@@ -10,11 +10,13 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 from decouple import config
 
 SECRET_KEY = config('SECRET_KEY')
-
+SECRET_KEY = os.environ.get('SECRET_KEY', config('SECRET_KEY'))
+DEBUG = os.environ.get('DEBUG', config('DEBUG', cast=bool))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,9 +27,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', cast=bool)
 
 ALLOWED_HOSTS = []
 
@@ -85,11 +84,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
-        'PORT': config('DB_PORT'),
+        'NAME': os.environ.get('DB_NAME', config('DB_NAME')),
+        'USER': os.environ.get('DB_USER', config('DB_USER')),
+        'PASSWORD': os.environ.get('DB_PASSWORD', config('DB_PASSWORD')),
+        'HOST': os.environ.get('DB_HOST', config('DB_HOST')),
+        'PORT': os.environ.get('DB_PORT', config('DB_PORT')),
     }
 }
 
