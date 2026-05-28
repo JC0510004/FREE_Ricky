@@ -4,7 +4,7 @@ from .models import Usuario, Nivel, Partida
 class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
-        fields = ['id', 'username', 'email', 'password', 'fecha_registro']
+        fields = ['id', 'username', 'email', 'password', 'fecha_registro', 'rol']
         extra_kwargs = {'password': {'write_only': True}}
 
 class NivelSerializer(serializers.ModelSerializer):
