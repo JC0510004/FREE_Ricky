@@ -32,6 +32,7 @@ class UsuarioListView(APIView):
         serializer = UsuarioSerializer(usuarios, many=True)
         return Response(serializer.data)
 
+
 # ACTUALIZAR Y ELIMINAR
 class UsuarioDetailView(APIView):
     def get_object(self, pk):
@@ -56,3 +57,5 @@ class UsuarioDetailView(APIView):
             return Response({'error': 'Usuario no encontrado'}, status=status.HTTP_404_NOT_FOUND)
         usuario.delete()
         return Response({'mensaje': 'Usuario eliminado'}, status=status.HTTP_204_NO_CONTENT)
+    
+    

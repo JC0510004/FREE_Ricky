@@ -9,3 +9,4 @@ docker-compose up --build
 docker exec -it free_ricky_backend python manage.py migrate
 
 http://localhost:5173
+docker compose up -d

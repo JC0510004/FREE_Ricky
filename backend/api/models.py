@@ -1,6 +1,11 @@
 from django.db import models
 
 class Usuario(models.Model):
+    ROL_CHOICES = [
+    ('admin', 'Admin'),
+    ('jugador', 'Jugador'),
+    ]
+    rol = models.CharField(max_length=10, choices=ROL_CHOICES, default='jugador')
     username = models.CharField(max_length=50, unique=True)
     email = models.EmailField(max_length=100, blank=True, null=True)
     password = models.CharField(max_length=255)
