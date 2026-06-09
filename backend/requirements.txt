@@ -11,3 +11,4 @@ django-filter==25.2
 python-decouple==3.8
 python-dotenv==1.2.1
 bleach==6.4.0
+argon2-cffi==25.1.0

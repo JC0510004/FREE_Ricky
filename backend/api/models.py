@@ -34,6 +34,7 @@ class Usuario(AbstractBaseUser):
     is_active = models.BooleanField(default=True)
     is_verified = models.BooleanField(default=False)
     failed_attempts = models.IntegerField(default=0)
+    lockout_count = models.IntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
 
     objects = UsuarioManager()
@@ -64,11 +65,18 @@ class Usuario(AbstractBaseUser):
             return True
         return False
 
+    def _get_lockout_duration(self):
+        durations = [15, 60, 360, 1440]
+        index = min(self.lockout_count, len(durations) - 1)
+        return durations[index]
+
     def increment_failed_attempts(self):
         self.failed_attempts += 1
         if self.failed_attempts >= 5:
-            self.locked_until = timezone.now() + timezone.timedelta(minutes=15)
-        self.save(update_fields=['failed_attempts', 'locked_until'])
+            self.lockout_count += 1
+            minutes = self._get_lockout_duration()
+            self.locked_until = timezone.now() + timezone.timedelta(minutes=minutes)
+        self.save(update_fields=['failed_attempts', 'lockout_count', 'locked_until'])
 
     def reset_failed_attempts(self):
         self.failed_attempts = 0

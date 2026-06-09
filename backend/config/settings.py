@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
@@ -49,6 +50,10 @@ MIDDLEWARE = [
     'api.middleware.AuditLogMiddleware',
 ]
 
+# BruteForceIPMiddleware solo en produccion (no en tests)
+if 'test' not in sys.argv:
+    MIDDLEWARE.append('api.middleware.BruteForceIPMiddleware')
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -96,6 +101,14 @@ DATABASES = {
     }
 }
 
+# ─── PASSWORD HASHING ───────────────────────────────────────────────────
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
+
 # ─── PASSWORD VALIDATION ───────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -119,14 +132,19 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',
         'user': '120/minute',
-        'login': '30/minute',
-        'register': '30/minute',
+        'login': '5/minute',
+        'register': '3/minute',
     },
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
     ),
     'EXCEPTION_HANDLER': 'api.utils.custom_exception_handler',
 }
+
+# En tests: relajar throttles para evitar falsos 429
+if 'test' in sys.argv:
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['register'] = '100/minute'
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
@@ -171,7 +189,6 @@ if not DEBUG:
     CSRF_COOKIE_HTTPONLY = True
     CSRF_COOKIE_SAMESITE = 'Lax'
     # SSL solo si no estamos en entorno de test
-    import sys
     if 'test' not in sys.argv:
         SECURE_SSL_REDIRECT = True
         SESSION_COOKIE_SECURE = True

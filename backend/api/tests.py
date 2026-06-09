@@ -181,7 +181,7 @@ class PasswordHashingTests(TestCase):
         self.client.post(self.url, self.data, format='json')
         usuario = Usuario.objects.get(username='testuser')
         self.assertNotEqual(usuario.password, 'TestPass123!')
-        self.assertTrue(usuario.password.startswith('pbkdf2_'))
+        self.assertTrue(usuario.password.startswith('argon2'))
 
     def test_verificacion_password(self):
         self.client.post(self.url, self.data, format='json')
