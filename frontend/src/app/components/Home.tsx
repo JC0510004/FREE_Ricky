@@ -1,5 +1,5 @@
 import { Lock, CheckCircle2, Star, Clock, Target } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 const levels = [
   { id: 1, name: 'Tutorial Valley', difficulty: 'Fácil', status: 'completed', stars: 3, time: '2:45' },
@@ -12,15 +12,8 @@ const levels = [
 ];
 
 export function Home() {
-  const [userName, setUserName] = useState('Jugador');
-
-  useEffect(() => {
-  const raw = localStorage.getItem('usuario');
-  if (raw) {
-    const usuario = JSON.parse(raw);
-    setUserName(usuario.username || 'Jugador');
-  }
-}, []);
+  const { user } = useAuth();
+  const userName = user?.username || 'Jugador';
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {

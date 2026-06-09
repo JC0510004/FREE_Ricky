@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Trash2, Edit, Save, X, Shield } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Trash2, Edit, Save, X, Shield, AlertCircle } from 'lucide-react';
 import API from '../api/axios';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Usuario {
   id: number;
@@ -25,7 +26,7 @@ export function Admin() {
       const res = await API.get('/usuarios/');
       setUsuarios(res.data);
     } catch {
-      setError('Error al cargar usuarios');
+      setError('Error al cargar');
     }
   };
 
@@ -40,7 +41,7 @@ export function Admin() {
       setEditingId(null);
       fetchUsuarios();
     } catch {
-      setError('Error al actualizar usuario');
+      setError('Error al actualizar');
     }
   };
 
@@ -50,7 +51,7 @@ export function Admin() {
       await API.delete(`/usuarios/${id}/`);
       fetchUsuarios();
     } catch {
-      setError('Error al eliminar usuario');
+      setError('Error al eliminar');
     }
   };
 

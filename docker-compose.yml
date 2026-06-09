@@ -1,47 +1,60 @@
-version: '3.8'
-
 services:
 
   mysql:
     image: mysql:8.0
     container_name: free_ricky_db
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: free_ricky
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-free_ricky}
     ports:
-      - "3307:3306"
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
-      interval: 5s
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD:-root}"]
+      interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - app_network
 
   backend:
     build: ./backend
     container_name: free_ricky_backend
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       mysql:
         condition: service_healthy
     environment:
-      DB_NAME: free_ricky
-      DB_USER: root
-      DB_PASSWORD: root
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: ${DEBUG:-False}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      DB_NAME: ${DB_NAME:-free_ricky}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
       DB_HOST: mysql
       DB_PORT: 3306
-      SECRET_KEY: tu_clave_secreta
-      DEBUG: "True"
+    networks:
+      - app_network
 
   frontend:
     build: ./frontend
     container_name: free_ricky_frontend
+    restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     depends_on:
       - backend
+    networks:
+      - app_network
 
 volumes:
   mysql_data:
+
+networks:
+  app_network:
+    driver: bridge

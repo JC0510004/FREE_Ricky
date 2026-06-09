@@ -13,8 +13,8 @@ export function LandingPage() {
   const [rankings, setRankings] = useState<Usuario[]>([]);
 
   useEffect(() => {
-    API.get('/usuarios/')
-      .then(res => setRankings(res.data.slice(0, 5)))
+    API.get('/ranking/')
+      .then(res => setRankings(Array.isArray(res.data) ? res.data : []))
       .catch(() => setRankings([]));
   }, []);
 

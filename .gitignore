@@ -6,6 +6,8 @@ __pycache__/
 # Django
 *.sqlite3
 db.sqlite3
+logs/
+backend/logs/
 
 # Entorno
 .env
@@ -18,3 +20,7 @@ frontend/node_modules/
 
 # Docker
 mysql_data/
+
+# OS
+.DS_Store
+Thumbs.db

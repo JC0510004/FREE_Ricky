@@ -1,40 +1,39 @@
-import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, User, Mail, Save } from 'lucide-react';
+import { useState } from 'react';
+import { Settings as SettingsIcon, User, Mail, Save, AlertCircle } from 'lucide-react';
 import API from '../api/axios';
+import { useAuth } from '../contexts/AuthContext';
 
 export function Settings() {
-  const [formData, setFormData] = useState({ name: '', email: '', bio: '' });
+  const { user } = useAuth();
+  const [formData, setFormData] = useState({
+    name: user?.username || '',
+    email: user?.email || '',
+  });
   const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState('');
-  const [usuarioId, setUsuarioId] = useState<number | null>(null);
-
-  useEffect(() => {
-    const raw = localStorage.getItem('usuario');
-    if (raw) {
-      const usuario = JSON.parse(raw);
-      setUsuarioId(usuario.id);
-      setFormData({
-        name: usuario.username || '',
-        email: usuario.email || '',
-        bio: usuario.bio || ''
-      });
-    }
-  }, []);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usuarioId) return;
+    if (!user) return;
+    setIsLoading(true);
+    setError('');
     try {
-      const res = await API.put(`/usuarios/${usuarioId}/`, {
+      await API.put(`/usuarios/${user.id}/`, {
         username: formData.name,
-        email: formData.email
+        email: formData.email,
       });
-      localStorage.setItem('usuario', JSON.stringify(res.data.usuario));
+      const stored = localStorage.getItem('usuario');
+      if (stored) {
+        const updated = { ...JSON.parse(stored), username: formData.name, email: formData.email };
+        localStorage.setItem('usuario', JSON.stringify(updated));
+      }
       setIsSaved(true);
-      setError('');
       setTimeout(() => setIsSaved(false), 3000);
     } catch {
       setError('Error al guardar los cambios');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -59,9 +58,10 @@ export function Settings() {
               id="name"
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value.replace(/[<>]/g, '') })}
               className="w-full px-4 py-3 bg-input-background rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary transition-all"
               placeholder="Tu nombre"
+              disabled={isLoading}
               required
             />
           </div>
@@ -78,34 +78,39 @@ export function Settings() {
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="w-full px-4 py-3 bg-input-background rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary transition-all"
               placeholder="tu@email.com"
+              disabled={isLoading}
               required
             />
           </div>
 
-          <div>
-            <label htmlFor="bio" className="block mb-2">Biografía</label>
-            <textarea
-              id="bio"
-              value={formData.bio}
-              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-              className="w-full px-4 py-3 bg-input-background rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary transition-all min-h-[100px] resize-none"
-              placeholder="Cuéntanos sobre ti..."
-            />
-          </div>
-
-          {error && <p style={{ color: 'red', fontSize: '13px' }}>{error}</p>}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+          )}
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-[#9FE0C3] via-[#9FDDE0] to-[#9FBCE0] text-foreground py-3 rounded-lg hover:opacity-90 transition-opacity shadow-lg flex items-center justify-center gap-2"
+            disabled={isLoading}
+            className="w-full bg-gradient-to-r from-[#9FE0C3] via-[#9FDDE0] to-[#9FBCE0] text-foreground py-3 rounded-lg hover:opacity-90 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <Save className="w-5 h-5" />
-            Guardar Cambios
+            {isLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-current" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5" />
+                Guardar Cambios
+              </>
+            )}
           </button>
 
           {isSaved && (
             <div className="p-4 bg-[#9FE0C3]/20 border border-[#9FE0C3] rounded-lg text-center">
-              <p className="text-foreground">✓ Cambios guardados exitosamente</p>
+              <p className="text-foreground">Cambios guardados correctamente</p>
             </div>
           )}
         </form>
