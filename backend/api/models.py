@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.utils import timezone
+import hashlib
 
 
 class UsuarioManager(BaseUserManager):
@@ -116,3 +117,22 @@ class Partida(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - {self.nivel.nombre}"
+
+
+class ConfirmacionReset(models.Model):
+    token_hash = models.CharField(max_length=64, primary_key=True)
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'confirmaciones_reset'
+
+    @classmethod
+    def confirmar(cls, token: str, usuario) -> None:
+        h = hashlib.sha256(token.encode()).hexdigest()
+        cls.objects.get_or_create(token_hash=h, usuario=usuario)
+
+    @classmethod
+    def esta_confirmado(cls, token: str) -> bool:
+        h = hashlib.sha256(token.encode()).hexdigest()
+        return cls.objects.filter(token_hash=h).exists()

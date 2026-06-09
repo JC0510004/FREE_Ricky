@@ -8,6 +8,10 @@ from .views import (
     PublicRankingView,
     UsuarioListView,
     UsuarioDetailView,
+    PasswordReset,
+    PasswordResetConfirm,
+    ConfirmarIdentidad,
+    VerificarConfirmacion,
 )
 
 urlpatterns = [
@@ -19,4 +23,8 @@ urlpatterns = [
     path('ranking/', PublicRankingView.as_view(), name='public_ranking'),
     path('usuarios/', UsuarioListView.as_view(), name='usuario_list'),
     path('usuarios/<int:pk>/', UsuarioDetailView.as_view(), name='usuario_detail'),
+    path('password-reset/', PasswordReset.as_view(), name='password_reset'),
+    path('password-reset/confirm/', PasswordResetConfirm.as_view(), name='password_reset_confirm'),
+    path('password-reset/confirmar/', ConfirmarIdentidad.as_view(), name='password_reset_confirmar'),
+    path('password-reset/verificar/', VerificarConfirmacion.as_view(), name='password_reset_verificar'),
 ]

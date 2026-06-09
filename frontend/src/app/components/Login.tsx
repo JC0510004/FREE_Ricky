@@ -154,6 +154,16 @@ export function Login() {
               </div>
             )}
 
+            <div className="text-right -mt-4">
+              <button
+                type="button"
+                onClick={() => navigate('/forgot-password')}
+                className="text-sm text-[#9FBCE0] hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
+
             {attempts >= 3 && (
               <p className="text-amber-600 text-xs text-center">
                 Múltiples intentos fallidos. Su cuenta será bloqueada temporalmente después de 5 intentos.

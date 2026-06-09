@@ -1,18 +1,25 @@
 import logging
+import hashlib
+from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Q
+from django.http import HttpResponse, HttpResponseRedirect
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Usuario
-from .serializers import RegisterSerializer, LoginSerializer, UsuarioSerializer
+from django.conf import settings
+
+from .models import Usuario, ConfirmacionReset
+from .serializers import (
+    RegisterSerializer, LoginSerializer, UsuarioSerializer,
+    PasswordResetSerializer, PasswordResetConfirmSerializer,
+)
 
 logger = logging.getLogger('seguridad')
 
@@ -356,3 +363,246 @@ class UsuarioDetailView(APIView):
             {'mensaje': 'Usuario desactivado'},
             status=status.HTTP_200_OK
         )
+
+
+# ─── RECUPERACIÓN DE CONTRASEÑA ────────────────────────────────────────
+
+from django.core.mail import send_mail
+from django.conf import settings
+
+
+class PasswordReset(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {'errores': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        email = serializer.validated_data['email']
+        response_data = {
+            'mensaje': 'Si el correo existe, recibirás un mensaje de confirmación',
+        }
+
+        try:
+            usuario = Usuario.objects.get(email__iexact=email, is_active=True)
+            token = AccessToken()
+            token.set_exp(lifetime=timedelta(minutes=15))
+            token['user_id'] = usuario.id
+            token['type'] = 'password_reset'
+
+            reset_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
+
+            si_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
+            no_url = f"http://127.0.0.1:5173/login"
+
+            html_message = f"""
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"></head>
+            <body style="margin:0;padding:0;background-color:#f4f6f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f9;min-height:100vh;">
+                <tr>
+                  <td align="center" style="padding:40px 16px;">
+                    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+                      <tr>
+                        <td style="padding:48px 40px 40px;">
+                          <div style="width:56px;height:56px;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);border-radius:50%;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;">
+                            <span style="font-size:24px;color:#ffffff;">?</span>
+                          </div>
+                          <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a2e;text-align:center;">¿Eres tú?</h1>
+                          <p style="margin:0 0 28px;font-size:14px;color:#6b7280;text-align:center;line-height:1.5;">
+                            Se solicitó un restablecimiento de contraseña para la cuenta<br/>
+                            <strong style="color:#1a1a2e;">{email}</strong>
+                          </p>
+                          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                            <tr>
+                              <td align="center">
+                                <a href="{si_url}" style="display:inline-block;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);color:#ffffff;text-decoration:none;padding:14px 48px;border-radius:8px;font-size:15px;font-weight:500;letter-spacing:0.3px;">Sí, soy yo</a>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td align="center" style="padding-top:12px;">
+                                <a href="{no_url}" style="display:inline-block;color:#6b7280;text-decoration:none;padding:10px 24px;font-size:13px;">No, cancelar</a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:0 40px 32px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
+                                <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
+                                  Este enlace expira en 15 minutos. Si no solicitaste este cambio, puedes ignorar este correo.
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+            """
+
+            send_mail(
+                subject='¿Eres tú? - FREE RICKY',
+                message=f'¿Eres tú? Se solicitó un restablecimiento de contraseña para {email}.\n\nSí, soy yo: {si_url}\nNo, cancelar: {no_url}\n\nEste enlace expira en 15 minutos.',
+                html_message=html_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=True,
+            )
+
+            logger.info(
+                f"Token de recuperación generado para: {usuario.username}",
+                extra={'user_id': usuario.id}
+            )
+
+            response_data['reset_url'] = reset_url
+
+        except Usuario.DoesNotExist:
+            logger.info(f"Intento de recuperación para email no registrado: {email}")
+
+        return Response(response_data)
+
+
+class PasswordResetConfirm(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {'errores': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token = serializer.validated_data['token']
+        password = serializer.validated_data['password']
+
+        try:
+            access_token = AccessToken(token)
+            if access_token.payload.get('type') != 'password_reset':
+                raise Exception('Invalid token type')
+
+            user_id = access_token.payload.get('user_id')
+            usuario = Usuario.objects.get(id=user_id, is_active=True)
+
+            usuario.set_password(password)
+            usuario.failed_attempts = 0
+            usuario.locked_until = None
+            usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
+
+            logger.info(
+                f"Contraseña restablecida para: {usuario.username}",
+                extra={'user_id': usuario.id}
+            )
+
+            return Response({'mensaje': 'Contraseña restablecida correctamente'})
+        except Exception:
+            return Response(
+                {'error': 'Token inválido o expirado'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+SUCCESS_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Identidad Confirmada</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f4f6f9;}
+.card{background:white;border-radius:16px;padding:48px 40px;text-align:center;max-width:400px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.06);}
+.icon{width:56px;height:56px;background:#16a34a;border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;}
+.icon svg{width:28px;height:28px;stroke:white;stroke-width:2.5;fill:none;}
+h1{font-size:22px;font-weight:600;color:#1a1a2e;margin:0 0 8px;}
+p{font-size:14px;color:#6b7280;line-height:1.5;margin:0;}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+<h1>Identidad Confirmada</h1>
+<p>Puedes cerrar esta ventana y continuar en la aplicaci&oacute;n.</p>
+</div>
+</body>
+</html>"""
+
+ERROR_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enlace Inválido</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f4f6f9;}
+.card{background:white;border-radius:16px;padding:48px 40px;text-align:center;max-width:400px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,0.06);}
+.icon{width:56px;height:56px;background:#dc2626;border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;}
+.icon svg{width:28px;height:28px;stroke:white;stroke-width:2.5;fill:none;}
+h1{font-size:22px;font-weight:600;color:#1a1a2e;margin:0 0 8px;}
+p{font-size:14px;color:#6b7280;line-height:1.5;margin:0;}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="icon"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+<h1>Enlace Inválido</h1>
+<p>Este enlace ha expirado o no es válido. Solicita un nuevo restablecimiento de contraseña.</p>
+</div>
+</body>
+</html>"""
+
+
+class ConfirmarIdentidad(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = request.query_params.get('token', '')
+        logger.info(f"[ConfirmarIdentidad] token recibido, length={len(token)}, starts={token[:30] if token else 'EMPTY'}...")
+
+        if not token:
+            return HttpResponseRedirect('/forgot-password')
+
+        try:
+            access_token = AccessToken(token)
+            if access_token.payload.get('type') != 'password_reset':
+                return HttpResponse(ERROR_HTML, content_type='text/html', status=400)
+
+            user_id = access_token.payload.get('user_id')
+            usuario = Usuario.objects.get(id=user_id, is_active=True)
+
+            ConfirmacionReset.confirmar(token, usuario)
+            logger.info(f"[ConfirmarIdentidad] CONFIRMADO user={usuario.id}")
+
+            return HttpResponse(SUCCESS_HTML, content_type='text/html')
+
+        except Exception as e:
+            logger.error(f"[ConfirmarIdentidad] ERROR: {e}")
+            return HttpResponse(ERROR_HTML, content_type='text/html', status=400)
+
+
+class VerificarConfirmacion(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = request.query_params.get('token', '')
+        if not token:
+            return Response({'confirmado': False})
+
+        confirmado = ConfirmacionReset.esta_confirmado(token)
+        return Response({'confirmado': confirmado})

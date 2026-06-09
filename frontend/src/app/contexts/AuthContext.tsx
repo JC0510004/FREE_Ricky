@@ -50,8 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string;
     confirm_password: string;
   }) => {
-    const response = await authService.register(data);
-    setUser(response.usuario);
+    await authService.register(data);
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('usuario');
   }, []);
 
   const logout = useCallback(async () => {

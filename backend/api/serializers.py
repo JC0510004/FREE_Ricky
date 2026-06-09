@@ -33,7 +33,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         sanitized = sanitize_input(value)
         if not validate_email(sanitized):
-            raise serializers.ValidationError('Ingrese un correo electrónico válido')
+            raise serializers.ValidationError('Debe ser un correo @gmail.com o @hotmail.com')
         normalized = normalize_email(sanitized)
         if Usuario.objects.filter(email__iexact=normalized).exists():
             raise serializers.ValidationError('Este correo electrónico ya está registrado')
@@ -68,6 +68,33 @@ class LoginSerializer(serializers.Serializer):
 
     def validate_username(self, value):
         return sanitize_input(value)
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        sanitized = sanitize_input(value)
+        if not validate_email(sanitized):
+            raise serializers.ValidationError('Debe ser un correo @gmail.com o @hotmail.com')
+        return normalize_email(sanitized)
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    confirm_password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+
+    def validate_password(self, value):
+        errors = check_password_strength(value)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return value
+
+    def validate(self, data):
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError({'confirm_password': 'Las contraseñas no coinciden'})
+        return data
 
 
 class UsuarioSerializer(serializers.ModelSerializer):

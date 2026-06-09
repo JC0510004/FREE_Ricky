@@ -11,7 +11,7 @@ class RegistroTests(TestCase):
         self.url = reverse('register')
         self.valid_data = {
             'username': 'testuser',
-            'email': 'test@example.com',
+            'email': 'test@gmail.com',
             'password': 'TestPass123!',
             'confirm_password': 'TestPass123!',
         }
@@ -70,7 +70,7 @@ class LoginTests(TestCase):
         self.login_url = reverse('login')
         self.credentials = {
             'username': 'testuser',
-            'email': 'test@example.com',
+            'email': 'test@gmail.com',
             'password': 'TestPass123!',
             'confirm_password': 'TestPass123!',
         }
@@ -88,7 +88,7 @@ class LoginTests(TestCase):
 
     def test_login_con_email(self):
         response = self.client.post(self.login_url, {
-            'username': 'test@example.com',
+            'username': 'test@gmail.com',
             'password': 'TestPass123!',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -131,7 +131,7 @@ class ProteccionEndpointTests(TestCase):
         self.login_url = reverse('login')
         self.data = {
             'username': 'testuser',
-            'email': 'test@example.com',
+            'email': 'test@gmail.com',
             'password': 'TestPass123!',
             'confirm_password': 'TestPass123!',
         }
@@ -172,7 +172,7 @@ class PasswordHashingTests(TestCase):
         self.url = reverse('register')
         self.data = {
             'username': 'testuser',
-            'email': 'test@example.com',
+            'email': 'test@gmail.com',
             'password': 'TestPass123!',
             'confirm_password': 'TestPass123!',
         }
@@ -197,7 +197,7 @@ class BruteForceTests(TestCase):
         self.login_url = reverse('login')
         self.data = {
             'username': 'testuser',
-            'email': 'test@example.com',
+            'email': 'test@gmail.com',
             'password': 'TestPass123!',
             'confirm_password': 'TestPass123!',
         }

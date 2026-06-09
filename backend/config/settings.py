@@ -15,6 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ─── HOSTS SEGUROS ─────────────────────────────────────────────────────
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 # ─── APPLICATION DEFINITION ────────────────────────────────────────────
 AUTH_USER_MODEL = 'api.Usuario'
@@ -188,8 +190,8 @@ if not DEBUG:
     SESSION_COOKIE_SAMESITE = 'Lax'
     CSRF_COOKIE_HTTPONLY = True
     CSRF_COOKIE_SAMESITE = 'Lax'
-    # SSL solo si no estamos en entorno de test
-    if 'test' not in sys.argv:
+    # SSL solo en produccion (no en test ni localhost)
+    if 'test' not in sys.argv and 'WEBSITE_HOSTNAME' in os.environ:
         SECURE_SSL_REDIRECT = True
         SESSION_COOKIE_SECURE = True
         CSRF_COOKIE_SECURE = True
@@ -256,6 +258,22 @@ LOGGING = {
         },
     },
 }
+
+# ─── EMAIL ──────────────────────────────────────────────────────────────
+_email_user = os.environ.get('EMAIL_HOST_USER', '')
+_email_pass = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_BACKEND = (
+    'django.core.mail.backends.smtp.EmailBackend'
+    if _email_user and _email_pass
+    else 'django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_HOST_USER = _email_user
+EMAIL_HOST_PASSWORD = _email_pass
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@free-ricky.com')
+
 
 # ─── STATIC ────────────────────────────────────────────────────────────
 STATIC_URL = 'static/'

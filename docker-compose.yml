@@ -38,6 +38,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-root}
       DB_HOST: mysql
       DB_PORT: 3306
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@free-ricky.com}
     networks:
       - app_network
 

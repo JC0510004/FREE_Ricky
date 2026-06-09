@@ -58,7 +58,7 @@ export function Register() {
         return undefined;
       case 'email':
         if (!sanitized) return 'El correo electrónico es requerido';
-        if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(sanitized)) return 'Ingrese un correo válido';
+        if (!/^[a-zA-Z0-9._%+-]+@(gmail|hotmail)\.com$/.test(sanitized)) return 'Debe ser un correo @gmail.com o @hotmail.com';
         if (sanitized.length > 254) return 'Correo demasiado largo';
         return undefined;
       case 'password':
@@ -133,7 +133,7 @@ export function Register() {
         password: formData.password,
         confirm_password: formData.confirmPassword,
       });
-      navigate('/home');
+      navigate('/login');
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { errores?: Record<string, string[]> } } };
       const serverErrors = apiError?.response?.data?.errores;
