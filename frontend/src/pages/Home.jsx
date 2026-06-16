@@ -64,8 +64,6 @@ export default function Home() {
           </Link>
           <div className="gaming-nav-links">
             <Link to="/home" className="gaming-nav-link active">Inicio</Link>
-            <Link to="/home" className="gaming-nav-link">Jugar</Link>
-            <Link to="/home" className="gaming-nav-link">Ranking</Link>
             {user.rol === 'admin' && (
               <Link to="/admin" className="gaming-nav-link">Admin</Link>
             )}
