@@ -19,6 +19,9 @@ from .views import (
     RankingView,
     UserStatsView,
     ChangePasswordView,
+    NivelDetailView,
+    AdminPartidasView,
+    AdminStatsView,
 )
 
 urlpatterns = [
@@ -40,4 +43,7 @@ urlpatterns = [
     path('partidas/<int:pk>/', PartidaDetailView.as_view(), name='partida_detail'),
     path('estadisticas/', UserStatsView.as_view(), name='user_stats'),
     path('cambiar-password/', ChangePasswordView.as_view(), name='change_password'),
+    path('niveles/<int:pk>/', NivelDetailView.as_view(), name='nivel_detail'),
+    path('admin/partidas/', AdminPartidasView.as_view(), name='admin_partidas'),
+    path('admin/stats/', AdminStatsView.as_view(), name='admin_stats'),
 ]

@@ -848,3 +848,89 @@ class ChangePasswordView(APIView):
         })
 
         return Response({'mensaje': 'Contraseña actualizada correctamente'})
+
+
+# ─── ADMIN: DETALLE NIVEL (PUT/DELETE) ──────────────────────────────────
+
+class NivelDetailView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        try:
+            return Nivel.objects.get(pk=pk)
+        except Nivel.DoesNotExist:
+            return None
+
+    def put(self, request, pk):
+        if request.user.rol != 'admin':
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+        nivel = self.get_object(pk)
+        if not nivel:
+            return Response({'error': 'No encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = NivelSerializer(nivel, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        if request.user.rol != 'admin':
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+        nivel = self.get_object(pk)
+        if not nivel:
+            return Response({'error': 'No encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        nivel.delete()
+        return Response({'mensaje': 'Nivel eliminado'})
+
+
+# ─── ADMIN: TODAS LAS PARTIDAS ──────────────────────────────────────────
+
+class AdminPartidasView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.rol != 'admin':
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+        partidas = Partida.objects.select_related('usuario', 'nivel').order_by('-fecha')[:50]
+        serializer = PartidaSerializer(partidas, many=True)
+        return Response(serializer.data)
+
+
+# ─── ADMIN: ESTADÍSTICAS DEL SISTEMA ────────────────────────────────────
+
+class AdminStatsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.rol != 'admin':
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+
+        total_usuarios = Usuario.objects.count()
+        total_partidas = Partida.objects.count()
+        total_niveles = Nivel.objects.count()
+
+        stats_partidas = Partida.objects.aggregate(
+            mejor_puntuacion=Max('puntuacion'),
+            promedio_puntuacion=Avg('puntuacion'),
+            total_muertes=Sum('muertes'),
+        )
+
+        top_jugador = (
+            Partida.objects.values('usuario__username')
+            .annotate(total=Count('id'))
+            .order_by('-total')
+            .first()
+        )
+
+        return Response({
+            'total_usuarios': total_usuarios,
+            'total_partidas': total_partidas,
+            'total_niveles': total_niveles,
+            'mejor_puntuacion_global': stats_partidas['mejor_puntuacion'] or 0,
+            'promedio_puntuacion_global': round(stats_partidas['promedio_puntuacion'] or 0, 1),
+            'total_muertes_global': stats_partidas['total_muertes'] or 0,
+            'jugador_mas_activo': top_jugador['usuario__username'] if top_jugador else None,
+        })
