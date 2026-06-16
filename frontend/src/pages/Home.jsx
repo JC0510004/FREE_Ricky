@@ -20,7 +20,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      navigate('/login')
+      navigate('/')
     }
   }, [isLoading, isAuthenticated, navigate])
 
