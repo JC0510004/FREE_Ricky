@@ -102,7 +102,7 @@ export default function Settings() {
                 </span>
               </div>
             </div>
-            <button className="gaming-logout-btn" onClick={() => { logout(); navigate('/') }}>
+            <button className="gaming-logout-btn" onClick={async () => { await logout(); navigate('/') }}>
               Salir
             </button>
           </div>

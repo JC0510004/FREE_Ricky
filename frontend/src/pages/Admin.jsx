@@ -65,29 +65,43 @@ export default function Admin() {
   if (!user) return null
 
   return (
-    <div className="auth-page">
-      <nav className="dashboard-nav">
-        <div className="dashboard-nav-inner">
-          <Link to="/" className="dashboard-logo">SALT BORN</Link>
-          <div className="dashboard-nav-links">
-            <Link to="/home" className="dashboard-nav-link">Inicio</Link>
-            <Link to="/admin" className="dashboard-nav-link active">Admin</Link>
-            <Link to="/settings" className="dashboard-nav-link">Configuración</Link>
+    <div className="gaming-dashboard">
+      <nav className="gaming-nav">
+        <div className="gaming-nav-inner">
+          <Link to="/" className="gaming-logo">
+            <span className="logo-icon">⬡</span>
+            SALT BORN
+          </Link>
+          <div className="gaming-nav-links">
+            <Link to="/home" className="gaming-nav-link">Inicio</Link>
+            <Link to="/admin" className="gaming-nav-link active">Admin</Link>
+            <Link to="/settings" className="gaming-nav-link">Configuración</Link>
           </div>
-          <div className="dashboard-user-area">
-            <span className="dashboard-username">{user.username}</span>
-            <span className="dashboard-role admin">Admin</span>
-            <button className="dashboard-logout-btn" onClick={() => { logout(); navigate('/') }}>
-              Cerrar Sesión
+          <div className="gaming-user-area">
+            <div className="gaming-user-info">
+              <div className="gaming-avatar">{user.username[0].toUpperCase()}</div>
+              <div className="gaming-user-text">
+                <span className="gaming-username">{user.username}</span>
+                <span className="gaming-badge admin">Administrador</span>
+              </div>
+            </div>
+            <button className="gaming-logout-btn" onClick={async () => { await logout(); navigate('/') }}>
+              Salir
             </button>
           </div>
         </div>
       </nav>
 
-      <main className="dashboard-main">
-        <div className="dashboard-welcome">
-          <h1>Panel de Administración</h1>
-          <p>Gestiona todos los usuarios del sistema</p>
+      <main className="gaming-main">
+        <div className="gaming-hero" style={{ paddingBottom: 40 }}>
+          <div className="hero-glow" />
+          <div className="hero-content">
+            <div className="hero-text">
+              <span className="hero-greeting">Administración</span>
+              <h1 className="hero-title">Panel de Control</h1>
+              <p className="hero-subtitle">Gestiona todos los usuarios del sistema</p>
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -97,6 +111,7 @@ export default function Admin() {
           </div>
         )}
 
+        <div className="gaming-section" style={{ padding: '0 32px' }}>
         <div className="admin-table-wrapper">
           <table className="admin-table">
             <thead>
@@ -175,6 +190,7 @@ export default function Admin() {
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       </main>
     </div>
