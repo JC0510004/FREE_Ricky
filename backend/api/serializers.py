@@ -1,6 +1,6 @@
 import logging
 from rest_framework import serializers
-from .models import Usuario
+from .models import Usuario, Nivel, Partida
 from .utils import (
     sanitize_input, validate_email, validate_username,
     normalize_email, check_password_strength
@@ -102,3 +102,41 @@ class UsuarioSerializer(serializers.ModelSerializer):
         model = Usuario
         fields = ['id', 'username', 'email', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
         read_only_fields = ['id', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
+
+
+class NivelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Nivel
+        fields = '__all__'
+        read_only_fields = ['id', 'fecha_creacion']
+
+
+class PartidaSerializer(serializers.ModelSerializer):
+    usuario_username = serializers.CharField(source='usuario.username', read_only=True)
+    nivel_nombre = serializers.CharField(source='nivel.nombre', read_only=True)
+    nivel_dificultad = serializers.CharField(source='nivel.dificultad', read_only=True)
+
+    class Meta:
+        model = Partida
+        fields = ['id', 'usuario', 'usuario_username', 'nivel', 'nivel_nombre',
+                   'nivel_dificultad', 'muertes', 'tiempo', 'puntuacion', 'fecha']
+        read_only_fields = ['id', 'usuario', 'usuario_username', 'nivel_nombre',
+                             'nivel_dificultad', 'fecha']
+
+
+class PartidaCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Partida
+        fields = ['nivel', 'muertes', 'tiempo', 'puntuacion']
+
+
+class UserStatsSerializer(serializers.Serializer):
+    total_partidas = serializers.IntegerField()
+    mejor_puntuacion = serializers.IntegerField()
+    peor_puntuacion = serializers.IntegerField()
+    promedio_puntuacion = serializers.FloatField()
+    total_muertes = serializers.IntegerField()
+    promedio_muertes = serializers.FloatField()
+    tiempo_total = serializers.IntegerField()
+    nivel_favorito = serializers.CharField(allow_null=True)
+    partidas_por_dificultad = serializers.DictField(child=serializers.IntegerField())

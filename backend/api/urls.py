@@ -5,7 +5,7 @@ from .views import (
     RefreshTokenView,
     LogoutView,
     VerifySessionView,
-    PublicRankingView,
+
     UsuarioListView,
     UsuarioDetailView,
     PasswordReset,
@@ -13,6 +13,11 @@ from .views import (
     ConfirmarIdentidad,
     VerificarConfirmacion,
     VerificarCodigo,
+    NivelListView,
+    PartidaListView,
+    PartidaDetailView,
+    RankingView,
+    UserStatsView,
 )
 
 urlpatterns = [
@@ -21,7 +26,7 @@ urlpatterns = [
     path('token/refresh/', RefreshTokenView.as_view(), name='token_refresh'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('verify/', VerifySessionView.as_view(), name='verify_session'),
-    path('ranking/', PublicRankingView.as_view(), name='public_ranking'),
+    path('ranking/', RankingView.as_view(), name='ranking'),
     path('usuarios/', UsuarioListView.as_view(), name='usuario_list'),
     path('usuarios/<int:pk>/', UsuarioDetailView.as_view(), name='usuario_detail'),
     path('password-reset/', PasswordReset.as_view(), name='password_reset'),
@@ -29,4 +34,8 @@ urlpatterns = [
     path('password-reset/confirmar/', ConfirmarIdentidad.as_view(), name='password_reset_confirmar'),
     path('password-reset/verificar/', VerificarConfirmacion.as_view(), name='password_reset_verificar'),
     path('password-reset/verificar-codigo/', VerificarCodigo.as_view(), name='password_reset_verificar_codigo'),
+    path('niveles/', NivelListView.as_view(), name='nivel_list'),
+    path('partidas/', PartidaListView.as_view(), name='partida_list'),
+    path('partidas/<int:pk>/', PartidaDetailView.as_view(), name='partida_detail'),
+    path('estadisticas/', UserStatsView.as_view(), name='user_stats'),
 ]
