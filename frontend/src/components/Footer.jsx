@@ -1,26 +1,22 @@
 import React from 'react';
 
-function Footer() {
-  const socials = ['𝕏', '▶', '💬', '📄'];
-  const links = ['Inicio', 'Manifiesto', 'Noticias', 'Equipo', 'Contacto'];
-
+export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-container">
-        <a href="/" className="footer-logo">Salt Born</a>
+        <a className="footer-logo" href="#">SALT BORN</a>
         <div className="footer-links">
-          {links.map((link, i) => (
-            <a key={i} href={`#${link.toLowerCase()}`}>{link}</a>
-          ))}
+          <a href="#">Kit de Prensa</a>
+          <a href="#">Relaciones Públicas</a>
+          <a href="#">© 2024, 1724 Studios</a>
+          <a href="#">Privacidad</a>
+          <a href="#">Términos</a>
         </div>
         <div className="footer-socials">
-          {socials.map((s, i) => (
-            <a key={i} href="#" className="social-link">{s}</a>
-          ))}
+          <a className="social-link" href="#">In</a>
+          <a className="social-link" href="#">X</a>
         </div>
       </div>
     </footer>
   );
 }
-
-export default Footer;

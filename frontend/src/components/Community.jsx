@@ -1,18 +1,13 @@
 import React from 'react';
 
-function Community() {
+export default function Community() {
   return (
-    <section className="community">
+    <section className="community" id="community">
       <div className="community-content fade-up-element">
-        <h2 className="community-title">Únete a la Tripulación</h2>
-        <p className="hero-description" style={{ maxWidth: '600px', textAlign: 'center' }}>
-          Sé parte de nuestra comunidad en Discord, síguenos en redes sociales
-          y no te pierdas ninguna novedad sobre Salt Born.
-        </p>
-        <button className="community-button">Unirse al Discord</button>
+        <span className="section-label">COMUNIDAD</span>
+        <h3 className="community-title">¿CREES TENER MÁS SUERTE QUE ÉL??</h3>
+        <button className="community-button">ÚNETE A LA TRIPULACIÓN</button>
       </div>
     </section>
   );
 }
-
-export default Community;

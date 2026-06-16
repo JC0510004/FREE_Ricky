@@ -40,7 +40,7 @@ function App() {
     } else {
       fadeElements.forEach((el) => el.classList.add('is-visible'));
     }
-  }, [showLoading]);
+  }, [showLoading]); // Run observer setup again if loading screen unmounts, to ensure all elements are captured
 
   return (
     <>
