@@ -121,6 +121,7 @@ class Partida(models.Model):
 
 class ConfirmacionReset(models.Model):
     token_hash = models.CharField(max_length=64, primary_key=True)
+    codigo_hash = models.CharField(max_length=64, db_index=True, null=True)
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -136,3 +137,12 @@ class ConfirmacionReset(models.Model):
     def esta_confirmado(cls, token: str) -> bool:
         h = hashlib.sha256(token.encode()).hexdigest()
         return cls.objects.filter(token_hash=h).exists()
+
+    @classmethod
+    def verificar_codigo(cls, email: str, codigo: str) -> bool:
+        h = hashlib.sha256(codigo.encode()).hexdigest()
+        return cls.objects.filter(
+            codigo_hash=h,
+            usuario__email__iexact=email,
+            usuario__is_active=True,
+        ).exists()

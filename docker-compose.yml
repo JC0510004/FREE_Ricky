@@ -11,6 +11,7 @@ services:
       - "127.0.0.1:3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    shm_size: 256mb
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD:-root}"]
       interval: 10s

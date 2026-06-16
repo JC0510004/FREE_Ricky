@@ -12,6 +12,7 @@ from .views import (
     PasswordResetConfirm,
     ConfirmarIdentidad,
     VerificarConfirmacion,
+    VerificarCodigo,
 )
 
 urlpatterns = [
@@ -27,4 +28,5 @@ urlpatterns = [
     path('password-reset/confirm/', PasswordResetConfirm.as_view(), name='password_reset_confirm'),
     path('password-reset/confirmar/', ConfirmarIdentidad.as_view(), name='password_reset_confirmar'),
     path('password-reset/verificar/', VerificarConfirmacion.as_view(), name='password_reset_verificar'),
+    path('password-reset/verificar-codigo/', VerificarCodigo.as_view(), name='password_reset_verificar_codigo'),
 ]

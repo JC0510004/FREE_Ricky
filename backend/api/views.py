@@ -390,14 +390,16 @@ class PasswordReset(APIView):
 
         try:
             usuario = Usuario.objects.get(email__iexact=email, is_active=True)
+
+            import secrets
             token = AccessToken()
             token.set_exp(lifetime=timedelta(minutes=15))
             token['user_id'] = usuario.id
             token['type'] = 'password_reset'
 
-            reset_url = f"http://localhost:8000/api/password-reset/confirmar/?token={token}"
+            reset_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
 
-            si_url = f"http://localhost:8000/api/password-reset/confirmar/?token={token}"
+            si_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
             no_url = f"http://localhost:5173/login"
 
             html_message = f"""
@@ -568,6 +570,47 @@ p{font-size:14px;color:#6b7280;line-height:1.5;margin:0;}
 </html>"""
 
 
+class VerificarCodigo(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        codigo = request.data.get('codigo', '').strip()
+
+        if not email or not codigo:
+            return Response(
+                {'error': 'Email y código requeridos'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        confirmado = ConfirmacionReset.verificar_codigo(email, codigo)
+        if confirmado:
+            try:
+                usuario = Usuario.objects.get(email__iexact=email, is_active=True)
+                token = AccessToken()
+                token.set_exp(lifetime=timedelta(minutes=15))
+                token['user_id'] = usuario.id
+                token['type'] = 'password_reset'
+
+                token_hash = hashlib.sha256(str(token).encode()).hexdigest()
+                ConfirmacionReset.objects.filter(
+                    usuario=usuario,
+                    codigo_hash=hashlib.sha256(codigo.encode()).hexdigest()
+                ).update(token_hash=token_hash)
+
+                return Response({
+                    'valido': True,
+                    'token': str(token),
+                })
+            except Usuario.DoesNotExist:
+                pass
+
+        return Response(
+            {'valido': False, 'error': 'Código inválido o expirado'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
 class ConfirmarIdentidad(APIView):
     permission_classes = [AllowAny]
 
@@ -576,7 +619,7 @@ class ConfirmarIdentidad(APIView):
         logger.info(f"[ConfirmarIdentidad] token recibido, length={len(token)}, starts={token[:30] if token else 'EMPTY'}...")
 
         if not token:
-            return HttpResponseRedirect('http://localhost:5173/forgot-password')
+            return HttpResponseRedirect('/forgot-password')
 
         try:
             access_token = AccessToken(token)
@@ -589,7 +632,7 @@ class ConfirmarIdentidad(APIView):
             ConfirmacionReset.confirmar(token, usuario)
             logger.info(f"[ConfirmarIdentidad] CONFIRMADO user={usuario.id}")
 
-            return HttpResponseRedirect(f'http://localhost:5173/forgot-password?token={token}')
+            return HttpResponse(SUCCESS_HTML, content_type='text/html')
 
         except Exception as e:
             logger.error(f"[ConfirmarIdentidad] ERROR: {e}")
