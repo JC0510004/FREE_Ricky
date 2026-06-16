@@ -1,11 +1,41 @@
+# Salt Born - Frontend
 
-  # Frontend de página con login
+Frontend oficial de Salt Born, un desafiante plataformas pirata.
 
-  This is a code bundle for Frontend de página con login. The original project is available at https://www.figma.com/design/tEQp5t9yKaXaYmi580wYSx/Frontend-de-p%C3%A1gina-con-login.
+## Requisitos
 
-  ## Running the code
+- Node.js 20+
+- npm
 
-  Run `npm i` to install the dependencies.
+## Instalación
 
-  Run `npm run dev` to start the development server.
-  
+```bash
+npm install
+```
+
+## Desarrollo
+
+```bash
+npm run dev
+```
+
+El servidor de desarrollo se ejecuta en `http://localhost:5173`.
+
+## Producción
+
+```bash
+npm run build
+```
+
+Los archivos estáticos se generan en la carpeta `dist/`.
+
+## Docker
+
+```bash
+docker build -t saltborn-frontend .
+docker run -p 5173:5173 saltborn-frontend
+```
+
+## API
+
+La aplicación se conecta a `http://127.0.0.1:8000/api` por defecto.
