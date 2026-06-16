@@ -807,3 +807,44 @@ class UserStatsView(APIView):
             'partidas_por_dificultad': dificultad_map,
         })
         return Response(serializer.data)
+
+
+# ─── CAMBIAR CONTRASEÑA (AUTHENTICATED) ────────────────────────────────
+
+class ChangePasswordView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        usuario = request.user
+        old_password = request.data.get('old_password', '')
+        new_password = request.data.get('new_password', '')
+        confirm_password = request.data.get('confirm_password', '')
+
+        if not usuario.check_password(old_password):
+            return Response(
+                {'error': 'La contraseña actual no es correcta'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(new_password) < 8:
+            return Response(
+                {'error': 'La nueva contraseña debe tener al menos 8 caracteres'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if new_password != confirm_password:
+            return Response(
+                {'error': 'Las contraseñas no coinciden'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        usuario.set_password(new_password)
+        usuario.save(update_fields=['password'])
+
+        logger.info(f"Contraseña cambiada: {usuario.username}", extra={
+            'user_id': usuario.id,
+            'username': usuario.username,
+        })
+
+        return Response({'mensaje': 'Contraseña actualizada correctamente'})
