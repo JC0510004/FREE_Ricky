@@ -3,6 +3,12 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import API from '../api/axios'
 
+const difficultyConfig = {
+  facil: { label: 'Fácil', color: '#22c55e' },
+  medio: { label: 'Medio', color: '#eab308' },
+  dificil: { label: 'Difícil', color: '#ef4444' },
+}
+
 export default function Home() {
   const navigate = useNavigate()
   const { user, isAuthenticated, isLoading, logout } = useAuth()
@@ -10,6 +16,7 @@ export default function Home() {
   const [stats, setStats] = useState(null)
   const [ranking, setRanking] = useState([])
   const [partidas, setPartidas] = useState([])
+  const [niveles, setNiveles] = useState([])
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -22,6 +29,7 @@ export default function Home() {
     API.get('/estadisticas/').then(r => setStats(r.data)).catch(() => {})
     API.get('/ranking/').then(r => setRanking(r.data)).catch(() => {})
     API.get('/partidas/').then(r => setPartidas(r.data)).catch(() => {})
+    API.get('/niveles/').then(r => setNiveles(r.data)).catch(() => {})
   }, [isAuthenticated])
 
   const handleLogout = async () => {
@@ -47,135 +55,225 @@ export default function Home() {
   if (!user) return null
 
   return (
-    <div className="auth-page">
-      <nav className="dashboard-nav">
-        <div className="dashboard-nav-inner">
-          <Link to="/" className="dashboard-logo">SALT BORN</Link>
-          <div className="dashboard-nav-links">
-            <Link to="/home" className="dashboard-nav-link active">Inicio</Link>
+    <div className="gaming-dashboard">
+      <nav className="gaming-nav">
+        <div className="gaming-nav-inner">
+          <Link to="/" className="gaming-logo">
+            <span className="logo-icon">⬡</span>
+            SALT BORN
+          </Link>
+          <div className="gaming-nav-links">
+            <Link to="/home" className="gaming-nav-link active">Inicio</Link>
+            <Link to="/home" className="gaming-nav-link">Jugar</Link>
+            <Link to="/home" className="gaming-nav-link">Ranking</Link>
             {user.rol === 'admin' && (
-              <Link to="/admin" className="dashboard-nav-link">Admin</Link>
+              <Link to="/admin" className="gaming-nav-link">Admin</Link>
             )}
-            <Link to="/settings" className="dashboard-nav-link">Configuración</Link>
+            <Link to="/settings" className="gaming-nav-link">Configuración</Link>
           </div>
-          <div className="dashboard-user-area">
-            <span className="dashboard-username">{user.username}</span>
-            <span className={`dashboard-role ${user.rol}`}>{user.rol === 'admin' ? 'Admin' : 'Jugador'}</span>
-            <button className="dashboard-logout-btn" onClick={handleLogout} disabled={loggingOut}>
-              {loggingOut ? '...' : 'Cerrar Sesión'}
+          <div className="gaming-user-area">
+            <div className="gaming-user-info">
+              <div className="gaming-avatar">
+                {user.username[0].toUpperCase()}
+              </div>
+              <div className="gaming-user-text">
+                <span className="gaming-username">{user.username}</span>
+                <span className={`gaming-badge ${user.rol}`}>
+                  {user.rol === 'admin' ? 'Administrador' : 'Jugador'}
+                </span>
+              </div>
+            </div>
+            <button className="gaming-logout-btn" onClick={handleLogout} disabled={loggingOut}>
+              {loggingOut ? '...' : 'Salir'}
             </button>
           </div>
         </div>
       </nav>
 
-      <main className="dashboard-main">
-        <div className="dashboard-welcome">
-          <h1>Bienvenido, {user.username}</h1>
-          <p>Has iniciado sesión como <strong>{user.rol === 'admin' ? 'Administrador' : 'Jugador'}</strong></p>
-        </div>
-
-        {stats && (
-          <div className="dashboard-cards">
-            <div className="dashboard-card dashboard-stat">
-              <span className="material-symbols-outlined dashboard-card-icon">sports_esports</span>
-              <h3>Partidas</h3>
-              <p className="stat-number">{stats.total_partidas}</p>
-              <p className="dashboard-card-meta">jugadas</p>
+      <main className="gaming-main">
+        <section className="gaming-hero">
+          <div className="hero-glow" />
+          <div className="hero-content">
+            <div className="hero-text">
+              <span className="hero-greeting">Bienvenido de vuelta,</span>
+              <h1 className="hero-title">{user.username}</h1>
+              <p className="hero-subtitle">
+                {stats ? `${stats.total_partidas} partidas jugadas · ${stats.mejor_puntuacion} pts máximos` : 'Cargando estadísticas...'}
+              </p>
             </div>
-            <div className="dashboard-card dashboard-stat">
-              <span className="material-symbols-outlined dashboard-card-icon">star</span>
-              <h3>Mejor Puntuación</h3>
-              <p className="stat-number">{stats.mejor_puntuacion}</p>
-              <p className="dashboard-card-meta">puntos</p>
-            </div>
-            <div className="dashboard-card dashboard-stat">
-              <span className="material-symbols-outlined dashboard-card-icon">trending_up</span>
-              <h3>Promedio</h3>
-              <p className="stat-number">{stats.promedio_puntuacion}</p>
-              <p className="dashboard-card-meta">puntos x partida</p>
-            </div>
-            <div className="dashboard-card dashboard-stat">
-              <span className="material-symbols-outlined dashboard-card-icon">schedule</span>
-              <h3>Tiempo Total</h3>
-              <p className="stat-number">{Math.floor(stats.tiempo_total / 60)}m {stats.tiempo_total % 60}s</p>
-              <p className="dashboard-card-meta">en juego</p>
-            </div>
-          </div>
-        )}
-
-        <div className="dashboard-cards">
-          <div className="dashboard-card" style={{ flex: 1 }}>
-            <span className="material-symbols-outlined dashboard-card-icon">person</span>
-            <h3>Perfil</h3>
-            <p>{user.email}</p>
-            <p className="dashboard-card-meta">Miembro desde {new Date(user.fecha_registro).toLocaleDateString()}</p>
-          </div>
-
-          {user.rol === 'admin' && (
-            <Link to="/admin" className="dashboard-card dashboard-card-link" style={{ flex: 1 }}>
-              <span className="material-symbols-outlined dashboard-card-icon">admin_panel_settings</span>
-              <h3>Panel Admin</h3>
-              <p>Gestiona usuarios del sistema</p>
-            </Link>
-          )}
-
-          <Link to="/settings" className="dashboard-card dashboard-card-link" style={{ flex: 1 }}>
-            <span className="material-symbols-outlined dashboard-card-icon">settings</span>
-            <h3>Configuración</h3>
-            <p>Actualiza tus datos personales</p>
-          </Link>
-        </div>
-
-        {ranking.length > 0 && (
-          <div className="dashboard-section">
-            <h2 className="section-title">Ranking Global</h2>
-            <div className="ranking-table">
-              <div className="ranking-header">
-                <span className="rank-pos">#</span>
-                <span className="rank-user">Jugador</span>
-                <span className="rank-score">Mejor Punt.</span>
-                <span className="rank-games">Partidas</span>
-                <span className="rank-avg">Promedio</span>
-              </div>
-              {ranking.map(r => (
-                <div key={r.usuario_id} className={`ranking-row ${r.usuario_id === user.id ? 'is-me' : ''}`}>
-                  <span className="rank-pos">{r.posicion}</span>
-                  <span className="rank-user">{r.username}</span>
-                  <span className="rank-score">{r.mejor_puntuacion}</span>
-                  <span className="rank-games">{r.total_partidas}</span>
-                  <span className="rank-avg">{r.promedio_puntuacion}</span>
+            {stats && (
+              <div className="hero-stats">
+                <div className="hero-stat">
+                  <span className="hero-stat-value">{stats.total_partidas}</span>
+                  <span className="hero-stat-label">Partidas</span>
                 </div>
-              ))}
-            </div>
+                <div className="hero-stat">
+                  <span className="hero-stat-value">{stats.mejor_puntuacion}</span>
+                  <span className="hero-stat-label">Mejor Score</span>
+                </div>
+                <div className="hero-stat">
+                  <span className="hero-stat-value">{stats.promedio_puntuacion}</span>
+                  <span className="hero-stat-label">Promedio</span>
+                </div>
+                <div className="hero-stat">
+                  <span className="hero-stat-value">
+                    {Math.floor(stats.tiempo_total / 60)}m
+                  </span>
+                  <span className="hero-stat-label">Tiempo Total</span>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </section>
 
-        {partidas.length > 0 && (
-          <div className="dashboard-section">
-            <h2 className="section-title">Últimas Partidas</h2>
-            <div className="ranking-table">
-              <div className="ranking-header">
-                <span className="rank-game">Nivel</span>
-                <span className="rank-score">Punt.</span>
-                <span className="rank-deaths">Muertes</span>
-                <span className="rank-time">Tiempo</span>
-                <span className="rank-date">Fecha</span>
+        <section className="gaming-section">
+          <div className="section-header">
+            <h2 className="section-title">
+              <span className="section-icon">▶</span>
+              Niveles
+            </h2>
+            <span className="section-subtitle">Elige un nivel para comenzar</span>
+          </div>
+          <div className="levels-grid">
+            {niveles.map(n => {
+              const diff = difficultyConfig[n.dificultad] || { label: n.dificultad, color: '#888' }
+              return (
+                <div key={n.id} className="level-card" style={{ '--accent': diff.color }}>
+                  <div className="level-card-glow" />
+                  <div className="level-card-header">
+                    <span className="level-difficulty" style={{ background: `${diff.color}20`, color: diff.color }}>
+                      {diff.label}
+                    </span>
+                    {n.tiempo_limite && (
+                      <span className="level-time">{n.tiempo_limite}s</span>
+                    )}
+                  </div>
+                  <h3 className="level-name">{n.nombre}</h3>
+                  <div className="level-card-footer">
+                    <button className="level-play-btn" style={{ '--btn-accent': diff.color }}>
+                      JUGAR
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="gaming-section">
+          <div className="section-header">
+            <h2 className="section-title">
+              <span className="section-icon">🏆</span>
+              Ranking Global
+            </h2>
+            <span className="section-subtitle">Top jugadores por puntuación</span>
+          </div>
+          <div className="gaming-table-wrap">
+            <div className="gaming-table-header">
+              <span className="col-pos">#</span>
+              <span className="col-player">Jugador</span>
+              <span className="col-score">Puntos</span>
+              <span className="col-games">Partidas</span>
+              <span className="col-avg">Promedio</span>
+            </div>
+            {ranking.map(r => (
+              <div key={r.usuario_id} className={`gaming-table-row ${r.usuario_id === user.id ? 'is-me' : ''}`}>
+                <span className="col-pos">
+                  {r.posicion <= 3 ? (
+                    <span className={`medal medal-${r.posicion}`}>
+                      {['🥇', '🥈', '🥉'][r.posicion - 1]}
+                    </span>
+                  ) : (
+                    r.posicion
+                  )}
+                </span>
+                <span className="col-player">
+                  {r.usuario_id === user.id && <span className="you-tag">TÚ</span>}
+                  {r.username}
+                </span>
+                <span className="col-score">{r.mejor_puntuacion.toLocaleString()}</span>
+                <span className="col-games">{r.total_partidas}</span>
+                <span className="col-avg">{r.promedio_puntuacion}</span>
+              </div>
+            ))}
+            {ranking.length === 0 && (
+              <div className="gaming-table-empty">
+                Aún no hay partidas registradas. ¡Sé el primero!
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="gaming-bottom-grid">
+          <section className="gaming-section">
+            <div className="section-header">
+              <h2 className="section-title">
+                <span className="section-icon">⚡</span>
+                Últimas Partidas
+              </h2>
+            </div>
+            <div className="gaming-table-wrap">
+              <div className="gaming-table-header">
+                <span className="col-level">Nivel</span>
+                <span className="col-score-sm">Pts</span>
+                <span className="col-deaths">💀</span>
+                <span className="col-time">Tiempo</span>
+                <span className="col-date">Fecha</span>
               </div>
               {partidas.map(p => (
-                <div key={p.id} className="ranking-row">
-                  <span className="rank-game">
+                <div key={p.id} className="gaming-table-row">
+                  <span className="col-level">
                     {p.nivel_nombre}
-                    <span className={`difficulty-badge ${p.nivel_dificultad}`}>{p.nivel_dificultad}</span>
+                    <span className={`mini-badge ${p.nivel_dificultad}`}>
+                      {p.nivel_dificultad[0].toUpperCase()}
+                    </span>
                   </span>
-                  <span className="rank-score">{p.puntuacion}</span>
-                  <span className="rank-deaths">{p.muertes}</span>
-                  <span className="rank-time">{p.tiempo ? `${Math.floor(p.tiempo / 60)}:${String(p.tiempo % 60).padStart(2, '0')}` : '-'}</span>
-                  <span className="rank-date">{new Date(p.fecha).toLocaleDateString()}</span>
+                  <span className="col-score-sm">{p.puntuacion}</span>
+                  <span className="col-deaths">{p.muertes}</span>
+                  <span className="col-time">
+                    {p.tiempo ? `${Math.floor(p.tiempo / 60)}:${String(p.tiempo % 60).padStart(2, '0')}` : '-'}
+                  </span>
+                  <span className="col-date">{new Date(p.fecha).toLocaleDateString()}</span>
                 </div>
               ))}
+              {partidas.length === 0 && (
+                <div className="gaming-table-empty">
+                  No has jugado ninguna partida aún.
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          </section>
+
+          <section className="gaming-section gaming-profile-card">
+            <div className="section-header">
+              <h2 className="section-title">
+                <span className="section-icon">👤</span>
+                Perfil
+              </h2>
+            </div>
+            <div className="profile-content">
+              <div className="profile-info">
+                <div className="profile-field">
+                  <span className="profile-label">Email</span>
+                  <span className="profile-value">{user.email}</span>
+                </div>
+                <div className="profile-field">
+                  <span className="profile-label">Miembro desde</span>
+                  <span className="profile-value">{new Date(user.fecha_registro).toLocaleDateString()}</span>
+                </div>
+                <div className="profile-field">
+                  <span className="profile-label">Rol</span>
+                  <span className={`gaming-badge ${user.rol}`}>
+                    {user.rol === 'admin' ? 'Administrador' : 'Jugador'}
+                  </span>
+                </div>
+              </div>
+              <Link to="/settings" className="profile-edit-btn">
+                Editar Perfil
+              </Link>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
   )

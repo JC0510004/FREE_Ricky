@@ -1591,59 +1591,709 @@ body.loading-lock {
     font-size: 16px;
 }
 
-.dashboard-cards {
+/* ===== Gaming Dashboard (Home) ===== */
+.gaming-dashboard {
+    min-height: 100vh;
+    background: #0a0e1a;
+    position: relative;
+}
+
+.gaming-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: rgba(10, 14, 26, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gaming-nav-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 32px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+
+.gaming-logo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: 1px;
+}
+
+.logo-icon {
+    color: #ffb68c;
+    font-size: 24px;
+}
+
+.gaming-nav-links {
+    display: flex;
+    gap: 4px;
+}
+
+.gaming-nav-link {
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.gaming-nav-link:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.gaming-nav-link.active {
+    color: #ffb68c;
+    background: rgba(255, 182, 140, 0.1);
+}
+
+.gaming-user-area {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.gaming-user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gaming-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #ffb68c, #ff7eb3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: #0a0e1a;
+}
+
+.gaming-user-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.gaming-username {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1;
+}
+
+.gaming-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 50px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.4;
+    display: inline-block;
+}
+
+.gaming-badge.admin {
+    background: rgba(255, 182, 140, 0.15);
+    color: #ffb68c;
+}
+
+.gaming-logout-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: 'Work Sans', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.gaming-logout-btn:hover {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.gaming-main {
+    padding-top: 72px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Hero */
+.gaming-hero {
+    position: relative;
+    padding: 80px 32px;
+    overflow: hidden;
+}
+
+.hero-glow {
+    position: absolute;
+    top: -200px;
+    right: -200px;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(255, 182, 140, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.hero-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 40px;
+}
+
+.hero-text {
+    flex: 1;
+}
+
+.hero-greeting {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 12px;
+    display: block;
+}
+
+.hero-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 56px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 12px;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 0%, #ffb68c 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.hero-subtitle {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 15px;
+}
+
+.hero-stats {
+    display: flex;
+    gap: 32px;
+    flex-shrink: 0;
+}
+
+.hero-stat {
+    text-align: center;
+}
+
+.hero-stat-value {
+    display: block;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: #ffb68c;
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.hero-stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Sections */
+.gaming-section {
+    padding: 0 32px;
+    margin-bottom: 48px;
+}
+
+.section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.section-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.section-icon {
+    font-size: 18px;
+}
+
+.section-subtitle {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Level Cards */
+.levels-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 20px;
+}
+
+.level-card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 24px;
+    transition: all 0.3s ease;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.level-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-4px);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.level-card-glow {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at var(--accent), rgba(255, 255, 255, 0.03) 0%, transparent 60%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.level-card:hover .level-card-glow {
+    opacity: 1;
+}
+
+.level-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.level-difficulty {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 3px 10px;
+    border-radius: 50px;
+    font-weight: 600;
+}
+
+.level-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.level-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0 0 20px;
+}
+
+.level-card-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.level-play-btn {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: 1px solid var(--btn-accent);
+    background: transparent;
+    color: var(--btn-accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.level-play-btn:hover {
+    background: var(--btn-accent);
+    color: #0a0e1a;
+    box-shadow: 0 0 30px rgba(255, 182, 140, 0.2);
+}
+
+/* Tables */
+.gaming-table-wrap {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.gaming-table-header {
+    display: grid;
+    gap: 8px;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(255, 255, 255, 0.3);
+    font-weight: 600;
+}
+
+.gaming-table-row {
+    display: grid;
+    gap: 8px;
+    padding: 14px 20px;
+    color: #c0c0c0;
+    font-size: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.gaming-table-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.gaming-table-row.is-me {
+    background: rgba(255, 182, 140, 0.05);
+}
+
+.gaming-table-row.is-me .col-player {
+    color: #ffb68c;
+    font-weight: 600;
+}
+
+.gaming-table-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+/* Ranking specific cols */
+.gaming-table-header.ranking-header,
+.gaming-table-row.ranking-row {
+    grid-template-columns: 50px 1fr 120px 100px 100px;
+}
+
+.col-pos {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.2);
+    text-align: center;
+}
+
+.col-player {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.col-score {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: #ffb68c;
+    text-align: right;
+}
+
+.col-games {
+    font-family: 'JetBrains Mono', monospace;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: right;
+}
+
+.col-avg {
+    font-family: 'JetBrains Mono', monospace;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: right;
+}
+
+/* Rank table specific */
+.gaming-table-wrap:has(.col-pos) .gaming-table-header {
+    grid-template-columns: 50px 1fr 120px 100px 100px;
+}
+
+.gaming-table-wrap:has(.col-pos) .gaming-table-row {
+    grid-template-columns: 50px 1fr 120px 100px 100px;
+}
+
+.medal {
+    font-size: 18px;
+}
+
+.you-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 1px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 182, 140, 0.2);
+    color: #ffb68c;
+    font-weight: 700;
+}
+
+/* Recent games cols */
+.col-level {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.col-score-sm {
+    font-family: 'JetBrains Mono', monospace;
+    color: #ffb68c;
+    font-weight: 600;
+    text-align: right;
+}
+
+.col-deaths {
+    font-family: 'JetBrains Mono', monospace;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+}
+
+.col-time {
+    font-family: 'JetBrains Mono', monospace;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: right;
+}
+
+.col-date {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.3);
+    text-align: right;
+}
+
+.mini-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mini-badge.F {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.mini-badge.M {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+}
+
+.mini-badge.D {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* Bottom grid */
+.gaming-bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 32px;
+    padding: 0 32px;
+    margin-bottom: 48px;
+}
+
+.gaming-bottom-grid .gaming-section {
+    padding: 0;
+    margin-bottom: 0;
+}
+
+.gaming-bottom-grid .gaming-table-wrap:has(.col-level) .gaming-table-header {
+    grid-template-columns: 1fr 60px 40px 70px 80px;
+}
+
+.gaming-bottom-grid .gaming-table-wrap:has(.col-level) .gaming-table-row {
+    grid-template-columns: 1fr 60px 40px 70px 80px;
+}
+
+/* Profile card */
+.gaming-profile-card {
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 24px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.gaming-profile-card .section-header {
+    margin-bottom: 20px;
+}
+
+.profile-content {
+    display: flex;
+    flex-direction: column;
     gap: 24px;
 }
 
-.dashboard-card {
-    background: rgba(4, 20, 36, 0.5);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
-    padding: 32px;
-    transition: all 0.3s ease;
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
-.dashboard-card:hover {
-    border-color: rgba(255, 182, 140, 0.3);
-    transform: translateY(-4px);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.dashboard-card-link {
-    display: block;
-    text-decoration: none;
-    color: inherit;
+.profile-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.3);
 }
 
-.dashboard-card-icon {
-    font-size: 36px;
-    color: #ffb68c;
-    margin-bottom: 16px;
-    display: block;
-}
-
-.dashboard-card h3 {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 20px;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 8px;
-}
-
-.dashboard-card p {
-    color: #c0c0c0;
+.profile-value {
     font-size: 14px;
-    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.7);
 }
 
-.dashboard-card-meta {
-    font-size: 12px !important;
-    color: rgba(255, 255, 255, 0.4) !important;
-    margin-top: 8px;
+.profile-edit-btn {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.profile-edit-btn:hover {
+    border-color: rgba(255, 182, 140, 0.3);
+    color: #ffb68c;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .hero-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .hero-stats {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .gaming-bottom-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .gaming-nav-inner {
+        padding: 0 16px;
+        gap: 16px;
+    }
+
+    .gaming-nav-links {
+        display: none;
+    }
+
+    .gaming-hero {
+        padding: 40px 16px;
+    }
+
+    .hero-title {
+        font-size: 32px;
+    }
+
+    .hero-stat-value {
+        font-size: 24px;
+    }
+
+    .gaming-section {
+        padding: 0 16px;
+    }
+
+    .gaming-bottom-grid {
+        padding: 0 16px;
+    }
+
+    .levels-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .gaming-table-wrap:has(.col-pos) .gaming-table-header,
+    .gaming-table-wrap:has(.col-pos) .gaming-table-row {
+        grid-template-columns: 30px 1fr 80px;
+    }
+
+    .col-games,
+    .col-avg {
+        display: none;
+    }
+
+    .gaming-bottom-grid .gaming-table-wrap:has(.col-level) .gaming-table-header,
+    .gaming-bottom-grid .gaming-table-wrap:has(.col-level) .gaming-table-row {
+        grid-template-columns: 1fr 50px;
+    }
+
+    .col-deaths,
+    .col-time,
+    .col-date {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .gaming-user-text {
+        display: none;
+    }
 }
 
 .settings-card {
@@ -1840,155 +2490,3 @@ body.loading-lock {
     }
 }
 
-/* ===== Dashboard Stats ===== */
-.dashboard-stat .stat-number {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 32px;
-    color: #ffb68c;
-    margin: 8px 0 0;
-    line-height: 1;
-}
-
-.dashboard-section {
-    margin-top: 48px;
-}
-
-.section-title {
-    font-size: 24px;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 20px;
-}
-
-/* ===== Ranking Table ===== */
-.ranking-table {
-    background: rgba(4, 20, 36, 0.5);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
-    overflow: hidden;
-}
-
-.ranking-header {
-    display: grid;
-    grid-template-columns: 40px 1fr 120px 100px 100px;
-    gap: 8px;
-    padding: 16px 20px;
-    background: rgba(255, 182, 140, 0.15);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #ffb68c;
-    font-weight: 600;
-}
-
-.ranking-row {
-    display: grid;
-    grid-template-columns: 40px 1fr 120px 100px 100px;
-    gap: 8px;
-    padding: 14px 20px;
-    color: #c0c0c0;
-    font-size: 14px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    align-items: center;
-}
-
-.ranking-row:hover {
-    background: rgba(255, 255, 255, 0.03);
-}
-
-.ranking-row.is-me {
-    background: rgba(255, 182, 140, 0.08);
-    color: #fff;
-}
-
-.rank-pos {
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.3);
-}
-
-.ranking-row.is-me .rank-pos {
-    color: #ffb68c;
-}
-
-.rank-user {
-    font-weight: 600;
-    color: #fff;
-}
-
-.rank-score {
-    font-family: 'JetBrains Mono', monospace;
-    color: #ffb68c;
-}
-
-.rank-avg {
-    font-family: 'JetBrains Mono', monospace;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.rank-games {
-    font-family: 'JetBrains Mono', monospace;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.rank-game {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.difficulty-badge {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: 2px 8px;
-    border-radius: 50px;
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.difficulty-badge.facil {
-    background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
-}
-
-.difficulty-badge.medio {
-    background: rgba(234, 179, 8, 0.15);
-    color: #eab308;
-}
-
-.difficulty-badge.dificil {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
-}
-
-.rank-time {
-    font-family: 'JetBrains Mono', monospace;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.rank-date {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.rank-deaths {
-    font-family: 'JetBrains Mono', monospace;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-@media (max-width: 768px) {
-    .ranking-header,
-    .ranking-row {
-        grid-template-columns: 30px 1fr 80px;
-    }
-
-    .rank-avg,
-    .rank-games {
-        display: none;
-    }
-}
