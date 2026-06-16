@@ -576,7 +576,7 @@ class ConfirmarIdentidad(APIView):
         logger.info(f"[ConfirmarIdentidad] token recibido, length={len(token)}, starts={token[:30] if token else 'EMPTY'}...")
 
         if not token:
-            return HttpResponseRedirect('/forgot-password')
+            return HttpResponseRedirect('http://localhost:5173/forgot-password')
 
         try:
             access_token = AccessToken(token)
@@ -589,7 +589,7 @@ class ConfirmarIdentidad(APIView):
             ConfirmacionReset.confirmar(token, usuario)
             logger.info(f"[ConfirmarIdentidad] CONFIRMADO user={usuario.id}")
 
-            return HttpResponse(SUCCESS_HTML, content_type='text/html')
+            return HttpResponseRedirect(f'http://localhost:5173/forgot-password?token={token}')
 
         except Exception as e:
             logger.error(f"[ConfirmarIdentidad] ERROR: {e}")
