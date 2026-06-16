@@ -395,10 +395,10 @@ class PasswordReset(APIView):
             token['user_id'] = usuario.id
             token['type'] = 'password_reset'
 
-            reset_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
+            reset_url = f"http://localhost:8000/api/password-reset/confirmar/?token={token}"
 
-            si_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
-            no_url = f"http://127.0.0.1:5173/login"
+            si_url = f"http://localhost:8000/api/password-reset/confirmar/?token={token}"
+            no_url = f"http://localhost:5173/login"
 
             html_message = f"""
             <!DOCTYPE html>
