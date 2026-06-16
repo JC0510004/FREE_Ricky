@@ -111,6 +111,11 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
 ]
 
+ARGON2_TIMEOUT = 3
+ARGON2_MEMORY_COST = 20480
+ARGON2_TIME_COST = 2
+ARGON2_PARALLELISM = 2
+
 # ─── PASSWORD VALIDATION ───────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
