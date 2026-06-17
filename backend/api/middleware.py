@@ -20,6 +20,16 @@ class SecurityHeadersMiddleware:
         response['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
         response['Cache-Control'] = 'no-store, max-age=0'
         response['Pragma'] = 'no-cache'
+        response['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self' http://127.0.0.1:5173; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'"
+        )
         return response
 
 

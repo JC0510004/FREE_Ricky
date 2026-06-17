@@ -16,6 +16,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.conf import settings
 
 from .models import Usuario, ConfirmacionReset, Nivel, Partida
+from .utils import check_password_strength
 from .serializers import (
     RegisterSerializer, LoginSerializer, UsuarioSerializer,
     PasswordResetSerializer, PasswordResetConfirmSerializer,
@@ -24,6 +25,22 @@ from .serializers import (
 )
 
 logger = logging.getLogger('seguridad')
+
+
+def _set_refresh_cookie(response, refresh_token):
+    response.set_cookie(
+        'refresh_token',
+        refresh_token,
+        httponly=True,
+        samesite='Lax',
+        max_age=86400,
+        path='/api/',
+        secure=False,
+    )
+
+
+def _clear_refresh_cookie(response):
+    response.delete_cookie('refresh_token', path='/api/')
 
 
 # ─── THROTTLES PERSONALIZADOS ──────────────────────────────────────────
@@ -65,7 +82,7 @@ class RegisterView(APIView):
             extra={'user_id': usuario.id, 'username': usuario.username}
         )
 
-        return Response(
+        response = Response(
             {
                 'mensaje': 'Registro exitoso',
                 'usuario': {
@@ -75,10 +92,11 @@ class RegisterView(APIView):
                     'rol': usuario.rol,
                 },
                 'access_token': access_token,
-                'refresh_token': refresh_token,
             },
             status=status.HTTP_201_CREATED,
         )
+        _set_refresh_cookie(response, refresh_token)
+        return response
 
 
 # ─── LOGIN SEGURO ──────────────────────────────────────────────────────
@@ -162,7 +180,7 @@ class LoginView(APIView):
             }
         )
 
-        return Response(
+        response = Response(
             {
                 'mensaje': 'Sesión iniciada',
                 'usuario': {
@@ -172,9 +190,10 @@ class LoginView(APIView):
                     'rol': usuario.rol,
                 },
                 'access_token': access_token,
-                'refresh_token': refresh_token,
             }
         )
+        _set_refresh_cookie(response, refresh_token)
+        return response
 
 
 # ─── REFRESH TOKEN ─────────────────────────────────────────────────────
@@ -184,7 +203,7 @@ class RefreshTokenView(APIView):
     throttle_classes = [LoginThrottle]
 
     def post(self, request):
-        refresh_token = request.data.get('refresh_token')
+        refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
         if not refresh_token:
             return Response(
                 {'error': 'Refresh token requerido'},
@@ -202,10 +221,11 @@ class RefreshTokenView(APIView):
 
             refresh.blacklist()
 
-            return Response({
+            response = Response({
                 'access_token': access_token,
-                'refresh_token': new_refresh_token,
             })
+            _set_refresh_cookie(response, new_refresh_token)
+            return response
         except Exception as e:
             logger.warning(f"Refresh token inválido: {str(e)}")
             return Response(
@@ -222,7 +242,7 @@ class LogoutView(APIView):
 
     def post(self, request):
         try:
-            refresh_token = request.data.get('refresh_token')
+            refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
@@ -231,13 +251,14 @@ class LogoutView(APIView):
                 f"Logout: {request.user.username}",
                 extra={'user_id': request.user.id}
             )
-            return Response({'mensaje': 'Sesión cerrada correctamente'})
+            response = Response({'mensaje': 'Sesión cerrada correctamente'})
+            _clear_refresh_cookie(response)
+            return response
         except Exception as e:
             logger.error(f"Error en logout: {str(e)}")
-            return Response(
-                {'mensaje': 'Sesión cerrada'},
-                status=status.HTTP_200_OK
-            )
+            response = Response({'mensaje': 'Sesión cerrada'}, status=status.HTTP_200_OK)
+            _clear_refresh_cookie(response)
+            return response
 
 
 # ─── VERIFICAR SESIÓN ──────────────────────────────────────────────────
@@ -472,7 +493,7 @@ class PasswordReset(APIView):
                 extra={'user_id': usuario.id}
             )
 
-            response_data['reset_url'] = reset_url
+            # response_data['reset_url'] = reset_url  # NUNCA leakear el token
 
         except Usuario.DoesNotExist:
             logger.info(f"Intento de recuperación para email no registrado: {email}")
@@ -574,6 +595,7 @@ p{font-size:14px;color:#6b7280;line-height:1.5;margin:0;}
 
 class VerificarCodigo(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
         email = request.data.get('email', '').strip().lower()
@@ -615,6 +637,7 @@ class VerificarCodigo(APIView):
 
 class ConfirmarIdentidad(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]
 
     def get(self, request):
         token = request.query_params.get('token', '')
@@ -827,9 +850,10 @@ class ChangePasswordView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if len(new_password) < 8:
+        password_errors = check_password_strength(new_password)
+        if password_errors:
             return Response(
-                {'error': 'La nueva contraseña debe tener al menos 8 caracteres'},
+                {'errores': {'new_password': password_errors}},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

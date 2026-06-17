@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import API from '../api/axios'
 
-const tabs = [
+const TABS = [
   { id: 'resumen', label: 'Resumen', icon: '📊' },
   { id: 'usuarios', label: 'Usuarios', icon: '👥' },
   { id: 'niveles', label: 'Niveles', icon: '🎮' },
@@ -16,22 +16,20 @@ export default function Admin() {
   const [tab, setTab] = useState('resumen')
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) { navigate('/') }
+    if (!isLoading && !isAuthenticated) navigate('/')
   }, [isLoading, isAuthenticated, navigate])
   useEffect(() => {
-    if (user && user.rol !== 'admin') { navigate('/home') }
+    if (user && user.rol !== 'admin') navigate('/home')
   }, [user, navigate])
 
-  if (isLoading) return null
-  if (!user) return null
+  if (isLoading || !user) return null
 
   return (
     <div className="gaming-dashboard">
       <nav className="gaming-nav">
         <div className="gaming-nav-inner">
           <Link to="/" className="gaming-logo">
-            <span className="logo-icon">⬡</span>
-            SALT BORN
+            <span className="logo-icon">⬡</span>SALT BORN
           </Link>
           <div className="gaming-nav-links">
             <Link to="/home" className="gaming-nav-link">Inicio</Link>
@@ -54,19 +52,14 @@ export default function Admin() {
       </nav>
 
       <main className="gaming-main">
-        <div className="gaming-hero" style={{ paddingBottom: 24 }}>
-          <div className="hero-glow" />
-          <div className="hero-content" style={{ alignItems: 'flex-start' }}>
-            <div className="hero-text">
-              <span className="hero-greeting">Administración</span>
-              <h1 className="hero-title">Panel de Control</h1>
-              <p className="hero-subtitle">Gestiona usuarios, niveles y supervisa el sistema</p>
-            </div>
-          </div>
+        <div className="admin-hero">
+          <span className="hero-greeting">Administración</span>
+          <h1 className="admin-hero-title">Panel de Control</h1>
+          <p className="hero-subtitle">Usuarios, niveles y supervisión del sistema</p>
         </div>
 
         <div className="admin-tabs">
-          {tabs.map(t => (
+          {TABS.map(t => (
             <button key={t.id} className={`admin-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
               <span className="admin-tab-icon">{t.icon}</span>
               {t.label}
@@ -74,18 +67,51 @@ export default function Admin() {
           ))}
         </div>
 
-        <div className="gaming-section" style={{ padding: '0 32px' }}>
-          {tab === 'resumen' && <ResumenTab />}
-          {tab === 'usuarios' && <UsuariosTab />}
-          {tab === 'niveles' && <NivelesTab />}
-          {tab === 'partidas' && <PartidasTab />}
+        <div className="admin-content">
+          {tab === 'resumen' && <Resumen />}
+          {tab === 'usuarios' && <Usuarios />}
+          {tab === 'niveles' && <Niveles />}
+          {tab === 'partidas' && <Partidas />}
         </div>
       </main>
     </div>
   )
 }
 
-function ResumenTab() {
+/* ─── Tabla reutilizable ─── */
+function AdminTable({ headers, rows, emptyMsg = 'Sin datos', className = '' }) {
+  return (
+    <div className={`admin-table ${className}`}>
+      <div className="admin-thead">
+        {headers.map((h, i) => <span key={i} className="admin-th">{h}</span>)}
+      </div>
+      {rows.length > 0 ? rows : (
+        <div className="admin-empty">{emptyMsg}</div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Botones de acción ─── */
+function ActionBtns({ editing, onSave, onCancel, onEdit, onDelete }) {
+  if (editing) {
+    return (
+      <div className="admin-actions">
+        <button className="admin-btn save" onClick={onSave} title="Guardar"><span className="material-symbols-outlined">check</span></button>
+        <button className="admin-btn cancel" onClick={onCancel} title="Cancelar"><span className="material-symbols-outlined">close</span></button>
+      </div>
+    )
+  }
+  return (
+    <div className="admin-actions">
+      <button className="admin-btn edit" onClick={onEdit} title="Editar"><span className="material-symbols-outlined">edit</span></button>
+      <button className="admin-btn delete" onClick={onDelete} title="Eliminar"><span className="material-symbols-outlined">delete</span></button>
+    </div>
+  )
+}
+
+/* ─── RESUMEN ─── */
+function Resumen() {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
 
@@ -93,47 +119,59 @@ function ResumenTab() {
     API.get('/admin/stats/').then(r => setStats(r.data)).catch(() => setError('Error al cargar'))
   }, [])
 
-  if (error) return <div className="auth-general-error"><span className="material-symbols-outlined">error</span><span>{error}</span></div>
-  if (!stats) return <div className="loading-dots" style={{ padding: 40 }}><div className="dot" /><div className="dot" /><div className="dot" /></div>
+  if (error) return <Msg type="error" text={error} />
+  if (!stats) return <Loader />
 
   return (
-    <div className="admin-stats-grid">
-      <div className="admin-stat-card">
-        <span className="admin-stat-icon">👥</span>
-        <span className="admin-stat-value">{stats.total_usuarios}</span>
-        <span className="admin-stat-label">Usuarios</span>
+    <div className="admin-resumen">
+      <div className="stat-card">
+        <span className="stat-icon">👥</span>
+        <div>
+          <span className="stat-value">{stats.total_usuarios}</span>
+          <span className="stat-label">Usuarios registrados</span>
+        </div>
       </div>
-      <div className="admin-stat-card">
-        <span className="admin-stat-icon">🎮</span>
-        <span className="admin-stat-value">{stats.total_niveles}</span>
-        <span className="admin-stat-label">Niveles</span>
+      <div className="stat-card">
+        <span className="stat-icon">🎮</span>
+        <div>
+          <span className="stat-value">{stats.total_niveles}</span>
+          <span className="stat-label">Niveles creados</span>
+        </div>
       </div>
-      <div className="admin-stat-card">
-        <span className="admin-stat-icon">⚔️</span>
-        <span className="admin-stat-value">{stats.total_partidas}</span>
-        <span className="admin-stat-label">Partidas</span>
+      <div className="stat-card">
+        <span className="stat-icon">⚔️</span>
+        <div>
+          <span className="stat-value">{stats.total_partidas}</span>
+          <span className="stat-label">Partidas jugadas</span>
+        </div>
       </div>
-      <div className="admin-stat-card">
-        <span className="admin-stat-icon">⭐</span>
-        <span className="admin-stat-value">{stats.mejor_puntuacion_global}</span>
-        <span className="admin-stat-label">Mejor Punt.</span>
+      <div className="stat-card">
+        <span className="stat-icon">⭐</span>
+        <div>
+          <span className="stat-value">{stats.mejor_puntuacion_global}</span>
+          <span className="stat-label">Mejor puntuación</span>
+        </div>
       </div>
-      <div className="admin-stat-card">
-        <span className="admin-stat-icon">📈</span>
-        <span className="admin-stat-value">{stats.promedio_puntuacion_global}</span>
-        <span className="admin-stat-label">Promedio Global</span>
+      <div className="stat-card">
+        <span className="stat-icon">📈</span>
+        <div>
+          <span className="stat-value">{stats.promedio_puntuacion_global}</span>
+          <span className="stat-label">Promedio global</span>
+        </div>
       </div>
-      <div className="admin-stat-card">
-        <span className="admin-stat-icon">💀</span>
-        <span className="admin-stat-value">{stats.total_muertes_global}</span>
-        <span className="admin-stat-label">Muertes</span>
+      <div className="stat-card">
+        <span className="stat-icon">💀</span>
+        <div>
+          <span className="stat-value">{stats.total_muertes_global}</span>
+          <span className="stat-label">Muertes totales</span>
+        </div>
       </div>
       {stats.jugador_mas_activo && (
-        <div className="admin-stat-card admin-stat-wide">
-          <span className="admin-stat-icon">🏆</span>
-          <div className="admin-stat-text">
-            <span className="admin-stat-value" style={{ fontSize: 18 }}>{stats.jugador_mas_activo}</span>
-            <span className="admin-stat-label">Jugador más activo</span>
+        <div className="stat-card wide">
+          <span className="stat-icon">🏆</span>
+          <div>
+            <span className="stat-value" style={{ fontSize: 20 }}>{stats.jugador_mas_activo}</span>
+            <span className="stat-label">Jugador más activo</span>
           </div>
         </div>
       )}
@@ -141,68 +179,48 @@ function ResumenTab() {
   )
 }
 
-function UsuariosTab() {
+/* ─── USUARIOS ─── */
+function Usuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [error, setError] = useState('')
-  const [editingId, setEditingId] = useState(null)
-  const [editData, setEditData] = useState({ username: '', email: '', rol: '' })
+  const [editId, setEditId] = useState(null)
+  const [form, setForm] = useState({ username: '', email: '', rol: '' })
 
-  useEffect(() => { fetchUsuarios() }, [])
-
-  const fetchUsuarios = async () => {
+  useEffect(() => { fetch() }, [])
+  const fetch = async () => {
     try {
       const res = await API.get('/usuarios/')
       setUsuarios(res.data)
-    } catch { setError('Error al cargar usuarios') }
+    } catch { setError('Error al cargar') }
   }
 
-  const handleEdit = (u) => {
-    setEditingId(u.id)
-    setEditData({ username: u.username, email: u.email, rol: u.rol })
+  const startEdit = (u) => { setEditId(u.id); setForm({ username: u.username, email: u.email, rol: u.rol }) }
+  const save = async (id) => {
+    try { await API.put(`/usuarios/${id}/`, form); setEditId(null); fetch() }
+    catch { setError('Error al actualizar') }
   }
-
-  const handleSave = async (id) => {
-    try {
-      await API.put(`/usuarios/${id}/`, editData)
-      setEditingId(null)
-      fetchUsuarios()
-    } catch { setError('Error al actualizar') }
-  }
-
-  const handleDelete = async (id) => {
+  const del = async (id) => {
     if (!confirm('¿Eliminar este usuario?')) return
-    try {
-      await API.delete(`/usuarios/${id}/`)
-      fetchUsuarios()
-    } catch { setError('Error al eliminar') }
+    try { await API.delete(`/usuarios/${id}/`); fetch() }
+    catch { setError('Error al eliminar') }
   }
 
   return (
     <>
-      {error && <div className="auth-general-error" style={{ marginBottom: 16 }}><span className="material-symbols-outlined">error</span><span>{error}</span></div>}
-      <div className="admin-table-wrap">
-        <div className="admin-table-header">
-          <span className="admin-th" style={{ flex: 2 }}>Usuario</span>
-          <span className="admin-th" style={{ flex: 3 }}>Email</span>
-          <span className="admin-th" style={{ flex: 1 }}>Rol</span>
-          <span className="admin-th" style={{ flex: 1.5 }}>Registro</span>
-          <span className="admin-th" style={{ flex: 1 }}>Acciones</span>
-        </div>
-        {usuarios.map(u => (
-          <div key={u.id} className="admin-table-row">
-            <span style={{ flex: 2, fontWeight: 600, color: '#fff' }}>
-              {editingId === u.id ? (
-                <input value={editData.username} onChange={e => setEditData({ ...editData, username: e.target.value })} className="admin-input" />
-              ) : u.username}
+      {error && <Msg type="error" text={error} />}
+      <AdminTable
+        headers={['Usuario', 'Email', 'Rol', 'Registro', '']}
+        rows={usuarios.map(u => (
+          <div key={u.id} className="admin-tr">
+            <span className="admin-td bold">
+              {editId === u.id ? <input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} className="inp" /> : u.username}
             </span>
-            <span style={{ flex: 3 }}>
-              {editingId === u.id ? (
-                <input value={editData.email} onChange={e => setEditData({ ...editData, email: e.target.value })} className="admin-input" />
-              ) : u.email}
+            <span className="admin-td">
+              {editId === u.id ? <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="inp" /> : u.email}
             </span>
-            <span style={{ flex: 1 }}>
-              {editingId === u.id ? (
-                <select value={editData.rol} onChange={e => setEditData({ ...editData, rol: e.target.value })} className="admin-select">
+            <span className="admin-td">
+              {editId === u.id ? (
+                <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })} className="sel">
                   <option value="jugador">Jugador</option>
                   <option value="admin">Admin</option>
                 </select>
@@ -210,173 +228,128 @@ function UsuariosTab() {
                 <span className={`gaming-badge ${u.rol}`}>{u.rol}</span>
               )}
             </span>
-            <span style={{ flex: 1.5, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
-              {new Date(u.fecha_registro).toLocaleDateString()}
-            </span>
-            <span style={{ flex: 1, display: 'flex', gap: 8 }}>
-              {editingId === u.id ? (
-                <>
-                  <button className="admin-icon-btn save" onClick={() => handleSave(u.id)} title="Guardar">
-                    <span className="material-symbols-outlined">check</span>
-                  </button>
-                  <button className="admin-icon-btn cancel" onClick={() => setEditingId(null)} title="Cancelar">
-                    <span className="material-symbols-outlined">close</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button className="admin-icon-btn edit" onClick={() => handleEdit(u)} title="Editar">
-                    <span className="material-symbols-outlined">edit</span>
-                  </button>
-                  <button className="admin-icon-btn delete" onClick={() => handleDelete(u.id)} title="Eliminar">
-                    <span className="material-symbols-outlined">delete</span>
-                  </button>
-                </>
-              )}
+            <span className="admin-td date">{new Date(u.fecha_registro).toLocaleDateString()}</span>
+            <span className="admin-td actions">
+              <ActionBtns
+                editing={editId === u.id}
+                onSave={() => save(u.id)}
+                onCancel={() => setEditId(null)}
+                onEdit={() => startEdit(u)}
+                onDelete={() => del(u.id)}
+              />
             </span>
           </div>
         ))}
-      </div>
+        emptyMsg="No hay usuarios registrados"
+      />
     </>
   )
 }
 
-function NivelesTab() {
+/* ─── NIVELES ─── */
+function Niveles() {
   const [niveles, setNiveles] = useState([])
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
   const [newNivel, setNewNivel] = useState({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
-  const [editingId, setEditingId] = useState(null)
-  const [editData, setEditData] = useState({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
+  const [editId, setEditId] = useState(null)
+  const [form, setForm] = useState({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
 
-  useEffect(() => { fetchNiveles() }, [])
-
-  const fetchNiveles = async () => {
-    try {
-      const res = await API.get('/niveles/')
-      setNiveles(res.data)
-    } catch { setError('Error al cargar niveles') }
+  useEffect(() => { fetch() }, [])
+  const fetch = async () => {
+    try { const res = await API.get('/niveles/'); setNiveles(res.data) }
+    catch { setError('Error al cargar') }
   }
 
-  const handleCreate = async () => {
+  const create = async () => {
     try {
       await API.post('/niveles/', { ...newNivel, tiempo_limite: newNivel.tiempo_limite ? Number(newNivel.tiempo_limite) : null })
-      setCreating(false)
-      setNewNivel({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
-      fetchNiveles()
-    } catch { setError('Error al crear nivel') }
+      setCreating(false); setNewNivel({ nombre: '', dificultad: 'facil', tiempo_limite: '' }); fetch()
+    } catch { setError('Error al crear') }
   }
 
-  const handleEdit = (n) => {
-    setEditingId(n.id)
-    setEditData({ nombre: n.nombre, dificultad: n.dificultad, tiempo_limite: n.tiempo_limite || '' })
+  const startEdit = (n) => { setEditId(n.id); setForm({ nombre: n.nombre, dificultad: n.dificultad, tiempo_limite: n.tiempo_limite || '' }) }
+  const save = async (id) => {
+    try { await API.put(`/niveles/${id}/`, { ...form, tiempo_limite: form.tiempo_limite ? Number(form.tiempo_limite) : null }); setEditId(null); fetch() }
+    catch { setError('Error al actualizar') }
   }
-
-  const handleSave = async (id) => {
-    try {
-      await API.put(`/niveles/${id}/`, { ...editData, tiempo_limite: editData.tiempo_limite ? Number(editData.tiempo_limite) : null })
-      setEditingId(null)
-      fetchNiveles()
-    } catch { setError('Error al actualizar') }
-  }
-
-  const handleDelete = async (id) => {
+  const del = async (id) => {
     if (!confirm('¿Eliminar este nivel?')) return
-    try {
-      await API.delete(`/niveles/${id}/`)
-      fetchNiveles()
-    } catch { setError('Error al eliminar') }
+    try { await API.delete(`/niveles/${id}/`); fetch() }
+    catch { setError('Error al eliminar') }
+  }
+
+  const Badge = ({ d }) => {
+    const map = { facil: 'F', medio: 'M', dificil: 'D' }
+    return <span className={`mini-badge ${map[d]}`} style={{ fontSize: 10, padding: '2px 10px', width: 'auto' }}>{d}</span>
   }
 
   return (
     <>
-      {error && <div className="auth-general-error" style={{ marginBottom: 16 }}><span className="material-symbols-outlined">error</span><span>{error}</span></div>}
+      {error && <Msg type="error" text={error} />}
 
-      <div style={{ marginBottom: 20 }}>
-        {!creating ? (
-          <button className="admin-create-btn" onClick={() => setCreating(true)}>
-            + Nuevo Nivel
-          </button>
-        ) : (
-          <div className="admin-create-form">
-            <input placeholder="Nombre" value={newNivel.nombre} onChange={e => setNewNivel({ ...newNivel, nombre: e.target.value })} className="admin-input" />
-            <select value={newNivel.dificultad} onChange={e => setNewNivel({ ...newNivel, dificultad: e.target.value })} className="admin-select">
+      {creating ? (
+        <div className="admin-create-card">
+          <h3 className="create-title">Nuevo nivel</h3>
+          <div className="create-fields">
+            <input placeholder="Nombre del nivel" value={newNivel.nombre} onChange={e => setNewNivel({ ...newNivel, nombre: e.target.value })} className="inp" />
+            <select value={newNivel.dificultad} onChange={e => setNewNivel({ ...newNivel, dificultad: e.target.value })} className="sel">
               <option value="facil">Fácil</option>
               <option value="medio">Medio</option>
               <option value="dificil">Difícil</option>
             </select>
-            <input placeholder="Tiempo límite (seg)" type="number" value={newNivel.tiempo_limite} onChange={e => setNewNivel({ ...newNivel, tiempo_limite: e.target.value })} className="admin-input" style={{ maxWidth: 140 }} />
-            <button className="admin-create-btn primary" onClick={handleCreate}>Crear</button>
-            <button className="admin-create-btn" style={{ background: 'transparent', color: 'rgba(255,255,255,0.5)' }} onClick={() => setCreating(false)}>Cancelar</button>
+            <input placeholder="Tiempo límite (seg)" type="number" value={newNivel.tiempo_limite} onChange={e => setNewNivel({ ...newNivel, tiempo_limite: e.target.value })} className="inp" style={{ maxWidth: 160 }} />
           </div>
-        )}
-      </div>
-
-      <div className="admin-table-wrap">
-        <div className="admin-table-header">
-          <span className="admin-th" style={{ flex: 2 }}>Nombre</span>
-          <span className="admin-th" style={{ flex: 1 }}>Dificultad</span>
-          <span className="admin-th" style={{ flex: 1 }}>Tiempo Límite</span>
-          <span className="admin-th" style={{ flex: 1.5 }}>Creado</span>
-          <span className="admin-th" style={{ flex: 1 }}>Acciones</span>
+          <div className="create-actions">
+            <button className="btn primary" onClick={create}>Crear nivel</button>
+            <button className="btn ghost" onClick={() => setCreating(false)}>Cancelar</button>
+          </div>
         </div>
-        {niveles.map(n => (
-          <div key={n.id} className="admin-table-row">
-            <span style={{ flex: 2, fontWeight: 600, color: '#fff' }}>
-              {editingId === n.id ? (
-                <input value={editData.nombre} onChange={e => setEditData({ ...editData, nombre: e.target.value })} className="admin-input" />
-              ) : n.nombre}
+      ) : (
+        <button className="btn primary" onClick={() => setCreating(true)} style={{ marginBottom: 20 }}>+ Nuevo nivel</button>
+      )}
+
+      <AdminTable
+        headers={['Nombre', 'Dificultad', 'Tiempo', 'Creado', '']}
+        rows={niveles.map(n => (
+          <div key={n.id} className="admin-tr">
+            <span className="admin-td bold">
+              {editId === n.id ? <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="inp" /> : n.nombre}
             </span>
-            <span style={{ flex: 1 }}>
-              {editingId === n.id ? (
-                <select value={editData.dificultad} onChange={e => setEditData({ ...editData, dificultad: e.target.value })} className="admin-select">
+            <span className="admin-td">
+              {editId === n.id ? (
+                <select value={form.dificultad} onChange={e => setForm({ ...form, dificultad: e.target.value })} className="sel">
                   <option value="facil">Fácil</option>
                   <option value="medio">Medio</option>
                   <option value="dificil">Difícil</option>
                 </select>
-              ) : (
-                <span className={`mini-badge ${n.dificultad[0].toUpperCase()}`} style={{ fontSize: 10, width: 'auto', padding: '2px 10px' }}>
-                  {n.dificultad}
-                </span>
-              )}
+              ) : <Badge d={n.dificultad} />}
             </span>
-            <span style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace", color: 'rgba(255,255,255,0.5)' }}>
-              {editingId === n.id ? (
-                <input type="number" value={editData.tiempo_limite} onChange={e => setEditData({ ...editData, tiempo_limite: e.target.value })} className="admin-input" style={{ maxWidth: 100 }} />
+            <span className="admin-td mono">
+              {editId === n.id ? (
+                <input type="number" value={form.tiempo_limite} onChange={e => setForm({ ...form, tiempo_limite: e.target.value })} className="inp" style={{ maxWidth: 80 }} />
               ) : n.tiempo_limite ? `${n.tiempo_limite}s` : '-'}
             </span>
-            <span style={{ flex: 1.5, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
-              {new Date(n.fecha_creacion).toLocaleDateString()}
-            </span>
-            <span style={{ flex: 1, display: 'flex', gap: 8 }}>
-              {editingId === n.id ? (
-                <>
-                  <button className="admin-icon-btn save" onClick={() => handleSave(n.id)} title="Guardar">
-                    <span className="material-symbols-outlined">check</span>
-                  </button>
-                  <button className="admin-icon-btn cancel" onClick={() => setEditingId(null)} title="Cancelar">
-                    <span className="material-symbols-outlined">close</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button className="admin-icon-btn edit" onClick={() => handleEdit(n)} title="Editar">
-                    <span className="material-symbols-outlined">edit</span>
-                  </button>
-                  <button className="admin-icon-btn delete" onClick={() => handleDelete(n.id)} title="Eliminar">
-                    <span className="material-symbols-outlined">delete</span>
-                  </button>
-                </>
-              )}
+            <span className="admin-td date">{new Date(n.fecha_creacion).toLocaleDateString()}</span>
+            <span className="admin-td actions">
+              <ActionBtns
+                editing={editId === n.id}
+                onSave={() => save(n.id)}
+                onCancel={() => setEditId(null)}
+                onEdit={() => startEdit(n)}
+                onDelete={() => del(n.id)}
+              />
             </span>
           </div>
         ))}
-      </div>
+        emptyMsg="No hay niveles creados"
+      />
     </>
   )
 }
 
-function PartidasTab() {
+/* ─── PARTIDAS ─── */
+function Partidas() {
   const [partidas, setPartidas] = useState([])
   const [error, setError] = useState('')
 
@@ -386,35 +359,32 @@ function PartidasTab() {
 
   return (
     <>
-      {error && <div className="auth-general-error" style={{ marginBottom: 16 }}><span className="material-symbols-outlined">error</span><span>{error}</span></div>}
-      <div className="admin-table-wrap">
-        <div className="admin-table-header">
-          <span className="admin-th" style={{ flex: 1.5 }}>Jugador</span>
-          <span className="admin-th" style={{ flex: 1.5 }}>Nivel</span>
-          <span className="admin-th" style={{ flex: 0.8 }}>Pts</span>
-          <span className="admin-th" style={{ flex: 0.8 }}>💀</span>
-          <span className="admin-th" style={{ flex: 0.8 }}>Tiempo</span>
-          <span className="admin-th" style={{ flex: 1 }}>Fecha</span>
-        </div>
-        {partidas.map(p => (
-          <div key={p.id} className="admin-table-row">
-            <span style={{ flex: 1.5, fontWeight: 600, color: '#fff' }}>{p.usuario_username}</span>
-            <span style={{ flex: 1.5, display: 'flex', gap: 8, alignItems: 'center' }}>
+      {error && <Msg type="error" text={error} />}
+      <AdminTable className="partidas"
+        headers={['Jugador', 'Nivel', 'Pts', '💀', 'Tiempo', 'Fecha']}
+        rows={partidas.map(p => (
+          <div key={p.id} className="admin-tr">
+            <span className="admin-td bold">{p.usuario_username}</span>
+            <span className="admin-td" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {p.nivel_nombre}
               <span className={`mini-badge ${p.nivel_dificultad[0].toUpperCase()}`}>{p.nivel_dificultad[0].toUpperCase()}</span>
             </span>
-            <span style={{ flex: 0.8, fontFamily: "'JetBrains Mono', monospace", color: '#ffb68c', fontWeight: 600 }}>{p.puntuacion}</span>
-            <span style={{ flex: 0.8, fontFamily: "'JetBrains Mono', monospace", color: 'rgba(255,255,255,0.5)' }}>{p.muertes}</span>
-            <span style={{ flex: 0.8, fontFamily: "'JetBrains Mono', monospace", color: 'rgba(255,255,255,0.5)' }}>
-              {p.tiempo ? `${Math.floor(p.tiempo / 60)}:${String(p.tiempo % 60).padStart(2, '0')}` : '-'}
-            </span>
-            <span style={{ flex: 1, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>{new Date(p.fecha).toLocaleDateString()}</span>
+            <span className="admin-td mono" style={{ color: '#ffb68c', fontWeight: 600 }}>{p.puntuacion}</span>
+            <span className="admin-td mono">{p.muertes}</span>
+            <span className="admin-td mono">{p.tiempo ? `${Math.floor(p.tiempo / 60)}:${String(p.tiempo % 60).padStart(2, '0')}` : '-'}</span>
+            <span className="admin-td date">{new Date(p.fecha).toLocaleDateString()}</span>
           </div>
         ))}
-        {partidas.length === 0 && (
-          <div style={{ padding: 40, textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>No hay partidas registradas</div>
-        )}
-      </div>
+        emptyMsg="No hay partidas registradas"
+      />
     </>
   )
+}
+
+/* ─── Helpers pequeños ─── */
+function Loader() {
+  return <div className="loading-dots" style={{ padding: 40 }}><div className="dot" /><div className="dot" /><div className="dot" /></div>
+}
+function Msg({ type, text }) {
+  return <div className={`auth-general-${type}`} style={{ marginBottom: 16 }}><span className="material-symbols-outlined">{type === 'error' ? 'error' : 'info'}</span><span>{text}</span></div>
 }

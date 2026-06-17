@@ -6,6 +6,7 @@ const API = axios.create({
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
   },
+  withCredentials: true,
 })
 
 API.interceptors.request.use(
@@ -43,34 +44,31 @@ API.interceptors.response.use(
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
         }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return API(originalRequest)
+          if (token) {
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            return API(originalRequest)
+          }
+          return Promise.reject(error)
         })
       }
 
       originalRequest._retry = true
       isRefreshing = true
 
-      const refresh_token = localStorage.getItem('refresh_token')
-      if (!refresh_token) {
-        localStorage.clear()
-        window.location.href = '/login'
-        return Promise.reject(error)
-      }
-
       try {
         const { data } = await axios.post(
           'http://127.0.0.1:8000/api/token/refresh/',
-          { refresh_token }
+          {},
+          { withCredentials: true }
         )
         localStorage.setItem('access_token', data.access_token)
-        localStorage.setItem('refresh_token', data.refresh_token)
         processQueue(null, data.access_token)
         originalRequest.headers.Authorization = `Bearer ${data.access_token}`
         return API(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
-        localStorage.clear()
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('usuario')
         window.location.href = '/login'
         return Promise.reject(refreshError)
       } finally {

@@ -20,7 +20,6 @@ class RegistroTests(TestCase):
         response = self.client.post(self.url, self.valid_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('access_token', response.data)
-        self.assertIn('refresh_token', response.data)
         self.assertEqual(response.data['usuario']['username'], 'testuser')
 
     def test_registro_password_debil(self):
@@ -83,7 +82,6 @@ class LoginTests(TestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access_token', response.data)
-        self.assertIn('refresh_token', response.data)
         self.assertIn('usuario', response.data)
 
     def test_login_con_email(self):
@@ -154,7 +152,7 @@ class ProteccionEndpointTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_ranking_publico(self):
-        url = reverse('public_ranking')
+        url = reverse('ranking')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
