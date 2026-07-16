@@ -27,7 +27,7 @@ class RegisterSerializer(serializers.ModelSerializer):
                 'El usuario debe tener entre 3 y 50 caracteres alfanuméricos o guión bajo'
             )
         if Usuario.objects.filter(username__iexact=sanitized).exists():
-            raise serializers.ValidationError('Este nombre de usuario ya está registrado')
+            raise serializers.ValidationError('Este nombre de usuario no está disponible')
         return sanitized
 
     def validate_email(self, value):
@@ -36,7 +36,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Debe ser un correo @gmail.com o @hotmail.com')
         normalized = normalize_email(sanitized)
         if Usuario.objects.filter(email__iexact=normalized).exists():
-            raise serializers.ValidationError('Este correo electrónico ya está registrado')
+            raise serializers.ValidationError('Este correo electrónico no está disponible')
         return normalized
 
     def validate_password(self, value):
@@ -101,7 +101,17 @@ class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = ['id', 'username', 'email', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
-        read_only_fields = ['id', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
+        read_only_fields = ['id', 'username', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
+
+    def validate_email(self, value):
+        sanitized = sanitize_input(value)
+        if not validate_email(sanitized):
+            raise serializers.ValidationError('Debe ser un correo @gmail.com o @hotmail.com')
+        normalized = normalize_email(sanitized)
+        user = self.context['request'].user
+        if Usuario.objects.filter(email__iexact=normalized).exclude(id=user.id).exists():
+            raise serializers.ValidationError('Este correo electrónico no está disponible')
+        return normalized
 
 
 class NivelSerializer(serializers.ModelSerializer):
@@ -128,6 +138,27 @@ class PartidaCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Partida
         fields = ['nivel', 'muertes', 'tiempo', 'puntuacion']
+
+    def validate_muertes(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Las muertes no pueden ser negativas')
+        if value > 9999:
+            raise serializers.ValidationError('Muertes fuera de rango permitido')
+        return value
+
+    def validate_puntuacion(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('La puntuación no puede ser negativa')
+        if value is not None and value > 999999:
+            raise serializers.ValidationError('Puntuación fuera de rango permitido')
+        return value
+
+    def validate_tiempo(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('El tiempo no puede ser negativo')
+        if value is not None and value > 86400:
+            raise serializers.ValidationError('Tiempo fuera de rango permitido')
+        return value
 
 
 class UserStatsSerializer(serializers.Serializer):

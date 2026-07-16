@@ -22,6 +22,9 @@ class UsuarioManager(BaseUserManager):
         return self.create_user(username, email, password, **extra_fields)
 
 
+_DUMMY_HASH = make_password('dummy_password_for_timing')
+
+
 class Usuario(AbstractBaseUser):
     ROL_CHOICES = [
         ('admin', 'Admin'),
@@ -85,6 +88,11 @@ class Usuario(AbstractBaseUser):
         self.last_login = timezone.now()
         self.save(update_fields=['failed_attempts', 'locked_until', 'last_login'])
 
+    @staticmethod
+    def dummy_check_password():
+        """Check contra hash precomputado para equalizar tiempo de respuesta (CWE-208)."""
+        check_password('anything', _DUMMY_HASH)
+
 
 class Nivel(models.Model):
     DIFICULTAD = [
@@ -114,6 +122,11 @@ class Partida(models.Model):
 
     class Meta:
         db_table = 'partidas'
+        indexes = [
+            models.Index(fields=['usuario', '-fecha'], name='idx_partida_usuario_fecha'),
+            models.Index(fields=['nivel', '-fecha'], name='idx_partida_nivel_fecha'),
+            models.Index(fields=['-puntuacion'], name='idx_partida_puntuacion'),
+        ]
 
     def __str__(self):
         return f"{self.usuario.username} - {self.nivel.nombre}"
@@ -125,18 +138,14 @@ class ConfirmacionReset(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    TOKEN_EXPIRY_MINUTES = 15
+
     class Meta:
         db_table = 'confirmaciones_reset'
 
-    @classmethod
-    def confirmar(cls, token: str, usuario) -> None:
-        h = hashlib.sha256(token.encode()).hexdigest()
-        cls.objects.get_or_create(token_hash=h, usuario=usuario)
-
-    @classmethod
-    def esta_confirmado(cls, token: str) -> bool:
-        h = hashlib.sha256(token.encode()).hexdigest()
-        return cls.objects.filter(token_hash=h).exists()
+    @property
+    def is_expired(self):
+        return timezone.now() > self.created_at + timezone.timedelta(minutes=self.TOKEN_EXPIRY_MINUTES)
 
     @classmethod
     def verificar_codigo(cls, email: str, codigo: str) -> bool:
@@ -145,4 +154,5 @@ class ConfirmacionReset(models.Model):
             codigo_hash=h,
             usuario__email__iexact=email,
             usuario__is_active=True,
+            created_at__gte=timezone.now() - timezone.timedelta(minutes=cls.TOKEN_EXPIRY_MINUTES),
         ).exists()

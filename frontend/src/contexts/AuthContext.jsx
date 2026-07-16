@@ -1,10 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { authService } from '../services/authService'
-
-const AuthContext = createContext(null)
+import { AuthContext } from './auth-context'
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(authService.getStoredUser())
+  const [user, setUser] = useState(() => authService.getStoredUser())
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -49,19 +48,14 @@ export function AuthProvider({ children }) {
 
   const isAuthenticated = !!user
 
+  const value = useMemo(
+    () => ({ user, isAuthenticated, isLoading, login, register, logout, checkSession }),
+    [user, isAuthenticated, isLoading, login, register, logout, checkSession]
+  )
+
   return (
-    <AuthContext.Provider
-      value={{ user, isAuthenticated, isLoading, login, register, logout, checkSession }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
 }

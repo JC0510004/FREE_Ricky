@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
 
 const TABS = [
@@ -9,6 +9,12 @@ const TABS = [
   { id: 'niveles', label: 'Niveles', icon: '🎮' },
   { id: 'partidas', label: 'Partidas', icon: '⚔️' },
 ]
+
+const BADGE_MAP = { facil: 'F', medio: 'M', dificil: 'D' }
+
+function Badge({ d }) {
+  return <span className={`mini-badge ${BADGE_MAP[d]}`} style={{ fontSize: 12, padding: '2px 10px', width: 'auto' }}>{d}</span>
+}
 
 export default function Admin() {
   const navigate = useNavigate()
@@ -44,7 +50,7 @@ export default function Admin() {
                 <span className="gaming-badge admin">Administrador</span>
               </div>
             </div>
-            <button className="gaming-logout-btn" onClick={async () => { await logout(); navigate('/') }}>
+            <button type="button" className="gaming-logout-btn" onClick={async () => { await logout(); navigate('/') }}>
               Salir
             </button>
           </div>
@@ -60,7 +66,7 @@ export default function Admin() {
 
         <div className="admin-tabs">
           {TABS.map(t => (
-            <button key={t.id} className={`admin-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            <button type="button" key={t.id} className={`admin-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
               <span className="admin-tab-icon">{t.icon}</span>
               {t.label}
             </button>
@@ -83,7 +89,7 @@ function AdminTable({ headers, rows, emptyMsg = 'Sin datos', className = '' }) {
   return (
     <div className={`admin-table ${className}`}>
       <div className="admin-thead">
-        {headers.map((h, i) => <span key={i} className="admin-th">{h}</span>)}
+        {headers.map((h) => <span key={h} className="admin-th">{h}</span>)}
       </div>
       {rows.length > 0 ? rows : (
         <div className="admin-empty">{emptyMsg}</div>
@@ -97,15 +103,15 @@ function ActionBtns({ editing, onSave, onCancel, onEdit, onDelete }) {
   if (editing) {
     return (
       <div className="admin-actions">
-        <button className="admin-btn save" onClick={onSave} title="Guardar"><span className="material-symbols-outlined">check</span></button>
-        <button className="admin-btn cancel" onClick={onCancel} title="Cancelar"><span className="material-symbols-outlined">close</span></button>
+        <button type="button" className="admin-btn save" onClick={onSave} title="Guardar"><span className="material-symbols-outlined">check</span></button>
+        <button type="button" className="admin-btn cancel" onClick={onCancel} title="Cancelar"><span className="material-symbols-outlined">close</span></button>
       </div>
     )
   }
   return (
     <div className="admin-actions">
-      <button className="admin-btn edit" onClick={onEdit} title="Editar"><span className="material-symbols-outlined">edit</span></button>
-      <button className="admin-btn delete" onClick={onDelete} title="Eliminar"><span className="material-symbols-outlined">delete</span></button>
+      <button type="button" className="admin-btn edit" onClick={onEdit} title="Editar"><span className="material-symbols-outlined">edit</span></button>
+      <button type="button" className="admin-btn delete" onClick={onDelete} title="Eliminar"><span className="material-symbols-outlined">delete</span></button>
     </div>
   )
 }
@@ -279,11 +285,6 @@ function Niveles() {
     catch { setError('Error al eliminar') }
   }
 
-  const Badge = ({ d }) => {
-    const map = { facil: 'F', medio: 'M', dificil: 'D' }
-    return <span className={`mini-badge ${map[d]}`} style={{ fontSize: 10, padding: '2px 10px', width: 'auto' }}>{d}</span>
-  }
-
   return (
     <>
       {error && <Msg type="error" text={error} />}
@@ -293,7 +294,7 @@ function Niveles() {
           <h3 className="create-title">Nuevo nivel</h3>
           <div className="create-fields">
             <input placeholder="Nombre del nivel" value={newNivel.nombre} onChange={e => setNewNivel({ ...newNivel, nombre: e.target.value })} className="inp" />
-            <select value={newNivel.dificultad} onChange={e => setNewNivel({ ...newNivel, dificultad: e.target.value })} className="sel">
+            <select value={newNivel.dificultad} onChange={e => setNewNivel({ ...newNivel, dificultad: e.target.value })} className="sel" aria-label="Dificultad">
               <option value="facil">Fácil</option>
               <option value="medio">Medio</option>
               <option value="dificil">Difícil</option>
@@ -301,12 +302,12 @@ function Niveles() {
             <input placeholder="Tiempo límite (seg)" type="number" value={newNivel.tiempo_limite} onChange={e => setNewNivel({ ...newNivel, tiempo_limite: e.target.value })} className="inp" style={{ maxWidth: 160 }} />
           </div>
           <div className="create-actions">
-            <button className="btn primary" onClick={create}>Crear nivel</button>
-            <button className="btn ghost" onClick={() => setCreating(false)}>Cancelar</button>
+            <button type="button" className="btn primary" onClick={create}>Crear nivel</button>
+            <button type="button" className="btn ghost" onClick={() => setCreating(false)}>Cancelar</button>
           </div>
         </div>
       ) : (
-        <button className="btn primary" onClick={() => setCreating(true)} style={{ marginBottom: 20 }}>+ Nuevo nivel</button>
+        <button type="button" className="btn primary" onClick={() => setCreating(true)} style={{ marginBottom: 20 }}>+ Nuevo nivel</button>
       )}
 
       <AdminTable

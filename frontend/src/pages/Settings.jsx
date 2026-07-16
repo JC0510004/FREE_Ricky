@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
 
 export default function Settings() {
@@ -39,10 +39,10 @@ export default function Settings() {
         username: profile.username,
         email: profile.email,
       })
-      const stored = localStorage.getItem('usuario')
+      const stored = localStorage.getItem('usuario:v1')
       if (stored) {
         const updated = { ...JSON.parse(stored), username: profile.username, email: profile.email }
-        localStorage.setItem('usuario', JSON.stringify(updated))
+        localStorage.setItem('usuario:v1', JSON.stringify(updated))
       }
       setSaved('Cambios guardados correctamente')
     } catch {
@@ -102,7 +102,7 @@ export default function Settings() {
                 </span>
               </div>
             </div>
-            <button className="gaming-logout-btn" onClick={async () => { await logout(); navigate('/') }}>
+            <button type="button" className="gaming-logout-btn" onClick={async () => { await logout(); navigate('/') }}>
               Salir
             </button>
           </div>

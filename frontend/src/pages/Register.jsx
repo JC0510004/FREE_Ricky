@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 
 function getPasswordStrength(password) {
   let score = 0
@@ -24,6 +24,7 @@ export default function Register() {
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const passwordStrength = useMemo(() => getPasswordStrength(formData.password), [formData.password])
 
@@ -181,13 +182,25 @@ export default function Register() {
 
             <div className="auth-field">
               <label htmlFor="confirmPassword">Confirmar Contraseña</label>
-              <input
-                id="confirmPassword" name="confirmPassword"
-                type={showPassword ? 'text' : 'password'}
-                value={formData.confirmPassword} onChange={handleChange}
-                placeholder="••••••••"
-                autoComplete="new-password" disabled={isLoading}
-              />
+              <div className="auth-password-wrapper">
+                <input
+                  id="confirmPassword" name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={formData.confirmPassword} onChange={handleChange}
+                  placeholder="••••••••"
+                  autoComplete="new-password" disabled={isLoading}
+                />
+                <button
+                  type="button" className="auth-password-toggle"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? 'Ocultar' : 'Mostrar'}
+                >
+                  <span className="material-symbols-outlined">
+                    {showConfirmPassword ? 'visibility_off' : 'visibility'}
+                  </span>
+                </button>
+              </div>
               {errors.confirmPassword && <span className="auth-error">{errors.confirmPassword}</span>}
             </div>
 

@@ -129,7 +129,7 @@ export default function Team() {
           />
         </div>
         <div className="team-right">
-          <button className="carousel-button prev" id="team-prev-btn" onClick={handlePrev}>
+          <button type="button" className="carousel-button prev" id="team-prev-btn" onClick={handlePrev}>
             <span className="material-symbols-outlined">chevron_left</span>
           </button>
           <div className="team-card">
@@ -157,7 +157,7 @@ export default function Team() {
               <span id="team-current">{currentMemberIndex + 1}</span> / <span id="team-total">{teamMembers.length}</span>
             </div>
           </div>
-          <button className="carousel-button next" id="team-next-btn" onClick={handleNext}>
+          <button type="button" className="carousel-button next" id="team-next-btn" onClick={handleNext}>
             <span className="material-symbols-outlined">chevron_right</span>
           </button>
         </div>

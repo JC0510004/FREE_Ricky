@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
 
 const difficultyConfig = {
@@ -81,7 +81,7 @@ export default function Home() {
                 </span>
               </div>
             </div>
-            <button className="gaming-logout-btn" onClick={handleLogout} disabled={loggingOut}>
+            <button type="button" className="gaming-logout-btn" onClick={handleLogout} disabled={loggingOut}>
               {loggingOut ? '...' : 'Salir'}
             </button>
           </div>
@@ -148,7 +148,7 @@ export default function Home() {
                   </div>
                   <h3 className="level-name">{n.nombre}</h3>
                   <div className="level-card-footer">
-                    <button className="level-play-btn" style={{ '--btn-accent': diff.color }}>
+                    <button type="button" className="level-play-btn" style={{ '--btn-accent': diff.color }}>
                       JUGAR
                     </button>
                   </div>

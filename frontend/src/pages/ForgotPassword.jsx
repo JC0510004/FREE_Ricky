@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import API from '../api/axios'
 
@@ -8,7 +8,7 @@ export default function ForgotPassword() {
   const urlToken = searchParams.get('token') || ''
 
   const [email, setEmail] = useState('')
-  const [token, setToken] = useState('')
+  const tokenRef = useRef('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [step, setStep] = useState('form')
@@ -16,10 +16,11 @@ export default function ForgotPassword() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   useEffect(() => {
     if (!urlToken) return
-    setToken(urlToken)
+    tokenRef.current = urlToken
     API.get(`/password-reset/verificar/?token=${urlToken}`)
       .then((res) => {
         if (res.data?.confirmado) {
@@ -29,7 +30,7 @@ export default function ForgotPassword() {
         }
       })
       .catch(() => {})
-  }, [])
+  }, [urlToken])
 
   const handleSubmitEmail = useCallback(async (e) => {
     e.preventDefault()
@@ -47,7 +48,7 @@ export default function ForgotPassword() {
       const res = await API.post('/password-reset/', { email: sanitized.toLowerCase() })
       if (res.data?.reset_url) {
         const match = res.data.reset_url.match(/token=([^&]+)/)
-        if (match) setToken(match[1])
+        if (match) tokenRef.current = match[1]
       }
       setStep('sent')
     } catch {
@@ -58,7 +59,7 @@ export default function ForgotPassword() {
   }, [email])
 
   const handleCheckConfirm = useCallback(async () => {
-    const t = token || urlToken
+    const t = tokenRef.current || urlToken
     if (!t) { setError('Token inválido'); return }
     setError('')
     try {
@@ -71,7 +72,7 @@ export default function ForgotPassword() {
     } catch {
       setError('Error al verificar identidad')
     }
-  }, [token, urlToken])
+  }, [urlToken])
 
   const handleResetPassword = useCallback(async (e) => {
     e.preventDefault()
@@ -84,7 +85,7 @@ export default function ForgotPassword() {
     if (!/[!@#$%^&*(),.?":{}|<>_\-]/.test(password)) { setError('Debe tener un carácter especial'); return }
     if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return }
 
-    const t = token || urlToken
+    const t = tokenRef.current || urlToken
     if (!t) { setError('Token inválido'); return }
 
     setIsLoading(true)
@@ -103,7 +104,7 @@ export default function ForgotPassword() {
     } finally {
       setIsLoading(false)
     }
-  }, [token, urlToken, password, confirmPassword])
+  }, [urlToken, password, confirmPassword])
 
   if (step === 'success') {
     return (
@@ -113,7 +114,7 @@ export default function ForgotPassword() {
             <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#22c55e', marginBottom: 16 }}>check_circle</span>
             <h1 className="auth-title">Contraseña Restablecida</h1>
             <p className="auth-subtitle" style={{ marginBottom: 32 }}>Tu contraseña ha sido actualizada correctamente.</p>
-            <button onClick={() => navigate('/login')} className="auth-submit">Iniciar Sesión</button>
+            <button type="button" onClick={() => navigate('/login')} className="auth-submit">Iniciar Sesión</button>
           </div>
         </div>
       </div>
@@ -138,11 +139,11 @@ export default function ForgotPassword() {
               </div>
             )}
 
-            <button onClick={handleCheckConfirm} className="auth-submit" style={{ marginBottom: 12 }}>
+            <button type="button" onClick={handleCheckConfirm} className="auth-submit" style={{ marginBottom: 12 }}>
               Continuar
             </button>
 
-            <button onClick={() => navigate('/login')} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <button type="button" onClick={() => navigate('/login')} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>
               Volver al inicio de sesión
             </button>
           </div>
@@ -162,11 +163,11 @@ export default function ForgotPassword() {
               Aún no has confirmado tu identidad. Revisa tu correo y haz clic en "Sí, soy yo", luego presiona "Continuar".
             </p>
 
-            <button onClick={handleCheckConfirm} className="auth-submit" style={{ marginBottom: 12 }}>
+            <button type="button" onClick={handleCheckConfirm} className="auth-submit" style={{ marginBottom: 12 }}>
               Verificar de nuevo
             </button>
 
-            <button onClick={() => { setStep('form'); setToken(''); setEmail(''); }} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <button type="button" onClick={() => { setStep('form'); tokenRef.current = ''; setEmail(''); }} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>
               Reenviar correo
             </button>
           </div>
@@ -203,13 +204,18 @@ export default function ForgotPassword() {
 
               <div className="auth-field">
                 <label htmlFor="confirmPassword">Confirmar Contraseña</label>
-                <input
-                  id="confirmPassword" type={showPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                />
+                <div className="auth-password-wrapper">
+                  <input
+                    id="confirmPassword" type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                  />
+                  <button type="button" className="auth-password-toggle" onClick={() => setShowConfirmPassword(!showConfirmPassword)} tabIndex={-1}>
+                    <span className="material-symbols-outlined">{showConfirmPassword ? 'visibility_off' : 'visibility'}</span>
+                  </button>
+                </div>
               </div>
 
               {error && (

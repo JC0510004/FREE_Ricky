@@ -4,15 +4,6 @@ export default function Hero() {
   const sectionRef = useRef(null);
 
   useEffect(() => {
-    const handlePointerMove = (e) => {
-      globalMouseX = e.clientX / window.innerWidth - 0.5;
-      globalMouseY = e.clientY / window.innerHeight - 0.5;
-    };
-
-    window.addEventListener('pointermove', handlePointerMove, {
-      passive: true,
-    });
-
     const section = sectionRef.current;
     if (!section) return;
 
@@ -24,9 +15,14 @@ export default function Hero() {
     let currentX = 0;
     let currentY = 0;
 
-    // Start active by default to prevent timing issues with CSS injection and initial observer callback
     let parallaxActive = true;
     let isAnimating = true;
+    let rafId = null;
+
+    const handlePointerMove = (e) => {
+      globalMouseX = e.clientX / window.innerWidth - 0.5;
+      globalMouseY = e.clientY / window.innerHeight - 0.5;
+    };
 
     const handleMouseMove = (e) => {
       globalMouseX = e.clientX / window.innerWidth - 0.5;
@@ -38,6 +34,7 @@ export default function Hero() {
       globalMouseY = 0;
     };
 
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
     document.addEventListener('mouseleave', handleMouseLeave);
 
@@ -55,13 +52,11 @@ export default function Hero() {
         const x = currentX * speed * 75;
         const y = currentY * speed * 50;
         layer.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
-        console.log(layer.className, x, y);
       });
 
-      requestAnimationFrame(animateParallax);
+      rafId = requestAnimationFrame(animateParallax);
     };
 
-    // Run the animation loop immediately on mount
     animateParallax();
 
     const observer = new IntersectionObserver(
@@ -84,8 +79,10 @@ export default function Hero() {
     observer.observe(section);
 
     return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseleave', handleMouseLeave);
+      if (rafId !== null) cancelAnimationFrame(rafId);
       observer.disconnect();
       parallaxActive = false;
     };
@@ -139,7 +136,7 @@ export default function Hero() {
           plataformas engañosas y un mundo decidido a convertir cada paso en una nueva desgracia.
         </p>
         <div className="hero-buttons">
-          <button className="hero-button">COMIENZA LA BÚSQUEDA</button>
+          <button type="button" className="hero-button">COMIENZA LA BÚSQUEDA</button>
         </div>
       </div>
     </section>

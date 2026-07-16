@@ -1,7 +1,9 @@
 import logging
 import hashlib
+from uuid import uuid4
 from datetime import timedelta
 from django.utils import timezone
+from django.conf import settings
 from django.db.models import Q, Avg, Count, Sum, Max, Min
 from django.http import HttpResponse, HttpResponseRedirect
 
@@ -9,11 +11,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.throttling import AnonRateThrottle
-from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.pagination import PageNumberPagination
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
-
-from django.conf import settings
 
 from .models import Usuario, ConfirmacionReset, Nivel, Partida
 from .utils import check_password_strength
@@ -35,7 +36,7 @@ def _set_refresh_cookie(response, refresh_token):
         samesite='Lax',
         max_age=86400,
         path='/api/',
-        secure=False,
+        secure=not settings.DEBUG,
     )
 
 
@@ -51,6 +52,21 @@ class LoginThrottle(AnonRateThrottle):
 
 class RegisterThrottle(AnonRateThrottle):
     scope = 'register'
+
+
+class PasswordResetThrottle(AnonRateThrottle):
+    scope = 'password_reset'
+
+
+class ChangePasswordThrottle(UserRateThrottle):
+    scope = 'change_password'
+
+
+def _generate_reset_token():
+    """Genera un token UUID y su hash SHA-256. El UUID viaja por email; el hash se guarda en DB."""
+    token = uuid4().hex
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    return token, token_hash
 
 
 # ─── REGISTRO SEGURO ───────────────────────────────────────────────────
@@ -121,6 +137,8 @@ class LoginView(APIView):
                 Q(username__iexact=username) | Q(email__iexact=username)
             )
         except Usuario.DoesNotExist:
+            # Dummy check_password para igualar tiempo de respuesta (CWE-208)
+            Usuario.dummy_check_password()
             logger.warning(
                 f"Login fallido - usuario no encontrado: {username}",
                 extra={'ip': request.META.get('REMOTE_ADDR')}
@@ -166,11 +184,10 @@ class LoginView(APIView):
         usuario.reset_failed_attempts()
 
         refresh = RefreshToken.for_user(usuario)
-        access_token = str(refresh.access_token)
-        refresh_token = str(refresh)
-
         refresh['username'] = usuario.username
         refresh['rol'] = usuario.rol
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
 
         logger.info(
             f"Login exitoso: {usuario.username}",
@@ -272,30 +289,13 @@ class VerifySessionView(APIView):
         return Response({'authenticated': True, 'usuario': serializer.data})
 
 
-# ─── RANKINGS PÚBLICOS (SOLO DATOS ANONIMIZADOS) ───────────────────────
-
-class PublicRankingView(APIView):
-    permission_classes = [AllowAny]
-    throttle_classes = [AnonRateThrottle]
-
-    def get(self, request):
-        usuarios = Usuario.objects.filter(is_active=True).order_by('-fecha_registro')[:5]
-        data = [
-            {
-                'id': u.id,
-                'username': u.username,
-                'fecha_registro': u.fecha_registro,
-            }
-            for u in usuarios
-        ]
-        return Response(data)
-
-
 # ─── LISTAR USUARIOS (SOLO ADMIN) ──────────────────────────────────────
 
 class UsuarioListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+    page_size = 50
 
     def get(self, request):
         if request.user.rol != 'admin':
@@ -304,8 +304,12 @@ class UsuarioListView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         usuarios = Usuario.objects.all()
-        serializer = UsuarioSerializer(usuarios, many=True)
-        return Response(serializer.data)
+        page = request.query_params.get('page', 1)
+        paginator = self.pagination_class()
+        paginator.page_size = self.page_size
+        page_obj = paginator.paginate_queryset(usuarios, request)
+        serializer = UsuarioSerializer(page_obj, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 # ─── DETALLE USUARIO (SOLO PROPIETARIO O ADMIN) ───────────────────────
@@ -347,14 +351,7 @@ class UsuarioDetailView(APIView):
                 {'error': 'No autorizado'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        allowed = ['username', 'email']
-        update_data = {k: v for k, v in request.data.items() if k in allowed}
-        if not update_data:
-            return Response(
-                {'error': 'No hay campos válidos para actualizar'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        serializer = UsuarioSerializer(usuario, data=update_data, partial=True)
+        serializer = UsuarioSerializer(usuario, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             logger.info(
@@ -391,12 +388,11 @@ class UsuarioDetailView(APIView):
 # ─── RECUPERACIÓN DE CONTRASEÑA ────────────────────────────────────────
 
 from django.core.mail import send_mail
-from django.conf import settings
 
 
 class PasswordReset(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [AnonRateThrottle]
+    throttle_classes = [PasswordResetThrottle]
 
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
@@ -414,16 +410,12 @@ class PasswordReset(APIView):
         try:
             usuario = Usuario.objects.get(email__iexact=email, is_active=True)
 
-            import secrets
-            token = AccessToken()
-            token.set_exp(lifetime=timedelta(minutes=15))
-            token['user_id'] = usuario.id
-            token['type'] = 'password_reset'
+            token, token_hash = _generate_reset_token()
+            ConfirmacionReset.objects.filter(usuario=usuario).delete()
+            ConfirmacionReset.objects.create(usuario=usuario, token_hash=token_hash)
 
-            reset_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
-
-            si_url = f"https://enrage-runt-starfish.ngrok-free.dev/api/password-reset/confirmar/?token={token}"
-            no_url = f"http://localhost:5173/login"
+            si_url = f"{settings.API_BASE_URL}/api/password-reset/confirmar/?token={token}"
+            no_url = f"{settings.FRONTEND_URL}/login"
 
             html_message = f"""
             <!DOCTYPE html>
@@ -503,7 +495,7 @@ class PasswordReset(APIView):
 
 class PasswordResetConfirm(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [AnonRateThrottle]
+    throttle_classes = [PasswordResetThrottle]
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
@@ -516,18 +508,29 @@ class PasswordResetConfirm(APIView):
         token = serializer.validated_data['token']
         password = serializer.validated_data['password']
 
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
         try:
-            access_token = AccessToken(token)
-            if access_token.payload.get('type') != 'password_reset':
-                raise Exception('Invalid token type')
+            reset_record = ConfirmacionReset.objects.select_related('usuario').get(
+                token_hash=token_hash
+            )
 
-            user_id = access_token.payload.get('user_id')
-            usuario = Usuario.objects.get(id=user_id, is_active=True)
+            if reset_record.is_expired:
+                return Response(
+                    {'error': 'Token expirado. Solicita uno nuevo'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            usuario = reset_record.usuario
+
+            if not usuario.is_active:
+                raise Exception('Usuario inactivo')
 
             usuario.set_password(password)
             usuario.failed_attempts = 0
             usuario.locked_until = None
             usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
+
+            reset_record.delete()
 
             logger.info(
                 f"Contraseña restablecida para: {usuario.username}",
@@ -595,7 +598,7 @@ p{font-size:14px;color:#6b7280;line-height:1.5;margin:0;}
 
 class VerificarCodigo(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [AnonRateThrottle]
+    throttle_classes = [PasswordResetThrottle]
 
     def post(self, request):
         email = request.data.get('email', '').strip().lower()
@@ -611,20 +614,19 @@ class VerificarCodigo(APIView):
         if confirmado:
             try:
                 usuario = Usuario.objects.get(email__iexact=email, is_active=True)
-                token = AccessToken()
-                token.set_exp(lifetime=timedelta(minutes=15))
-                token['user_id'] = usuario.id
-                token['type'] = 'password_reset'
+                token, token_hash = _generate_reset_token()
 
-                token_hash = hashlib.sha256(str(token).encode()).hexdigest()
                 ConfirmacionReset.objects.filter(
                     usuario=usuario,
                     codigo_hash=hashlib.sha256(codigo.encode()).hexdigest()
-                ).update(token_hash=token_hash)
+                ).update(
+                    token_hash=token_hash,
+                    codigo_hash=None,
+                )
 
                 return Response({
                     'valido': True,
-                    'token': str(token),
+                    'token': token,
                 })
             except Usuario.DoesNotExist:
                 pass
@@ -641,20 +643,24 @@ class ConfirmarIdentidad(APIView):
 
     def get(self, request):
         token = request.query_params.get('token', '')
-        logger.info(f"[ConfirmarIdentidad] token recibido, length={len(token)}, starts={token[:30] if token else 'EMPTY'}...")
 
         if not token:
             return HttpResponseRedirect('/forgot-password')
 
         try:
-            access_token = AccessToken(token)
-            if access_token.payload.get('type') != 'password_reset':
-                return HttpResponse(ERROR_HTML, content_type='text/html', status=400)
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            reset_record = ConfirmacionReset.objects.select_related('usuario').get(
+                token_hash=token_hash
+            )
 
-            user_id = access_token.payload.get('user_id')
-            usuario = Usuario.objects.get(id=user_id, is_active=True)
+            if reset_record.is_expired:
+                raise Exception('Token expirado')
 
-            ConfirmacionReset.confirmar(token, usuario)
+            usuario = reset_record.usuario
+
+            if not usuario.is_active:
+                raise Exception('Usuario inactivo')
+
             logger.info(f"[ConfirmarIdentidad] CONFIRMADO user={usuario.id}")
 
             return HttpResponse(SUCCESS_HTML, content_type='text/html')
@@ -672,14 +678,22 @@ class VerificarConfirmacion(APIView):
         if not token:
             return Response({'confirmado': False})
 
-        confirmado = ConfirmacionReset.esta_confirmado(token)
-        return Response({'confirmado': confirmado})
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        try:
+            reset_record = ConfirmacionReset.objects.get(token_hash=token_hash)
+            if reset_record.is_expired:
+                return Response({'confirmado': False})
+            return Response({'confirmado': True})
+        except ConfirmacionReset.DoesNotExist:
+            return Response({'confirmado': False})
 
 
 # ─── NIVELES ────────────────────────────────────────────────────────────
 
 class NivelListView(APIView):
     authentication_classes = [JWTAuthentication]
+    pagination_class = PageNumberPagination
+    page_size = 50
 
     def get_permissions(self):
         if self.request.method == 'GET':
@@ -688,8 +702,11 @@ class NivelListView(APIView):
 
     def get(self, request):
         niveles = Nivel.objects.all().order_by('dificultad', 'nombre')
-        serializer = NivelSerializer(niveles, many=True)
-        return Response(serializer.data)
+        paginator = self.pagination_class()
+        paginator.page_size = self.page_size
+        page_obj = paginator.paginate_queryset(niveles, request)
+        serializer = NivelSerializer(page_obj, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
         if request.user.rol != 'admin':
@@ -708,7 +725,7 @@ class PartidaListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        partidas = Partida.objects.filter(usuario=request.user).order_by('-fecha')[:20]
+        partidas = Partida.objects.select_related('nivel').filter(usuario=request.user).order_by('-fecha')[:20]
         serializer = PartidaSerializer(partidas, many=True)
         return Response(serializer.data)
 
@@ -837,6 +854,7 @@ class UserStatsView(APIView):
 class ChangePasswordView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ChangePasswordThrottle]
 
     def post(self, request):
         usuario = request.user

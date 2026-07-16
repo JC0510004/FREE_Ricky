@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../contexts/useAuth'
 
 export default function Login() {
   const navigate = useNavigate()

@@ -1,5 +1,6 @@
 import re
 import logging
+import bleach
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
@@ -15,11 +16,10 @@ def custom_exception_handler(exc, context):
 
         if isinstance(response.data, dict):
             for key, value in response.data.items():
-                safe_key = key.replace('_', ' ').capitalize()
                 if isinstance(value, list):
-                    safe_data[safe_key] = [str(v) for v in value]
+                    safe_data[key] = [str(v) for v in value]
                 else:
-                    safe_data[safe_key] = str(value)
+                    safe_data[key] = str(value)
         else:
             safe_data['detail'] = 'Error en la solicitud'
 
@@ -28,7 +28,7 @@ def custom_exception_handler(exc, context):
     else:
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
         return Response(
-            {'detail': 'Error interno del servidor'},
+            {'error': 'Error interno del servidor'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -38,7 +38,7 @@ def custom_exception_handler(exc, context):
 def sanitize_input(value):
     if not isinstance(value, str):
         return value
-    value = re.sub(r'<[^>]*>', '', value)
+    value = bleach.clean(value, tags=[], strip=True)
     value = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]', '', value)
     return value.strip()
 
@@ -61,7 +61,7 @@ def validate_username(username):
 
 
 def normalize_email(email):
-    local_part, domain = email.lower().strip().split('@')
+    local_part, domain = email.lower().strip().split('@', 1)
     if '+' in local_part:
         local_part = local_part.split('+')[0]
     return f"{local_part}@{domain}"
