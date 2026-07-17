@@ -10,30 +10,11 @@ env:
   SECRET_KEY: 'ci-test-key-not-for-production'
   JWT_SECRET_KEY: 'ci-test-jwt-key-not-for-production'
   DEBUG: 'False'
-  DB_NAME: free_ricky_test
-  DB_USER: root
-  DB_PASSWORD: root
-  DB_HOST: localhost
-  DB_PORT: '3306'
 
 jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
-
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: free_ricky_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost -u root -proot"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
 
     steps:
       - uses: actions/checkout@v4
@@ -52,15 +33,21 @@ jobs:
       - name: Run migrations
         run: python backend/manage.py migrate
         working-directory: .
+        env:
+          DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
 
       - name: Run tests
         run: python backend/manage.py test api --verbosity=2
         working-directory: .
+        env:
+          DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
 
       - name: Security check
         run: python backend/manage.py check --deploy
         continue-on-error: true
         working-directory: .
+        env:
+          DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
 
   backend-lint:
     name: Backend Lint

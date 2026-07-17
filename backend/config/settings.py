@@ -13,7 +13,7 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ─── HOSTS SEGUROS ─────────────────────────────────────────────────────
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver').split(',')
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 TRUSTED_PROXIES = os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16').split(',')
@@ -100,20 +100,29 @@ else:
 SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003', 'django_ratelimit.W001']
 
 # ─── DATABASE ──────────────────────────────────────────────────────────
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('DB_NAME', config('DB_NAME')),
-        'USER': os.environ.get('DB_USER', config('DB_USER')),
-        'PASSWORD': os.environ.get('DB_PASSWORD', config('DB_PASSWORD')),
-        'HOST': os.environ.get('DB_HOST', config('DB_HOST')),
-        'PORT': os.environ.get('DB_PORT', config('DB_PORT')),
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
-        'CONN_MAX_AGE': 600,
+_database_url = os.environ.get('DATABASE_URL', '')
+if _database_url.startswith('sqlite'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': _database_url.split('///', 1)[-1] if '///' in _database_url else ':memory:',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.environ.get('DB_NAME', config('DB_NAME')),
+            'USER': os.environ.get('DB_USER', config('DB_USER')),
+            'PASSWORD': os.environ.get('DB_PASSWORD', config('DB_PASSWORD')),
+            'HOST': os.environ.get('DB_HOST', config('DB_HOST')),
+            'PORT': os.environ.get('DB_PORT', config('DB_PORT')),
+            'OPTIONS': {
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
+            'CONN_MAX_AGE': 600,
+        }
+    }
 
 # ─── PASSWORD HASHING ───────────────────────────────────────────────────
 PASSWORD_HASHERS = [
