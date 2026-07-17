@@ -37,42 +37,14 @@ jobs:
 
       - name: Run migrations
         run: |
-          python backend/manage.py migrate --skip-checks --traceback --verbosity=2 2>&1
+          set +e
+          python backend/manage.py migrate --skip-checks --traceback --verbosity=2 > /tmp/migrate_out.txt 2>&1
           EXIT_CODE=$?
+          echo "=== migrate output ==="
+          cat /tmp/migrate_out.txt
+          echo "=== exit code: $EXIT_CODE ==="
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::Migrations failed with exit code $EXIT_CODE"
-            echo "--- TRYING DIAGNOSTIC ---"
-            python -c "
-          import os, sys, traceback
-          os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
-          os.environ['DATABASE_URL'] = 'sqlite:///tmp/test_diag.sqlite3'
-          sys.path.insert(0, 'backend')
-          try:
-              from config import settings
-              print('Settings OK, DB:', settings.DATABASES['default']['ENGINE'])
-          except Exception as e:
-              print('Settings FAILED:', e)
-              traceback.print_exc()
-          try:
-              import django
-              django.setup()
-              print('Setup OK')
-          except Exception as e:
-              print('Setup FAILED:', e)
-              traceback.print_exc()
-          try:
-              from api import models
-              print('Models OK')
-          except Exception as e:
-              print('Models FAILED:', e)
-              traceback.print_exc()
-          try:
-              from django.core.management import call_command
-              call_command('migrate', '--skip-checks', '--verbosity=2')
-          except Exception as e:
-              print('Migrate FAILED:', e)
-              traceback.print_exc()
-          "
+            echo "::error::migrate failed (exit $EXIT_CODE). See output above."
             exit 1
           fi
         working-directory: .
