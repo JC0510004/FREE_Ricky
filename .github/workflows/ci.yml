@@ -35,53 +35,46 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Diagnose Django setup
+      - name: Run migrations
         run: |
-          python -c "
-          import os, sys
+          python backend/manage.py migrate --skip-checks --traceback --verbosity=2 2>&1
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Migrations failed with exit code $EXIT_CODE"
+            echo "--- TRYING DIAGNOSTIC ---"
+            python -c "
+          import os, sys, traceback
           os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
           os.environ['DATABASE_URL'] = 'sqlite:///tmp/test_diag.sqlite3'
           sys.path.insert(0, 'backend')
-          import django
-          django.setup()
-          from django.core.management import call_command
-          call_command('migrate', '--verbosity=2')
-          " 2>&1 || true
-          echo "---"
-          python -c "
-          import os, sys
-          os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
-          os.environ['DATABASE_URL'] = 'sqlite:///tmp/test_diag.sqlite3'
-          sys.path.insert(0, 'backend')
-          import config.settings as s
-          print('DB_ENGINE:', s.DATABASES['default']['ENGINE'])
-          print('DB_NAME:', s.DATABASES['default'].get('NAME', 'N/A'))
-          print('SECRET_KEY_SET:', bool(s.SECRET_KEY))
-          print('JWT_SECRET_SET:', bool(getattr(s, 'SIMPLE_JWT', {}).get('SIGNING_KEY', '')))
-          print('DEBUG:', s.DEBUG)
-          print('ALLOWED_HOSTS:', s.ALLOWED_HOSTS)
-          print('MIDDLEWARE:', s.MIDDLEWARE)
-          print('LOGS_DIR:', s.LOGS_DIR)
-          print('LOGS_DIR_EXISTS:', os.path.exists(s.LOGS_DIR))
-          import logging
-          logging.disable(logging.CRITICAL)
-          import django
-          django.setup()
-          print('DJANGO_SETUP_OK: True')
-          " 2>&1 || echo "DJANGO_SETUP_FAILED"
-        working-directory: .
-        env:
-          DATABASE_URL: 'sqlite:///tmp/test_diag.sqlite3'
-
-      - name: Run migrations (skip checks)
-        run: python backend/manage.py migrate --skip-checks --traceback --verbosity=2
-        working-directory: .
-        env:
-          DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
-
-      - name: Run migrations (with checks)
-        run: python backend/manage.py check --traceback 2>&1; python backend/manage.py migrate --traceback --verbosity=2
-        continue-on-error: true
+          try:
+              from config import settings
+              print('Settings OK, DB:', settings.DATABASES['default']['ENGINE'])
+          except Exception as e:
+              print('Settings FAILED:', e)
+              traceback.print_exc()
+          try:
+              import django
+              django.setup()
+              print('Setup OK')
+          except Exception as e:
+              print('Setup FAILED:', e)
+              traceback.print_exc()
+          try:
+              from api import models
+              print('Models OK')
+          except Exception as e:
+              print('Models FAILED:', e)
+              traceback.print_exc()
+          try:
+              from django.core.management import call_command
+              call_command('migrate', '--skip-checks', '--verbosity=2')
+          except Exception as e:
+              print('Migrate FAILED:', e)
+              traceback.print_exc()
+          "
+            exit 1
+          fi
         working-directory: .
         env:
           DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
