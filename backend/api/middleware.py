@@ -32,7 +32,7 @@ def get_client_ip(request):
     ip, _ = _get_client_ip(
         request,
         request_header_order=['X_FORWARDED_FOR', 'X_REAL_IP'],
-        proxy_trusted_list=settings.TRUSTED_PROXIES,
+        proxy_trusted_ips=settings.TRUSTED_PROXIES,
     )
     if ip:
         return ip
