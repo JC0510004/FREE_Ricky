@@ -1,9 +1,10 @@
 import logging
 import hashlib
 from uuid import uuid4
-from datetime import timedelta
+
 from django.utils import timezone
 from django.conf import settings
+from django.core.mail import send_mail
 from django.db.models import Q, Avg, Count, Sum, Max, Min
 from django.http import HttpResponse, HttpResponseRedirect
 
@@ -304,7 +305,6 @@ class UsuarioListView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         usuarios = Usuario.objects.all()
-        page = request.query_params.get('page', 1)
         paginator = self.pagination_class()
         paginator.page_size = self.page_size
         page_obj = paginator.paginate_queryset(usuarios, request)
@@ -386,9 +386,6 @@ class UsuarioDetailView(APIView):
 
 
 # ─── RECUPERACIÓN DE CONTRASEÑA ────────────────────────────────────────
-
-from django.core.mail import send_mail
-
 
 class PasswordReset(APIView):
     permission_classes = [AllowAny]

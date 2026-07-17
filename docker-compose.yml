@@ -89,6 +89,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /app/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/ranking/')"]
       interval: 30s
@@ -114,8 +115,11 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /var/cache/nginx
+      - /var/run
+      - /var/log/nginx
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 5s
       retries: 3

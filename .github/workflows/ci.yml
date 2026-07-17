@@ -8,6 +8,7 @@ on:
 
 env:
   SECRET_KEY: 'ci-test-key-not-for-production'
+  JWT_SECRET_KEY: 'ci-test-jwt-key-not-for-production'
   DEBUG: 'False'
   DB_NAME: free_ricky_test
   DB_USER: root

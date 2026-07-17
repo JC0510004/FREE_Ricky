@@ -129,9 +129,9 @@ class PartidaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Partida
         fields = ['id', 'usuario', 'usuario_username', 'nivel', 'nivel_nombre',
-                   'nivel_dificultad', 'muertes', 'tiempo', 'puntuacion', 'fecha']
+                  'nivel_dificultad', 'muertes', 'tiempo', 'puntuacion', 'fecha']
         read_only_fields = ['id', 'usuario', 'usuario_username', 'nivel_nombre',
-                             'nivel_dificultad', 'fecha']
+                            'nivel_dificultad', 'fecha']
 
 
 class PartidaCreateSerializer(serializers.ModelSerializer):
