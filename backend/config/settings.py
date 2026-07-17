@@ -324,5 +324,4 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Crear directorio de logs si no existe
 LOGS_DIR = BASE_DIR / 'logs'
-if not os.path.exists(LOGS_DIR):
-    os.makedirs(LOGS_DIR)
+os.makedirs(LOGS_DIR, exist_ok=True)
