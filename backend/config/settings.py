@@ -6,7 +6,7 @@ from datetime import timedelta
 import hashlib
 
 # ─── CONFIGURACIÓN SEGURA ───────────────────────────────────────────────
-SECRET_KEY = os.environ.get('SECRET_KEY', config('SECRET_KEY'))
+SECRET_KEY = os.environ.get('SECRET_KEY') or config('SECRET_KEY', default='')
 
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
@@ -112,11 +112,11 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': os.environ.get('DB_NAME', config('DB_NAME')),
-            'USER': os.environ.get('DB_USER', config('DB_USER')),
-            'PASSWORD': os.environ.get('DB_PASSWORD', config('DB_PASSWORD')),
-            'HOST': os.environ.get('DB_HOST', config('DB_HOST')),
-            'PORT': os.environ.get('DB_PORT', config('DB_PORT')),
+            'NAME': os.environ.get('DB_NAME') or config('DB_NAME', default=''),
+            'USER': os.environ.get('DB_USER') or config('DB_USER', default=''),
+            'PASSWORD': os.environ.get('DB_PASSWORD') or config('DB_PASSWORD', default=''),
+            'HOST': os.environ.get('DB_HOST') or config('DB_HOST', default=''),
+            'PORT': os.environ.get('DB_PORT') or config('DB_PORT', default=''),
             'OPTIONS': {
                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             },
