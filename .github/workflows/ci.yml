@@ -36,24 +36,32 @@ jobs:
           pip install -r backend/requirements.txt
 
       - name: Run migrations
-        run: |
-          set +e
-          python backend/manage.py migrate --skip-checks --traceback --verbosity=2 > /tmp/migrate_out.txt 2>&1
-          EXIT_CODE=$?
-          echo "=== migrate output ==="
-          cat /tmp/migrate_out.txt
-          echo "=== exit code: $EXIT_CODE ==="
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::migrate failed (exit $EXIT_CODE). See output above."
-            exit 1
-          fi
-        working-directory: .
+        run: python manage.py migrate --skip-checks --traceback --verbosity=2 2>&1 || (echo "::error::Migration failed" && python -c "
+import os, sys, traceback
+os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
+os.environ['DATABASE_URL'] = 'sqlite:///tmp/test_db.sqlite3'
+try:
+    from config import settings
+    print('DB:', settings.DATABASES['default'])
+except Exception as e:
+    traceback.print_exc()
+try:
+    import django; django.setup()
+    print('setup OK')
+except Exception as e:
+    traceback.print_exc()
+try:
+    from api import models; print('models OK')
+except Exception as e:
+    traceback.print_exc()
+" && exit 1)
+        working-directory: backend
         env:
           DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
 
       - name: Run tests
-        run: python backend/manage.py test api --verbosity=2 --traceback --parallel
-        working-directory: .
+        run: python manage.py test api --verbosity=2 --traceback --parallel
+        working-directory: backend
         env:
           DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
 
@@ -73,7 +81,8 @@ jobs:
         run: pip install flake8
 
       - name: Lint
-        run: flake8 backend/api/ --max-line-length=120 --ignore=E501,W503
+        run: flake8 api/ --max-line-length=120 --ignore=E501,W503
+        working-directory: backend
 
   frontend-build:
     name: Frontend Build
