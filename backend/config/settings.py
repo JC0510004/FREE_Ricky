@@ -105,7 +105,7 @@ if _database_url.startswith('sqlite'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': _database_url.split('///', 1)[-1] if '///' in _database_url else ':memory:',
+            'NAME': _database_url.split('//', 1)[-1] if '//' in _database_url else ':memory:',
         }
     }
 else:
