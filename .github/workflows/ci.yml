@@ -36,14 +36,8 @@ jobs:
           pip install -r backend/requirements.txt
 
       - name: Verify Django loads
-        run: python -c "
-import os
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-import django
-django.setup()
-print('Django setup OK')
-print('DB:', django.conf.settings.DATABASES['default'])
-"
+        run: |
+          python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); print('OK:', django.conf.settings.DATABASES['default'])"
         working-directory: backend
         env:
           DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
