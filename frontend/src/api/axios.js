@@ -23,6 +23,14 @@ const processQueue = (error, token = null) => {
   failedQueue = []
 }
 
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 API.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -45,16 +53,17 @@ API.interceptors.response.use(
       isRefreshing = true
 
       try {
-        await axios.post(
-          'http://127.0.0.1:8000/api/token/refresh/',
-          {},
-          { withCredentials: true }
-        )
-        processQueue(null)
+        const { data } = await API.post('/token/refresh/')
+        const newToken = data.access_token
+        localStorage.setItem('access_token', newToken)
+        processQueue(null, newToken)
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
         return API(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
-        window.location.href = '/login'
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('usuario:v1')
+        window.location.href = '/'
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

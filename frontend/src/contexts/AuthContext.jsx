@@ -29,8 +29,6 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (data) => {
     await authService.register(data)
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('usuario')
   }, [])
 
   const logout = useCallback(async () => {

@@ -206,6 +206,9 @@ class LoginView(APIView):
                     'username': usuario.username,
                     'email': usuario.email,
                     'rol': usuario.rol,
+                    'fecha_registro': usuario.fecha_registro.isoformat() if usuario.fecha_registro else None,
+                    'is_verified': usuario.is_verified,
+                    'last_login': usuario.last_login.isoformat() if usuario.last_login else None,
                 },
                 'access_token': access_token,
             }
