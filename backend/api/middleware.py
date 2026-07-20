@@ -36,7 +36,7 @@ def get_client_ip(request):
     )
     if ip:
         return ip
-    return request.META.get('REMOTE_ADDR', '0.0.0.0')
+    return request.META.get('REMOTE_ADDR')
 
 
 class SecurityHeadersMiddleware:
@@ -133,7 +133,10 @@ class BruteForceIPMiddleware:
     def __call__(self, request):
         ip = get_client_ip(request)
 
-        if ip and self._is_blocked(ip):
+        if not ip:
+            return self.get_response(request)
+
+        if self._is_blocked(ip):
             logger.warning(f"Request bloqueado por IP: {ip} {request.method} {request.path}")
             return JsonResponse(
                 {'error': 'Demasiados intentos. IP bloqueada temporalmente'},
@@ -146,7 +149,7 @@ class BruteForceIPMiddleware:
         if (
             path_prefix is not None
             and request.method == 'POST'
-            and response.status_code in (401, 403, 429)
+            and response.status_code in (400, 401, 403, 429)
         ):
             self._record_failure(ip, path_prefix)
 

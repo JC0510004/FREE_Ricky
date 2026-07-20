@@ -65,8 +65,12 @@ class Usuario(AbstractBaseUser):
         return check_password(raw_password, self.password)
 
     def is_locked(self):
-        if self.locked_until and timezone.now() < self.locked_until:
-            return True
+        if self.locked_until:
+            if timezone.now() < self.locked_until:
+                return True
+            self.failed_attempts = 0
+            self.locked_until = None
+            self.save(update_fields=['failed_attempts', 'locked_until'])
         return False
 
     def _get_lockout_duration(self):
@@ -142,6 +146,9 @@ class ConfirmacionReset(models.Model):
 
     class Meta:
         db_table = 'confirmaciones_reset'
+
+    def __str__(self):
+        return f"Reset for {self.usuario.username}"
 
     @property
     def is_expired(self):

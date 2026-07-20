@@ -33,7 +33,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         sanitized = sanitize_input(value)
         if not validate_email(sanitized):
-            raise serializers.ValidationError('Debe ser un correo @gmail.com o @hotmail.com')
+            raise serializers.ValidationError('Debe ser un correo electrónico válido')
         normalized = normalize_email(sanitized)
         if Usuario.objects.filter(email__iexact=normalized).exists():
             raise serializers.ValidationError('Este correo electrónico no está disponible')
@@ -76,7 +76,7 @@ class PasswordResetSerializer(serializers.Serializer):
     def validate_email(self, value):
         sanitized = sanitize_input(value)
         if not validate_email(sanitized):
-            raise serializers.ValidationError('Debe ser un correo @gmail.com o @hotmail.com')
+            raise serializers.ValidationError('Debe ser un correo electrónico válido')
         return normalize_email(sanitized)
 
 
@@ -106,11 +106,15 @@ class UsuarioSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         sanitized = sanitize_input(value)
         if not validate_email(sanitized):
-            raise serializers.ValidationError('Debe ser un correo @gmail.com o @hotmail.com')
+            raise serializers.ValidationError('Debe ser un correo electrónico válido')
         normalized = normalize_email(sanitized)
-        user = self.context['request'].user
-        if Usuario.objects.filter(email__iexact=normalized).exclude(id=user.id).exists():
-            raise serializers.ValidationError('Este correo electrónico no está disponible')
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if Usuario.objects.filter(email__iexact=normalized).exclude(id=request.user.id).exists():
+                raise serializers.ValidationError('Este correo electrónico no está disponible')
+        else:
+            if Usuario.objects.filter(email__iexact=normalized).exists():
+                raise serializers.ValidationError('Este correo electrónico no está disponible')
         return normalized
 
 

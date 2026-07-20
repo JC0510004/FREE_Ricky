@@ -44,7 +44,7 @@ def sanitize_input(value):
 
 
 def validate_email(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@(gmail|hotmail)\.com$'
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     if not re.match(pattern, email):
         return False
     if len(email) > 254:

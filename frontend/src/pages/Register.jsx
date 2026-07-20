@@ -43,7 +43,7 @@ export default function Register() {
     else if (!/^[a-zA-Z0-9_]+$/.test(formData.username.trim())) newErrors.username = 'Solo letras, números y _'
 
     if (!formData.email.trim()) newErrors.email = 'El correo es requerido'
-    else if (!/^[a-zA-Z0-9._%+-]+@(gmail|hotmail)\.com$/.test(formData.email.trim())) newErrors.email = 'Debe ser @gmail.com o @hotmail.com'
+    else     if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(formData.email.trim())) newErrors.email = 'Debe ser un correo electrónico válido'
 
     if (!formData.password) newErrors.password = 'La contraseña es requerida'
     else if (formData.password.length < 8) newErrors.password = 'Mínimo 8 caracteres'

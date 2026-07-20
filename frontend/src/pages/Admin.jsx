@@ -13,7 +13,7 @@ const TABS = [
 const BADGE_MAP = { facil: 'F', medio: 'M', dificil: 'D' }
 
 function Badge({ d }) {
-  return <span className={`mini-badge ${BADGE_MAP[d]}`} style={{ fontSize: 12, padding: '2px 10px', width: 'auto' }}>{d}</span>
+  return <span className={`mini-badge ${BADGE_MAP[d] || ''}`} style={{ fontSize: 12, padding: '2px 10px', width: 'auto' }}>{d || '?'}</span>
 }
 
 export default function Admin() {
@@ -22,11 +22,10 @@ export default function Admin() {
   const [tab, setTab] = useState('resumen')
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) navigate('/')
-  }, [isLoading, isAuthenticated, navigate])
-  useEffect(() => {
-    if (user && user.rol !== 'admin') navigate('/home')
-  }, [user, navigate])
+    if (isLoading) return
+    if (!isAuthenticated) return navigate('/')
+    if (user?.rol !== 'admin') return navigate('/home')
+  }, [isLoading, isAuthenticated, user, navigate])
 
   if (isLoading || !user) return null
 
@@ -44,7 +43,7 @@ export default function Admin() {
           </div>
           <div className="gaming-user-area">
             <div className="gaming-user-info">
-              <div className="gaming-avatar">{user.username[0].toUpperCase()}</div>
+              <div className="gaming-avatar">{user.username?.[0]?.toUpperCase() || '?'}</div>
               <div className="gaming-user-text">
                 <span className="gaming-username">{user.username}</span>
                 <span className="gaming-badge admin">Administrador</span>
@@ -122,7 +121,9 @@ function Resumen() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    API.get('/admin/stats/').then(r => setStats(r.data)).catch(() => setError('Error al cargar'))
+    const controller = new AbortController()
+    API.get('/admin/stats/', { signal: controller.signal }).then(r => setStats(r.data)).catch(() => setError('Error al cargar'))
+    return () => controller.abort()
   }, [])
 
   if (error) return <Msg type="error" text={error} />
@@ -192,22 +193,23 @@ function Usuarios() {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ username: '', email: '', rol: '' })
 
-  useEffect(() => { fetch() }, [])
-  const fetch = async () => {
+  const fetchData = async () => {
     try {
       const res = await API.get('/usuarios/')
-      setUsuarios(res.data)
+      setUsuarios(res.data.results || res.data)
     } catch { setError('Error al cargar') }
   }
 
+  useEffect(() => { fetchData() }, [])
+
   const startEdit = (u) => { setEditId(u.id); setForm({ username: u.username, email: u.email, rol: u.rol }) }
   const save = async (id) => {
-    try { await API.put(`/usuarios/${id}/`, form); setEditId(null); fetch() }
+    try { await API.put(`/usuarios/${id}/`, form); setEditId(null); fetchData() }
     catch { setError('Error al actualizar') }
   }
   const del = async (id) => {
     if (!confirm('¿Eliminar este usuario?')) return
-    try { await API.delete(`/usuarios/${id}/`); fetch() }
+    try { await API.delete(`/usuarios/${id}/`); fetchData() }
     catch { setError('Error al eliminar') }
   }
 
@@ -234,7 +236,7 @@ function Usuarios() {
                 <span className={`gaming-badge ${u.rol}`}>{u.rol}</span>
               )}
             </span>
-            <span className="admin-td date">{new Date(u.fecha_registro).toLocaleDateString()}</span>
+            <span className="admin-td date">{u.fecha_registro ? new Date(u.fecha_registro).toLocaleDateString() : '-'}</span>
             <span className="admin-td actions">
               <ActionBtns
                 editing={editId === u.id}
@@ -261,27 +263,28 @@ function Niveles() {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
 
-  useEffect(() => { fetch() }, [])
-  const fetch = async () => {
-    try { const res = await API.get('/niveles/'); setNiveles(res.data) }
+  const fetchData = async () => {
+    try { const res = await API.get('/niveles/'); setNiveles(res.data.results || res.data) }
     catch { setError('Error al cargar') }
   }
+
+  useEffect(() => { fetchData() }, [])
 
   const create = async () => {
     try {
       await API.post('/niveles/', { ...newNivel, tiempo_limite: newNivel.tiempo_limite ? Number(newNivel.tiempo_limite) : null })
-      setCreating(false); setNewNivel({ nombre: '', dificultad: 'facil', tiempo_limite: '' }); fetch()
+      setCreating(false); setNewNivel({ nombre: '', dificultad: 'facil', tiempo_limite: '' }); fetchData()
     } catch { setError('Error al crear') }
   }
 
   const startEdit = (n) => { setEditId(n.id); setForm({ nombre: n.nombre, dificultad: n.dificultad, tiempo_limite: n.tiempo_limite || '' }) }
   const save = async (id) => {
-    try { await API.put(`/niveles/${id}/`, { ...form, tiempo_limite: form.tiempo_limite ? Number(form.tiempo_limite) : null }); setEditId(null); fetch() }
+    try { await API.put(`/niveles/${id}/`, { ...form, tiempo_limite: form.tiempo_limite ? Number(form.tiempo_limite) : null }); setEditId(null); fetchData() }
     catch { setError('Error al actualizar') }
   }
   const del = async (id) => {
     if (!confirm('¿Eliminar este nivel?')) return
-    try { await API.delete(`/niveles/${id}/`); fetch() }
+    try { await API.delete(`/niveles/${id}/`); fetchData() }
     catch { setError('Error al eliminar') }
   }
 
@@ -355,7 +358,9 @@ function Partidas() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    API.get('/admin/partidas/').then(r => setPartidas(r.data)).catch(() => setError('Error al cargar'))
+    const controller = new AbortController()
+    API.get('/admin/partidas/', { signal: controller.signal }).then(r => setPartidas(r.data.results || r.data)).catch(() => setError('Error al cargar'))
+    return () => controller.abort()
   }, [])
 
   return (
@@ -368,7 +373,7 @@ function Partidas() {
             <span className="admin-td bold">{p.usuario_username}</span>
             <span className="admin-td" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {p.nivel_nombre}
-              <span className={`mini-badge ${p.nivel_dificultad[0].toUpperCase()}`}>{p.nivel_dificultad[0].toUpperCase()}</span>
+              <span className={`mini-badge ${p.nivel_dificultad?.[0]?.toUpperCase() || '?'}`}>{p.nivel_dificultad?.[0]?.toUpperCase() || '?'}</span>
             </span>
             <span className="admin-td mono" style={{ color: '#ffb68c', fontWeight: 600 }}>{p.puntuacion}</span>
             <span className="admin-td mono">{p.muertes}</span>

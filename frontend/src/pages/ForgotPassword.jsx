@@ -38,8 +38,8 @@ export default function ForgotPassword() {
 
     const sanitized = email.replace(/[<>]/g, '').trim()
     if (!sanitized) { setError('El correo es requerido'); return }
-    if (!/^[a-zA-Z0-9._%+-]+@(gmail|hotmail)\.com$/.test(sanitized)) {
-      setError('Debe ser @gmail.com o @hotmail.com')
+    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(sanitized)) {
+      setError('Debe ser un correo electrónico válido')
       return
     }
 
@@ -167,7 +167,7 @@ export default function ForgotPassword() {
               Verificar de nuevo
             </button>
 
-            <button type="button" onClick={() => { setStep('form'); tokenRef.current = ''; setEmail(''); }} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <button type="button" onClick={() => { setStep('form'); tokenRef.current = ''; setEmail(''); setError(''); }} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>
               Reenviar correo
             </button>
           </div>

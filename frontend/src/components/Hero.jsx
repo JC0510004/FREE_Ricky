@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 export default function Hero() {
   const sectionRef = useRef(null);
@@ -24,18 +25,12 @@ export default function Hero() {
       globalMouseY = e.clientY / window.innerHeight - 0.5;
     };
 
-    const handleMouseMove = (e) => {
-      globalMouseX = e.clientX / window.innerWidth - 0.5;
-      globalMouseY = e.clientY / window.innerHeight - 0.5;
-    };
-
     const handleMouseLeave = () => {
       globalMouseX = 0;
       globalMouseY = 0;
     };
 
     window.addEventListener('pointermove', handlePointerMove, { passive: true });
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
     document.addEventListener('mouseleave', handleMouseLeave);
 
     const animateParallax = () => {
@@ -80,7 +75,6 @@ export default function Hero() {
 
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseleave', handleMouseLeave);
       if (rafId !== null) cancelAnimationFrame(rafId);
       observer.disconnect();
@@ -136,7 +130,7 @@ export default function Hero() {
           plataformas engañosas y un mundo decidido a convertir cada paso en una nueva desgracia.
         </p>
         <div className="hero-buttons">
-          <button type="button" className="hero-button">COMIENZA LA BÚSQUEDA</button>
+          <Link to="/register" className="hero-button">COMIENZA LA BÚSQUEDA</Link>
         </div>
       </div>
     </section>

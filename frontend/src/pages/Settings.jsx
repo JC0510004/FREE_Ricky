@@ -5,7 +5,7 @@ import API from '../api/axios'
 
 export default function Settings() {
   const navigate = useNavigate()
-  const { user, isAuthenticated, isLoading, logout } = useAuth()
+  const { user, isAuthenticated, isLoading, logout, updateUser } = useAuth()
   const [profile, setProfile] = useState({ username: '', email: '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState('')
@@ -39,11 +39,7 @@ export default function Settings() {
         username: profile.username,
         email: profile.email,
       })
-      const stored = localStorage.getItem('usuario:v1')
-      if (stored) {
-        const updated = { ...JSON.parse(stored), username: profile.username, email: profile.email }
-        localStorage.setItem('usuario:v1', JSON.stringify(updated))
-      }
+      updateUser({ username: profile.username, email: profile.email })
       setSaved('Cambios guardados correctamente')
     } catch {
       setError('Error al guardar los cambios')
@@ -93,7 +89,7 @@ export default function Settings() {
           <div className="gaming-user-area">
             <div className="gaming-user-info">
               <div className="gaming-avatar">
-                {user.username[0].toUpperCase()}
+                {user.username?.[0]?.toUpperCase() || '?'}
               </div>
               <div className="gaming-user-text">
                 <span className="gaming-username">{user.username}</span>
@@ -245,9 +241,9 @@ export default function Settings() {
               <div className="settings-info-row">
                 <span className="settings-info-label">Miembro desde</span>
                 <span className="settings-info-value">
-                  {new Date(user.fecha_registro).toLocaleDateString('es-ES', {
+                  {user.fecha_registro ? new Date(user.fecha_registro).toLocaleDateString('es-ES', {
                     year: 'numeric', month: 'long', day: 'numeric'
-                  })}
+                  }) : '-'}
                 </span>
               </div>
               <div className="settings-info-row">

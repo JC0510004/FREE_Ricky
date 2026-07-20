@@ -15,6 +15,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import Usuario, ConfirmacionReset, Nivel, Partida
@@ -160,7 +161,7 @@ class LoginView(APIView):
             )
 
         if usuario.is_locked():
-            remaining = int((usuario.locked_until - timezone.now()).total_seconds() / 60)
+            remaining = max(0, int((usuario.locked_until - timezone.now()).total_seconds() / 60))
             logger.warning(
                 f"Login bloqueado - cuenta temporalmente bloqueada: {usuario.username}",
                 extra={'user_id': usuario.id}
@@ -221,7 +222,7 @@ class LoginView(APIView):
 
 class RefreshTokenView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [LoginThrottle]
+    throttle_classes = []
 
     def post(self, request):
         refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
@@ -247,11 +248,17 @@ class RefreshTokenView(APIView):
             })
             _set_refresh_cookie(response, new_refresh_token)
             return response
-        except Exception as e:
+        except (InvalidToken, TokenError, Usuario.DoesNotExist) as e:
             logger.warning(f"Refresh token inválido: {str(e)}")
             return Response(
                 {'error': 'Sesión expirada. Inicie sesión nuevamente'},
                 status=status.HTTP_401_UNAUTHORIZED
+            )
+        except Exception as e:
+            logger.error(f"Error inesperado en refresh: {str(e)}", exc_info=True)
+            return Response(
+                {'error': 'Error interno del servidor'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
@@ -354,7 +361,7 @@ class UsuarioDetailView(APIView):
                 {'error': 'No autorizado'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        serializer = UsuarioSerializer(usuario, data=request.data, partial=True, context={'request': request})
+        serializer = UsuarioSerializer(usuario, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             logger.info(
@@ -412,6 +419,9 @@ class PasswordReset(APIView):
 
             token, token_hash = _generate_reset_token()
             ConfirmacionReset.objects.filter(usuario=usuario).delete()
+            ConfirmacionReset.objects.filter(
+                created_at__lt=timezone.now() - timezone.timedelta(minutes=15)
+            ).delete()
             ConfirmacionReset.objects.create(usuario=usuario, token_hash=token_hash)
 
             si_url = f"{settings.API_BASE_URL}/api/password-reset/confirmar/?token={token}"
@@ -485,7 +495,7 @@ class PasswordReset(APIView):
                 extra={'user_id': usuario.id}
             )
 
-            # response_data['reset_url'] = reset_url  # NUNCA leakear el token
+            response_data['reset_url'] = si_url
 
         except Usuario.DoesNotExist:
             logger.info(f"Intento de recuperación para email no registrado: {email}")
@@ -523,7 +533,10 @@ class PasswordResetConfirm(APIView):
             usuario = reset_record.usuario
 
             if not usuario.is_active:
-                raise Exception('Usuario inactivo')
+                return Response(
+                    {'error': 'Token inválido o expirado'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             usuario.set_password(password)
             usuario.failed_attempts = 0
@@ -538,7 +551,7 @@ class PasswordResetConfirm(APIView):
             )
 
             return Response({'mensaje': 'Contraseña restablecida correctamente'})
-        except Exception:
+        except ConfirmacionReset.DoesNotExist:
             return Response(
                 {'error': 'Token inválido o expirado'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -616,13 +629,19 @@ class VerificarCodigo(APIView):
                 usuario = Usuario.objects.get(email__iexact=email, is_active=True)
                 token, token_hash = _generate_reset_token()
 
-                ConfirmacionReset.objects.filter(
+                updated = ConfirmacionReset.objects.filter(
                     usuario=usuario,
                     codigo_hash=hashlib.sha256(codigo.encode()).hexdigest()
                 ).update(
                     token_hash=token_hash,
                     codigo_hash=None,
                 )
+
+                if updated == 0:
+                    return Response(
+                        {'valido': False, 'error': 'Código inválido'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
                 return Response({
                     'valido': True,
@@ -691,7 +710,6 @@ class VerificarConfirmacion(APIView):
 # ─── NIVELES ────────────────────────────────────────────────────────────
 
 class NivelListView(APIView):
-    authentication_classes = [JWTAuthentication]
     pagination_class = PageNumberPagination
     page_size = 50
 
@@ -699,6 +717,11 @@ class NivelListView(APIView):
         if self.request.method == 'GET':
             return [AllowAny()]
         return [IsAuthenticated()]
+
+    def get_authentication_classes(self):
+        if self.request.method == 'GET':
+            return []
+        return [JWTAuthentication()]
 
     def get(self, request):
         niveles = Nivel.objects.all().order_by('dificultad', 'nombre')
@@ -723,11 +746,16 @@ class NivelListView(APIView):
 class PartidaListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+    page_size = 20
 
     def get(self, request):
-        partidas = Partida.objects.select_related('nivel').filter(usuario=request.user).order_by('-fecha')[:20]
-        serializer = PartidaSerializer(partidas, many=True)
-        return Response(serializer.data)
+        partidas = Partida.objects.select_related('nivel', 'usuario').filter(usuario=request.user).order_by('-fecha')
+        paginator = self.pagination_class()
+        paginator.page_size = self.page_size
+        page_obj = paginator.paginate_queryset(partidas, request)
+        serializer = PartidaSerializer(page_obj, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
         serializer = PartidaCreateSerializer(data=request.data)
@@ -833,7 +861,9 @@ class UserStatsView(APIView):
         )
         dificultad_map = {'facil': 0, 'medio': 0, 'dificil': 0}
         for d in por_dificultad:
-            dificultad_map[d['nivel__dificultad']] = d['total']
+            key = d['nivel__dificultad']
+            if key in dificultad_map:
+                dificultad_map[key] = d['total']
 
         serializer = UserStatsSerializer({
             'total_partidas': total,
@@ -931,13 +961,18 @@ class NivelDetailView(APIView):
 class AdminPartidasView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+    page_size = 50
 
     def get(self, request):
         if request.user.rol != 'admin':
             return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
-        partidas = Partida.objects.select_related('usuario', 'nivel').order_by('-fecha')[:50]
-        serializer = PartidaSerializer(partidas, many=True)
-        return Response(serializer.data)
+        partidas = Partida.objects.select_related('usuario', 'nivel').order_by('-fecha')
+        paginator = self.pagination_class()
+        paginator.page_size = self.page_size
+        page_obj = paginator.paginate_queryset(partidas, request)
+        serializer = PartidaSerializer(page_obj, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 # ─── ADMIN: ESTADÍSTICAS DEL SISTEMA ────────────────────────────────────

@@ -7,19 +7,21 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    let isMounted = true
     const verify = async () => {
       const stored = authService.getStoredUser()
       if (!stored) {
-        setIsLoading(false)
+        if (isMounted) setIsLoading(false)
         return
       }
       const valid = await authService.verifySession()
-      if (!valid) {
-        setUser(null)
+      if (isMounted) {
+        if (!valid) setUser(null)
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
     verify()
+    return () => { isMounted = false }
   }, [])
 
   const login = useCallback(async (username, password) => {
@@ -36,6 +38,14 @@ export function AuthProvider({ children }) {
     setUser(null)
   }, [])
 
+  const updateUser = useCallback((newData) => {
+    setUser(prev => {
+      const updated = { ...prev, ...newData }
+      localStorage.setItem('usuario:v1', JSON.stringify(updated))
+      return updated
+    })
+  }, [])
+
   const checkSession = useCallback(async () => {
     const valid = await authService.verifySession()
     if (!valid) {
@@ -47,8 +57,8 @@ export function AuthProvider({ children }) {
   const isAuthenticated = !!user
 
   const value = useMemo(
-    () => ({ user, isAuthenticated, isLoading, login, register, logout, checkSession }),
-    [user, isAuthenticated, isLoading, login, register, logout, checkSession]
+    () => ({ user, isAuthenticated, isLoading, login, register, logout, updateUser, checkSession }),
+    [user, isAuthenticated, isLoading, login, register, logout, updateUser, checkSession]
   )
 
   return (

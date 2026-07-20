@@ -26,10 +26,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!isAuthenticated) return
-    API.get('/estadisticas/').then(r => setStats(r.data)).catch(() => {})
-    API.get('/ranking/').then(r => setRanking(r.data)).catch(() => {})
-    API.get('/partidas/').then(r => setPartidas(r.data)).catch(() => {})
-    API.get('/niveles/').then(r => setNiveles(r.data)).catch(() => {})
+    const controller = new AbortController()
+    const { signal } = controller
+    API.get('/estadisticas/', { signal }).then(r => setStats(r.data)).catch(() => {})
+    API.get('/ranking/', { signal }).then(r => setRanking(r.data)).catch(() => {})
+    API.get('/partidas/', { signal }).then(r => setPartidas(r.data.results || r.data)).catch(() => {})
+    API.get('/niveles/', { signal }).then(r => setNiveles(r.data.results || r.data)).catch(() => {})
+    return () => controller.abort()
   }, [isAuthenticated])
 
   const handleLogout = async () => {
@@ -72,7 +75,7 @@ export default function Home() {
           <div className="gaming-user-area">
             <div className="gaming-user-info">
               <div className="gaming-avatar">
-                {user.username[0].toUpperCase()}
+                {user.username?.[0]?.toUpperCase() || '?'}
               </div>
               <div className="gaming-user-text">
                 <span className="gaming-username">{user.username}</span>
@@ -189,7 +192,7 @@ export default function Home() {
                   {r.usuario_id === user.id && <span className="you-tag">TÚ</span>}
                   {r.username}
                 </span>
-                <span className="col-score">{r.mejor_puntuacion.toLocaleString()}</span>
+                <span className="col-score">{r.mejor_puntuacion?.toLocaleString() ?? '0'}</span>
                 <span className="col-games">{r.total_partidas}</span>
                 <span className="col-avg">{r.promedio_puntuacion}</span>
               </div>
@@ -223,7 +226,7 @@ export default function Home() {
                   <span className="col-level">
                     {p.nivel_nombre}
                     <span className={`mini-badge ${p.nivel_dificultad}`}>
-                      {p.nivel_dificultad[0].toUpperCase()}
+                      {p.nivel_dificultad?.[0]?.toUpperCase() || '?'}
                     </span>
                   </span>
                   <span className="col-score-sm">{p.puntuacion}</span>
@@ -257,7 +260,7 @@ export default function Home() {
                 </div>
                 <div className="profile-field">
                   <span className="profile-label">Miembro desde</span>
-                  <span className="profile-value">{new Date(user.fecha_registro).toLocaleDateString()}</span>
+                  <span className="profile-value">{user.fecha_registro ? new Date(user.fecha_registro).toLocaleDateString() : '-'}</span>
                 </div>
                 <div className="profile-field">
                   <span className="profile-label">Rol</span>

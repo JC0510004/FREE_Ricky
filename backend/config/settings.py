@@ -97,7 +97,7 @@ else:
         }
     }
 
-SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003', 'django_ratelimit.W001']
+SILENCED_SYSTEM_CHECKS = []
 
 # ─── DATABASE ──────────────────────────────────────────────────────────
 _database_url = os.environ.get('DATABASE_URL', '')

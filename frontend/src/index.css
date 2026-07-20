@@ -1759,18 +1759,18 @@ body.loading-lock {
     pointer-events: none;
 }
 
-.hero-content {
+.gaming-dashboard .hero-content {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
     gap: 40px;
 }
 
-.hero-text {
+.gaming-dashboard .hero-text {
     flex: 1;
 }
 
-.hero-greeting {
+.gaming-dashboard .hero-greeting {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     text-transform: uppercase;
@@ -1780,7 +1780,7 @@ body.loading-lock {
     display: block;
 }
 
-.hero-title {
+.gaming-dashboard .hero-title {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 56px;
     font-weight: 700;
@@ -1789,22 +1789,22 @@ body.loading-lock {
     line-height: 1.4;
 }
 
-.hero-subtitle {
+.gaming-dashboard .hero-subtitle {
     color: rgba(255, 255, 255, 0.4);
     font-size: 15px;
 }
 
-.hero-stats {
+.gaming-dashboard .hero-stats {
     display: flex;
     gap: 32px;
     flex-shrink: 0;
 }
 
-.hero-stat {
+.gaming-dashboard .hero-stat {
     text-align: center;
 }
 
-.hero-stat-value {
+.gaming-dashboard .hero-stat-value {
     display: block;
     font-family: 'Space Grotesk', sans-serif;
     font-size: 32px;
@@ -1814,7 +1814,7 @@ body.loading-lock {
     margin-bottom: 4px;
 }
 
-.hero-stat-label {
+.gaming-dashboard .hero-stat-label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     text-transform: uppercase;
@@ -1828,14 +1828,14 @@ body.loading-lock {
     margin-bottom: 48px;
 }
 
-.section-header {
+.gaming-dashboard .section-header {
     display: flex;
     align-items: baseline;
     gap: 16px;
     margin-bottom: 24px;
 }
 
-.section-title {
+.gaming-dashboard .section-title {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 22px;
     font-weight: 600;
@@ -1845,11 +1845,11 @@ body.loading-lock {
     gap: 10px;
 }
 
-.section-icon {
+.gaming-dashboard .section-icon {
     font-size: 18px;
 }
 
-.section-subtitle {
+.gaming-dashboard .section-subtitle {
     font-size: 13px;
     color: rgba(255, 255, 255, 0.3);
 }

@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const API = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
@@ -13,12 +13,9 @@ let isRefreshing = false
 let failedQueue = []
 
 const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error)
-    } else {
-      prom.resolve(token)
-    }
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error)
+    else resolve(token)
   })
   failedQueue = []
 }
@@ -36,7 +33,7 @@ API.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/token/refresh/')) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
@@ -46,7 +43,7 @@ API.interceptors.response.use(
             return API(originalRequest)
           }
           return Promise.reject(error)
-        })
+        }).catch(() => Promise.reject(error))
       }
 
       originalRequest._retry = true
@@ -63,7 +60,6 @@ API.interceptors.response.use(
         processQueue(refreshError, null)
         localStorage.removeItem('access_token')
         localStorage.removeItem('usuario:v1')
-        window.location.href = '/'
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false
