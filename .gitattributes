@@ -1,0 +1,20 @@
+# ─── GIT ATTRIBUTES - FREE RICKY ────────────────────────────────────────
+# Normaliza line endings para evitar problemas entre Windows y Linux.
+# Los archivos de shell/config de Docker DEBEN tener line endings Unix (LF).
+
+# Forzar LF para archivos de shell y configuración de Linux
+*.sh text eol=lf
+*.bash text eol=lf
+nginx.conf text eol=lf
+Dockerfile* text eol=lf
+*.yml text eol=lf
+
+# Archivos binarios (no modificar)
+*.gif binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

@@ -160,14 +160,16 @@ services:
     # Cada una puede sobreescribirse en .env para diferentes entornos (dev, staging, prod).
     environment:
       # Claves secretas para firma de sesiones y tokens JWT (OBLIGATORIAS en producción).
-      SECRET_KEY: ${SECRET_KEY}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      # Los defaults son solo para desarrollo local con Docker; en prod se debe usar .env.
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-change-in-production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-jwt-insecure-dev-only-change-in-production}
 
       # DEBUG=False en producción para no mostrar trazas de errores al usuario.
       DEBUG: ${DEBUG:-False}
 
       # Hosts permitidos: previene ataques de tipo Host Header Injection.
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      # "backend" es el hostname que usa nginx para comunicarse con Django dentro de Docker.
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
 
       # CORS: define qué dominios del frontend pueden hacer peticiones a la API.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
