@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
 
@@ -48,6 +48,12 @@ export default function Admin() {
 
       {/* ─── Contenido principal del admin ─── */}
       <main className="gaming-main">
+
+        {/* ─── Botón volver al inicio ─── */}
+        <Link to="/" className="back-to-landing">
+          <span className="material-symbols-outlined">arrow_back</span>
+          Volver al inicio
+        </Link>
 
         {/* ─── Hero section con título del panel ─── */}
         <div className="admin-hero">

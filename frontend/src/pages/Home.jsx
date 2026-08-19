@@ -75,6 +75,12 @@ export default function Home() {
   return (
     <div className="gaming-dashboard">
 
+      {/* ─── Botón volver al inicio ─── */}
+      <Link to="/" className="back-to-landing">
+        <span className="material-symbols-outlined">arrow_back</span>
+        Volver al inicio
+      </Link>
+
       {/* ─── Contenido principal del dashboard ─── */}
       <main className="gaming-main">
 

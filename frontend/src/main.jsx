@@ -26,6 +26,8 @@ import { AuthProvider } from './contexts/AuthContext'
 // ProtectedRoute es un componente de protección de rutas que redirige
 // al usuario si no está autenticado o no tiene los permisos necesarios
 import ProtectedRoute from './components/ProtectedRoute'
+// Navbar: barra de navegación global, visible en todas las páginas
+import Navbar from './components/Navbar'
 
 // ─── IMPORTACIONES DE PÁGINAS ────────────────────────────────────────
 // App es la página principal/landing page de la aplicación
@@ -60,6 +62,8 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        {/* Navbar global: se muestra en todas las páginas */}
+        <Navbar />
         <Routes>
           {/* ─── RUTA PRINCIPAL (LANDING PAGE) ────────────────── */}
           {/* La ruta "/" muestra la página de aterrizaje pública */}

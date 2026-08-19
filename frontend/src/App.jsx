@@ -13,8 +13,6 @@ import React, { useState, useEffect } from 'react';
 // ─── IMPORTACIONES DE COMPONENTES HIJOS ───────────────────────────────
 // LoadingScreen: pantalla de carga animada que se muestra al inicio
 import LoadingScreen from './components/LoadingScreen';
-// Navbar: barra de navegación superior con links y menú
-import Navbar from './components/Navbar';
 // Hero: sección principal de presentación con título y llamada a la acción
 import Hero from './components/Hero';
 // Manifesto: sección con el manifiesto/declaración de la organización
@@ -112,9 +110,6 @@ function App() {
   // en el medio, footer abajo, y la pantalla de carga como overlay.
   return (
     <>
-      {/* Barra de navegación superior */}
-      <Navbar />
-
       {/* Contenido principal de la página */}
       <main className="main-content">
         {/* Sección hero: presentación principal con imagen de fondo y título */}
