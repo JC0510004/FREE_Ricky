@@ -77,11 +77,9 @@ export default function ForgotPassword() {
       tokenRef.current = urlToken   // Almacena el token en la referencia mutable
       setError('')
       const isConfirmed = searchParams.get('confirmed') === '1'
-      console.log('[ForgotPassword] useEffect urlToken:', urlToken, 'isConfirmed:', isConfirmed)
       // Verifica con el backend si el token es válido y si la identidad está confirmada
       API.get(`/password-reset/verificar/?token=${urlToken}`)
         .then((res) => {
-          console.log('[ForgotPassword] VerificarConfirmacion response:', res.data)
           if (res.data?.confirmado) {
             // Si está confirmado y viene del correo, muestra pantalla de transición
             if (isConfirmed) {
@@ -93,9 +91,7 @@ export default function ForgotPassword() {
             setStep('not-confirmed')  // Token válido pero identidad no confirmada
           }
         })
-        .catch((err) => {
-          console.error('[ForgotPassword] VerificarConfirmacion error:', err?.response?.status, err?.message)
-        })
+        .catch(() => {})
     }
   }, [urlToken])
 
@@ -222,20 +218,17 @@ export default function ForgotPassword() {
             {/* Botón para verificar manualmente si la identidad fue confirmada */}
             <button type="button" onClick={() => {
               const t = tokenRef.current
-              console.log('[ForgotPassword] Ya confirmé mi correo clicked, token:', t ? t.substring(0, 8) + '...' : 'EMPTY')
               if (t) {
                 // Consulta al backend si el token ya fue confirmado
                 API.get(`/password-reset/verificar/?token=${t}`)
                   .then((res) => {
-                    console.log('[ForgotPassword] Ya confirmé response:', res.data)
                     if (res.data?.confirmado) {
                       setStep('reset')  // Confirmado: avanza al formulario
                     } else {
                       setError('Aún no se ha confirmado tu identidad. Revisa tu correo.')
                     }
                   })
-                  .catch((err) => {
-                    console.error('[ForgotPassword] Ya confirmé error:', err?.response?.status, err?.message)
+                  .catch(() => {
                     setError('Error al verificar. Intenta de nuevo.')
                   })
               } else {

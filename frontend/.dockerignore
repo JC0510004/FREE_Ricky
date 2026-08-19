@@ -1,6 +1,29 @@
-node_modules
-.git
-*.md
-Dockerfile
-.dockerignore
-dist
+# ─── FRONTEND DOCKERIGNORE ───────────────────────────────────────────────
+# Excluye archivos innecesarios del contexto de build Docker.
+# node_modules se excluye porque npm ci lo reinstala en el contenedor.
+
+# Dependencias de Node.js (se reinstalan con npm ci)
+node_modules/
+
+# Build de producción generado (se recrea con npm run build)
+dist/
+
+# Archivo de variables de entorno local
+.env
+.env.local
+
+# Git
+.git/
+.gitignore
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Documentación
+README.md
+LICENSE
+
+# Editor / IDE
+.vscode/
+.idea/

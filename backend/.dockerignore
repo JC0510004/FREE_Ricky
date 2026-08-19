@@ -1,18 +1,41 @@
-__pycache__
-*.pyc
-*.pyo
-*.egg-info
-.git
-.gitignore
-.env
-.env.*
+# ─── BACKEND DOCKERIGNORE ────────────────────────────────────────────────
+# Excluye archivos innecesarios del contexto de build Docker.
+# Reduce el tiempo de build y evita copiar archivos sensibles al contenedor.
+
+# Entorno virtual Python (ya instalado en el contenedor con pip)
 venv/
 env/
+
+# Archivo de variables de entorno con credenciales (NUNCA en Docker)
+.env
+
+# Cache de Python (se regenera en el contenedor)
+__pycache__/
+*.pyc
+*.pyo
+
+# Base de datos SQLite local
+*.sqlite3
+db.sqlite3
+
+# Logs de la aplicación
 logs/
-*.log
-.idea/
+backend/logs/
+
+# Git (historial y configuración)
+.git/
+.gitignore
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Documentación
+README.md
+LICENSE
+
+# Editor / IDE
 .vscode/
-tests.py
-Dockerfile
-docker-compose*.yml
-*.md
+.idea/
+*.swp
+*.swo

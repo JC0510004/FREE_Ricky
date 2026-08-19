@@ -84,6 +84,10 @@ createRoot(document.getElementById('root')).render(
           {/* ─── RUTA PROTEGIDA: CONFIGURACIÓN ────────────────── */}
           {/* Requiere autenticación pero no permisos de admin */}
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+
+          {/* ─── RUTA CATCH-ALL: 404 ──────────────────────────── */}
+          {/* Captura cualquier URL no definida y redirige a la landing page */}
+          <Route path="*" element={<App />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
