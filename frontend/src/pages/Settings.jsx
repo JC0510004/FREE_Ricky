@@ -47,15 +47,23 @@ export default function Settings() {
     setError('')
     setSaved('')
     try {
-      await API.put(`/usuarios/${user.id}/`, {
+      const res = await API.put(`/usuarios/${user.id}/`, {
         username: profile.username,
         email: profile.email,
       })
-      // Actualiza el contexto de autenticación con los nuevos datos
-      updateUser({ username: profile.username, email: profile.email })
+      // Actualiza el contexto de autenticación con los datos devueltos por el backend
+      if (res.data?.usuario) {
+        updateUser(res.data.usuario)
+      } else {
+        updateUser({ username: profile.username, email: profile.email })
+      }
       setSaved('Cambios guardados correctamente')
-    } catch {
-      setError('Error al guardar los cambios')
+    } catch (err) {
+      const data = err?.response?.data
+      if (data?.username) setError(Array.isArray(data.username) ? data.username[0] : data.username)
+      else if (data?.email) setError(Array.isArray(data.email) ? data.email[0] : data.email)
+      else if (data?.error) setError(data.error)
+      else setError('Error al guardar los cambios')
     } finally {
       setSaving(false)
     }

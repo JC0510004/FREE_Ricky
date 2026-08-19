@@ -196,8 +196,25 @@ class UsuarioSerializer(serializers.ModelSerializer):
         # Campos visibles en el perfil: identificador, nombre, email, rol,
         # fecha de registro, estado activo, verificación y último acceso
         fields = ['id', 'username', 'email', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
-        # Todos los campos son de solo lectura en este serializer
-        read_only_fields = ['id', 'username', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
+        # Solo campos de solo lectura: id, rol, fecha, estado y verificación
+        # username y email se pueden editar por el propietario del perfil
+        read_only_fields = ['id', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
+
+    # Valida que el username no esté en uso por otro usuario
+    def validate_username(self, value):
+        sanitized = sanitize_input(value)
+        if not sanitized or len(sanitized) < 3:
+            raise serializers.ValidationError('El nombre de usuario debe tener al menos 3 caracteres')
+        if not sanitized.isalnum() and not all(c.isalnum() or c in '_-' for c in sanitized):
+            raise serializers.ValidationError('El nombre de usuario solo puede contener letras, números, guiones y guiones bajos')
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if Usuario.objects.filter(username__iexact=sanitized).exclude(id=request.user.id).exists():
+                raise serializers.ValidationError('Este nombre de usuario no está disponible')
+        else:
+            if Usuario.objects.filter(username__iexact=sanitized).exists():
+                raise serializers.ValidationError('Este nombre de usuario no está disponible')
+        return sanitized
 
     # Permite actualizar el email del usuario actual; verifica que no esté
     # en uso por otro usuario (excluyendo al propio usuario que edita)

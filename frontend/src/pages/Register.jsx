@@ -23,7 +23,7 @@ export default function Register() {
   const navigate = useNavigate()
 
   // ─── Función de registro extraída del contexto de autenticación ───
-  const { register } = useAuth()
+  const { register, login } = useAuth()
 
   // ─── Estado del formulario con todos los campos de registro ───
   const [formData, setFormData] = useState({
@@ -93,7 +93,9 @@ export default function Register() {
         password: formData.password,
         confirm_password: formData.confirmPassword,
       })
-      navigate('/login')  // Redirige al login después del registro exitoso
+      // Registro exitoso: inicia sesión automáticamente y redirige a la Landing Page
+      await login(formData.username.trim(), formData.password)
+      navigate('/')  // Redirige a la Landing Page
     } catch (err) {
       // ─── Manejo de errores del servidor ───
       // El backend puede retornar errores por campo específico
@@ -115,7 +117,7 @@ export default function Register() {
     } finally {
       setIsLoading(false)
     }
-  }, [formData, register, navigate])
+  }, [formData, register, login, navigate])
 
   // ─── Lista de requisitos de contraseña con estado de cumplimiento ───
   // Se usa para mostrar los indicadores visuales de fortaleza en tiempo real.

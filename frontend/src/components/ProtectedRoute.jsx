@@ -40,7 +40,7 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
   // Si la ruta es adminOnly Y el usuario no tiene rol 'admin',
   // lo redirigimos a /home (página de usuario normal).
   // user?.rol usa optional chaining para evitar errores si user es null.
-  if (adminOnly && user?.rol !== 'admin') return <Navigate to="/home" replace />
+  if (adminOnly && user?.rol !== 'admin') return <Navigate to="/" replace />
 
   // ─── ACCESO PERMITIDO ─────────────────────────────────────────────
   // Si pasó todas las verificaciones, renderizamos los hijos
