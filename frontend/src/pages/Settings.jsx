@@ -1,33 +1,45 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
 
 export default function Settings() {
+  // ─── Hook de navegación para redirigir al login si no hay sesión ───
   const navigate = useNavigate()
-  const { user, isAuthenticated, isLoading, logout, updateUser } = useAuth()
+
+  // ─── Datos y funciones del contexto de autenticación ───
+  const { user, isAuthenticated, isLoading, updateUser } = useAuth()
+
+  // ─── Estado del formulario de perfil ───
   const [profile, setProfile] = useState({ username: '', email: '' })
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState('')
-  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)     // Estado de carga al guardar perfil
+  const [saved, setSaved] = useState('')           // Mensaje de éxito al guardar
+  const [error, setError] = useState('')           // Mensaje de error al guardar
 
+  // ─── Estado del formulario de contraseña ───
   const [pwd, setPwd] = useState({ old: '', new: '', confirm: '' })
-  const [changingPwd, setChangingPwd] = useState(false)
-  const [pwdSaved, setPwdSaved] = useState('')
-  const [pwdError, setPwdError] = useState('')
+  const [changingPwd, setChangingPwd] = useState(false)  // Estado de carga al cambiar contraseña
+  const [pwdSaved, setPwdSaved] = useState('')            // Mensaje de éxito al cambiar
+  const [pwdError, setPwdError] = useState('')            // Mensaje de error al cambiar
 
+  // ─── Redirección si no está autenticado ───
+  // Protege la ruta: si el usuario cierra sesión desde otra pestaña, se redirige.
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/')
     }
   }, [isLoading, isAuthenticated, navigate])
 
+  // ─── Sincroniza el formulario de perfil con los datos del usuario ───
+  // Se ejecuta cuando el objeto user cambia (login, actualización, etc.)
   useEffect(() => {
     if (user) {
       setProfile({ username: user.username, email: user.email })
     }
   }, [user])
 
+  // ─── Manejador de actualización de perfil ───
+  // Envía los cambios de username y email al backend y actualiza el contexto local.
   const handleProfile = async (e) => {
     e.preventDefault()
     if (!user) return
@@ -39,6 +51,7 @@ export default function Settings() {
         username: profile.username,
         email: profile.email,
       })
+      // Actualiza el contexto de autenticación con los nuevos datos
       updateUser({ username: profile.username, email: profile.email })
       setSaved('Cambios guardados correctamente')
     } catch {
@@ -48,6 +61,8 @@ export default function Settings() {
     }
   }
 
+  // ─── Manejador de cambio de contraseña ───
+  // Valida y envía la nueva contraseña al backend.
   const handlePassword = async (e) => {
     e.preventDefault()
     setChangingPwd(true)
@@ -59,6 +74,7 @@ export default function Settings() {
         new_password: pwd.new,
         confirm_password: pwd.confirm,
       })
+      // Limpia el formulario tras el cambio exitoso
       setPwd({ old: '', new: '', confirm: '' })
       setPwdSaved('Contraseña actualizada correctamente')
     } catch (err) {
@@ -68,44 +84,17 @@ export default function Settings() {
     }
   }
 
+  // ─── Guardias de renderizado ───
   if (isLoading) return null
   if (!user) return null
 
   return (
     <div className="gaming-dashboard">
-      <nav className="gaming-nav">
-        <div className="gaming-nav-inner">
-          <Link to="/" className="gaming-logo">
-            <span className="logo-icon">⬡</span>
-            SALT BORN
-          </Link>
-          <div className="gaming-nav-links">
-            <Link to="/home" className="gaming-nav-link">Inicio</Link>
-            {user.rol === 'admin' && (
-              <Link to="/admin" className="gaming-nav-link">Admin</Link>
-            )}
-            <Link to="/settings" className="gaming-nav-link active">Configuración</Link>
-          </div>
-          <div className="gaming-user-area">
-            <div className="gaming-user-info">
-              <div className="gaming-avatar">
-                {user.username?.[0]?.toUpperCase() || '?'}
-              </div>
-              <div className="gaming-user-text">
-                <span className="gaming-username">{user.username}</span>
-                <span className={`gaming-badge ${user.rol}`}>
-                  {user.rol === 'admin' ? 'Administrador' : 'Jugador'}
-                </span>
-              </div>
-            </div>
-            <button type="button" className="gaming-logout-btn" onClick={async () => { await logout(); navigate('/') }}>
-              Salir
-            </button>
-          </div>
-        </div>
-      </nav>
 
+      {/* ─── Contenido principal ─── */}
       <main className="gaming-main">
+
+        {/* ─── Hero section con título de la página ─── */}
         <div className="gaming-hero" style={{ paddingBottom: 40 }}>
           <div className="hero-glow" />
           <div className="hero-content">
@@ -117,7 +106,10 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* ─── Grid de secciones de configuración ─── */}
         <div className="settings-grid">
+
+          {/* ─── Sección 1: Edición de perfil ─── */}
           <section className="settings-section">
             <div className="section-header">
               <h2 className="section-title">
@@ -125,7 +117,9 @@ export default function Settings() {
                 Perfil
               </h2>
             </div>
+            {/* Formulario de edición de perfil */}
             <form onSubmit={handleProfile} className="settings-form">
+              {/* Campo de nombre de usuario */}
               <div className="auth-field">
                 <label htmlFor="username">Nombre de Usuario</label>
                 <input
@@ -136,6 +130,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Campo de correo electrónico */}
               <div className="auth-field">
                 <label htmlFor="email">Correo Electrónico</label>
                 <input
@@ -146,6 +141,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Mensaje de error si falla la actualización */}
               {error && (
                 <div className="auth-general-error">
                   <span className="material-symbols-outlined">error</span>
@@ -153,6 +149,7 @@ export default function Settings() {
                 </div>
               )}
 
+              {/* Mensaje de éxito tras guardar correctamente */}
               {saved && (
                 <div className="auth-success">
                   <span className="material-symbols-outlined">check_circle</span>
@@ -160,12 +157,14 @@ export default function Settings() {
                 </div>
               )}
 
+              {/* Botón de guardar con texto dinámico según el estado de carga */}
               <button type="submit" className="auth-submit" disabled={saving}>
                 {saving ? 'Guardando...' : 'Guardar Cambios'}
               </button>
             </form>
           </section>
 
+          {/* ─── Sección 2: Cambio de contraseña ─── */}
           <section className="settings-section">
             <div className="section-header">
               <h2 className="section-title">
@@ -173,7 +172,9 @@ export default function Settings() {
                 Seguridad
               </h2>
             </div>
+            {/* Formulario de cambio de contraseña */}
             <form onSubmit={handlePassword} className="settings-form">
+              {/* Campo de contraseña actual */}
               <div className="auth-field">
                 <label htmlFor="old-password">Contraseña Actual</label>
                 <input
@@ -184,6 +185,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Campo de nueva contraseña */}
               <div className="auth-field">
                 <label htmlFor="new-password">Nueva Contraseña</label>
                 <input
@@ -194,6 +196,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Campo de confirmación de la nueva contraseña */}
               <div className="auth-field">
                 <label htmlFor="confirm-password">Confirmar Nueva Contraseña</label>
                 <input
@@ -204,6 +207,7 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Mensaje de error si falla el cambio */}
               {pwdError && (
                 <div className="auth-general-error">
                   <span className="material-symbols-outlined">error</span>
@@ -211,6 +215,7 @@ export default function Settings() {
                 </div>
               )}
 
+              {/* Mensaje de éxito tras cambiar correctamente */}
               {pwdSaved && (
                 <div className="auth-success">
                   <span className="material-symbols-outlined">check_circle</span>
@@ -218,12 +223,14 @@ export default function Settings() {
                 </div>
               )}
 
+              {/* Botón de cambio con texto dinámico */}
               <button type="submit" className="auth-submit" disabled={changingPwd}>
                 {changingPwd ? 'Cambiando...' : 'Cambiar Contraseña'}
               </button>
             </form>
           </section>
 
+          {/* ─── Sección 3: Información de la cuenta (solo lectura) ─── */}
           <section className="settings-section settings-info-section">
             <div className="section-header">
               <h2 className="section-title">
@@ -232,12 +239,14 @@ export default function Settings() {
               </h2>
             </div>
             <div className="settings-info">
+              {/* Fila: Rol del usuario */}
               <div className="settings-info-row">
                 <span className="settings-info-label">Rol</span>
                 <span className={`gaming-badge ${user.rol}`}>
                   {user.rol === 'admin' ? 'Administrador' : 'Jugador'}
                 </span>
               </div>
+              {/* Fila: Fecha de registro formateada en español */}
               <div className="settings-info-row">
                 <span className="settings-info-label">Miembro desde</span>
                 <span className="settings-info-value">
@@ -246,12 +255,14 @@ export default function Settings() {
                   }) : '-'}
                 </span>
               </div>
+              {/* Fila: Estado de verificación del email */}
               <div className="settings-info-row">
                 <span className="settings-info-label">Email verificado</span>
                 <span className={`settings-info-value ${user.is_verified ? 'verified' : 'unverified'}`}>
                   {user.is_verified ? 'Sí' : 'No'}
                 </span>
               </div>
+              {/* Fila: Último acceso (solo si hay registro de último login) */}
               {user.last_login && (
                 <div className="settings-info-row">
                   <span className="settings-info-label">Último acceso</span>

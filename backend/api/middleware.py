@@ -125,10 +125,12 @@ class BruteForceIPMiddleware:
         return False
 
     def _get_path_prefix(self, path):
+        best = None
         for prefix in BRUTE_FORCE_PATHS:
             if path.startswith(prefix):
-                return prefix
-        return None
+                if best is None or len(prefix) > len(best):
+                    best = prefix
+        return best
 
     def __call__(self, request):
         ip = get_client_ip(request)
@@ -137,11 +139,13 @@ class BruteForceIPMiddleware:
             return self.get_response(request)
 
         if self._is_blocked(ip):
-            logger.warning(f"Request bloqueado por IP: {ip} {request.method} {request.path}")
-            return JsonResponse(
-                {'error': 'Demasiados intentos. IP bloqueada temporalmente'},
-                status=429
-            )
+            path_prefix = self._get_path_prefix(request.path)
+            if path_prefix is not None and request.method == 'POST':
+                logger.warning(f"Request bloqueado por IP: {ip} {request.method} {request.path}")
+                return JsonResponse(
+                    {'error': 'Demasiados intentos. IP bloqueada temporalmente'},
+                    status=429
+                )
 
         response = self.get_response(request)
 

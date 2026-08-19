@@ -1,30 +1,78 @@
-# Python
+# ══════════════════════════════════════════════════════════════════════════════
+# .gitignore - FREE RICKY
+# Archivos y directorios ignorados por Git para mantener el repositorio limpio.
+# Solo se versionan los archivos fuente necesarios para reproducir el proyecto.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ─── PYTHON ─────────────────────────────────────────────────────────────────
+# Directorios de cache de Python generados al importar módulos.
+# Contienen bytecode compilado (.pyc) y NO deben versionarse porque se regeneran.
 __pycache__/
+
+# Archivos compilados de Python (.pyc): cache de bytecode para carga rápida.
+# Se generan automáticamente y cambian entre versiones de Python, causando conflictos.
 *.pyc
+
+# Archivos optimizados de Python (.pyo): generados con la flag -O (optimización).
+# Mismo caso que .pyc, se regeneran automáticamente al ejecutar el código.
 *.pyo
 
-# Django
+# ─── DJANGO ────────────────────────────────────────────────────────────────
+# Base de datos SQLite de desarrollo: se crea con `python manage.py migrate`.
+# Es específica de cada máquina de desarrollo y NO debe compartirse por Git.
 *.sqlite3
+
+# Archivo SQLite específico (duplicado por claridad para que Git lo detecte).
 db.sqlite3
+
+# Directorio de logs de la aplicación: archivos de registro generados en runtime.
+# Contienen información sensible y datos de alta frecuencia que no deben versionarse.
 logs/
+
+# Logs específicos del backend: misma razón que el directorio anterior.
 backend/logs/
 
-# Entorno
+# ─── ENTORNO VIRTUAL ──────────────────────────────────────────────────────
+# Archivo .env con variables de entorno sensibles (contraseñas, claves secretas).
+# NUNCA debe versionarse para evitar filtración de credenciales al repositorio.
 .env
+
+# Directorio del entorno virtual Python (venv): contiene intérprete y paquetes instalados.
+# Es específico del sistema operativo y la versión de Python de cada desarrollador.
 venv/
+
+# Variante alternativa del nombre del entorno virtual (algunos desarrolladores usan "env").
 env/
 
-# Node
+# ─── NODE.JS ───────────────────────────────────────────────────────────────
+# Directorio node_modules: paquetes npm instalados localmente.
+# Puede pesar cientos de MB y se regenera con `npm install`.
+# Se excluye porque depende del sistema operativo y la versión de npm.
 node_modules/
+
+# Node modules del frontend (ruta específica para mayor claridad).
 frontend/node_modules/
+
+# Directorio de build del frontend (resultado de `npm run build`).
+# Contiene archivos HTML/JS/CSS minificados generados, NO código fuente.
 frontend/dist/
 
-# Docker
+# ─── DOCKER ────────────────────────────────────────────────────────────────
+# Directorio de datos MySQL montado como volumen por Docker Compose.
+# Contiene la base de datos en formato binario de InnoDB.
+# Es específico de cada máquina y NO debe versionarse.
 mysql_data/
 
-# OS
+# ─── SISTEMA OPERATIVO ────────────────────────────────────────────────────
+# Archivo generado por macOS en carpetas: almacena icono y posición en Finder.
+# Es específico de macOS y causa conflictos en repositorios multiplataforma.
 .DS_Store
+
+# Archivo generado por Windows: miniaturas de imágenes en el Explorador de Archivos.
+# Es específico de Windows y NO tiene relevancia para el proyecto.
 Thumbs.db
 
-# Tools
+# ─── HERRAMIENTAS ─────────────────────────────────────────────────────────
+# Directorio de configuración de Claude AI: almacena datos locales del asistente.
+# Es específico del usuario y NO debe compartirse entre desarrolladores.
 .claude/

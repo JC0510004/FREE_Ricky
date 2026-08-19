@@ -1,134 +1,321 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Docker Compose - FREE RICKY
+# Orquestación completa de la infraestructura: Redis, MySQL, Backend y Frontend.
+# Define servicios, redes, volúmenes y políticas de seguridad para desarrollo.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ─── SERVICIOS ───────────────────────────────────────────────────────────────
+# Cada servicio representa un contenedor independiente con su propia configuración.
 services:
 
+  # ─── REDIS ─────────────────────────────────────────────────────────────────
+  # Servicio de caché y almacenamiento en memoria para sesiones, colas y datos temporales.
   redis:
+    # Imagen oficial de Redis basada en Alpine para un contenedor ligero (~5MB).
+    # Alpine reduce significativamente el tamaño de la imagen en comparación con Debian.
     image: redis:7-alpine
+
+    # Nombre fijo del contenedor para facilitar referencias desde otros servicios
+    # y para administración manual con docker exec o docker logs.
     container_name: free_ricky_redis
+
+    # Reinicia automáticamente el contenedor si falla o al reiniciar el daemon de Docker,
+    # excepto cuando se detiene manualmente con `docker stop`.
     restart: unless-stopped
+
+    # Expone Redis SOLO en localhost (127.0.0.1) para evitar acceso externo no autorizado.
+    # El puerto del host (6379) mapea al puerto del contenedor (6379).
     ports:
       - "127.0.0.1:6379:6379"
+
+    # Configuración avanzada de Redis:
+    # - maxmemory 64mb: Limita el uso de RAM a 64 megabytes para evitar consumo excesivo.
+    # - maxmemory-policy allkeys-lru: Elimina las claves menos recientemente usadas (LRU)
+    #   cuando se alcanza el límite de memoria, liberando espacio automáticamente.
     command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+
+    # Verificación de salud: ejecuta un ping a Redis para confirmar que está operativo.
+    # Si Redis no responde, Docker lo marca como "unhealthy" y puede reiniciarlo.
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+      interval: 10s       # Cada 10 segundos verifica la salud
+      timeout: 3s         # Si no responde en 3 segundos, se considera fallido
+      retries: 5          # Tras 5 fallos consecutivos, marca el servicio como unhealthy
+
+    # Conecta Redis a la red interna del proyecto para comunicación con el backend.
     networks:
       - app_network
+
+    # Seguridad: impide que el contenedor obtenga privilegios adicionales (e.g. sudo).
+    # Previene escalada de privilegios en caso de vulnerabilidad en Redis.
     security_opt:
       - no-new-privileges:true
 
+    # Registro de logs con driver json-file para persistencia y análisis.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"   # Cada archivo de log no excede 10 megabytes
+        max-file: "3"     # Mantiene un máximo de 3 archivos rotados (30MB total)
+
+  # ─── MYSQL ─────────────────────────────────────────────────────────────────
+  # Base de datos relacional principal para almacenar datos persistentes de la aplicación.
   mysql:
+    # Imagen oficial de MySQL 8.0 con soporte completo para UTF-8 y autenticación moderna.
     image: mysql:8.0
+
+    # Nombre fijo del contenedor para referencias desde el backend y herramientas externas.
     container_name: free_ricky_db
+
+    # Reinicio automático excepto por detención manual.
     restart: unless-stopped
+
+    # Configuración avanzada del servidor MySQL al iniciar:
+    # - default-authentication-plugin=caching_sha2_password: Autenticación segura y moderna
+    #   (recomendada por Oracle para MySQL 8.0+).
+    # - character-set-server=utf8mb4: Soporte completo para caracteres Unicode (emojis, etc).
+    # - collation-server=utf8mb4_unicode_ci: Ordenamiento case-insensitive para búsquedas.
+    # - max-connections=200: Limita conexiones simultáneas para evitar agotamiento de recursos.
+    # - innodb-buffer-pool-size=256M: Memoria cache del motor InnoDB para consultas frecuentes.
     command: >
       --default-authentication-plugin=caching_sha2_password
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
       --max-connections=200
       --innodb-buffer-pool-size=256M
+
+    # Variables de entorno para inicialización de MySQL:
+    # Se usan valores por defecto si no existen en el archivo .env del proyecto.
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
-      MYSQL_DATABASE: ${DB_NAME:-free_ricky}
-      MYSQL_USER: ${DB_USER:-free_ricky}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}     # Contraseña del usuario root
+      MYSQL_DATABASE: ${DB_NAME:-free_ricky}        # Base de datos creada al iniciar
+      MYSQL_USER: ${DB_USER:-free_ricky}             # Usuario sin privilegios root
+      MYSQL_PASSWORD: ${DB_PASSWORD:-root}           # Contraseña del usuario normal
+
+    # Puerto 3307 en el host para evitar conflicto con una posible instalación local de MySQL.
+    # El contenedor usa el puerto estándar 3306 internamente.
     ports:
       - "127.0.0.1:3307:3306"
+
+    # Volumen nombrado para persistencia de datos MySQL más allá del ciclo de vida del contenedor.
+    # Los datos sobreviven a `docker-compose down` pero se eliminan con `docker-compose down -v`.
     volumes:
       - mysql_data:/var/lib/mysql
+
+    # Memoria compartida de 256MB para operaciones concurrentes de MySQL.
+    # Docker asigna solo 64MB por defecto, insuficiente para InnoDB con buffer pool de 256M.
     shm_size: 256mb
+
+    # Verificación de salud usando mysqladmin ping para confirmar que MySQL acepta conexiones.
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-root}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      interval: 10s       # Verifica cada 10 segundos
+      timeout: 5s         # Timeout de 5 segundos por intento
+      retries: 10         # 10 intentos antes de marcar unhealthy (MySQL tarda en iniciar)
+      start_period: 30s   # Período de gracia de 30s para que MySQL termine de inicializar
+
+    # Misma red interna para que el backend pueda conectarse usando el nombre "mysql".
     networks:
       - app_network
+
+    # Seguridad: sin escalada de privilegios.
     security_opt:
       - no-new-privileges:true
 
+    # Logs rotados para evitar llenado del disco en producción.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── BACKEND (Django) ─────────────────────────────────────────────────────
+  # API REST construida con Django que maneja la lógica de negocio y autenticación.
   backend:
+    # Construye la imagen desde el directorio ./backend usando el Dockerfile definido.
     build:
       context: ./backend
       dockerfile: Dockerfile
+
+    # Nombre fijo del contenedor para logging y debugging.
     container_name: free_ricky_backend
+
+    # Reinicio automático en caso de fallo o reinicio del sistema.
     restart: unless-stopped
+
+    # Puerto 8000 expuesto solo en localhost para desarrollo local.
     ports:
       - "127.0.0.1:8000:8000"
+
+    # Dependencias con condiciones de salud:
+    # El backend NO arranca hasta que MySQL y Redis estén completamente operativos.
+    # Esto previene errores de conexión al iniciar la aplicación.
     depends_on:
       mysql:
-        condition: service_healthy
+        condition: service_healthy   # Espera a que el healthcheck de MySQL pase
       redis:
-        condition: service_healthy
+        condition: service_healthy   # Espera a que el healthcheck de Redis pase
+
+    # Variables de entorno para configuración de Django:
+    # Cada una puede sobreescribirse en .env para diferentes entornos (dev, staging, prod).
     environment:
+      # Claves secretas para firma de sesiones y tokens JWT (OBLIGATORIAS en producción).
       SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+
+      # DEBUG=False en producción para no mostrar trazas de errores al usuario.
       DEBUG: ${DEBUG:-False}
+
+      # Hosts permitidos: previene ataques de tipo Host Header Injection.
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+
+      # CORS: define qué dominios del frontend pueden hacer peticiones a la API.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+
+      # URLs base para generación de enlaces internos y redirecciones.
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+
+      # Configuración de base de datos para Django ORM.
       DB_NAME: ${DB_NAME:-free_ricky}
       DB_USER: ${DB_USER:-free_ricky}
       DB_PASSWORD: ${DB_PASSWORD:-root}
-      DB_HOST: mysql
-      DB_PORT: 3306
+      DB_HOST: mysql          # Nombre del servicio Docker (resolución DNS interna)
+      DB_PORT: 3306           # Puerto estándar de MySQL dentro de la red Docker
+
+      # Configuración de correo electrónico para envío de notificaciones.
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@free-ricky.com}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-${EMAIL_HOST_USER}}
       EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
       EMAIL_PORT: ${EMAIL_PORT:-587}
+
+      # Tiempos de expiración de tokens JWT para seguridad.
+      # AccessToken: 15 minutos (acceso breve reduce riesgo si se compromete).
+      # RefreshToken: 1 día (renovación automática sin re-login frecuente).
       JWT_ACCESS_TOKEN_LIFETIME_MINUTES: ${JWT_ACCESS_TOKEN_LIFETIME_MINUTES:-15}
       JWT_REFRESH_TOKEN_LIFETIME_DAYS: ${JWT_REFRESH_TOKEN_LIFETIME_DAYS:-1}
+
+      # Conexión a Redis para caché: redis://redis:6379/0
+      # Usa el nombre del servicio "redis" como host (resolución DNS de Docker).
       CACHE_URL: redis://redis:6379/0
+
+      # Redirección SSL en producción: fuerza HTTPS para todas las peticiones.
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
+
+    # Red interna del proyecto.
     networks:
       - app_network
+
+    # Seguridad: sin escalada de privilegios.
     security_opt:
       - no-new-privileges:true
+
+    # Sistema de archivos de solo lectura para prevenir modificaciones maliciosas.
     read_only: true
+
+    # /tmp es writable via tmpfs para operaciones temporales de Python/Django.
     tmpfs:
       - /tmp
-      - /app/logs
+
+    # Volumen para logs persistentes de la aplicación backend.
+    volumes:
+      - backend_logs:/app/logs
+
+    # Logs con más archivos rotados (5 en vez de 3) porque el backend genera más logs.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    # Healthcheck que verifica la API respondiendo a una petición HTTP real.
+    # Usa urllib (stdlib de Python) para evitar dependencias externas en el healthcheck.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/ranking/')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      interval: 30s       # Verifica cada 30 segundos (el backend tarda más en iniciar)
+      timeout: 10s        # 10 segundos de tolerancia para respuesta
+      retries: 3          # 3 fallos antes de marcar unhealthy
+      start_period: 40s   # 40 segundos para que Django complete migraciones y arranque
 
+  # ─── FRONTEND (Nginx + App) ───────────────────────────────────────────────
+  # Servidor web estático que sirve la aplicación React/Vue compilada.
   frontend:
+    # Construye desde ./frontend con su propio Dockerfile (compila y sirve con Nginx).
     build:
       context: ./frontend
       dockerfile: Dockerfile
+
+    # Nombre fijo del contenedor.
     container_name: free_ricky_frontend
+
+    # Reinicio automático.
     restart: unless-stopped
+
+    # Puerto 5173 en el host (puerto estándar de Vite) mapeado a Nginx internamente (80).
     ports:
       - "127.0.0.1:5173:80"
+
+    # Espera a que el backend esté sano antes de iniciar, ya que el frontend le hace peticiones.
     depends_on:
       backend:
         condition: service_healthy
+
+    # Misma red interna del proyecto.
     networks:
       - app_network
+
+    # Seguridad: sin escalada de privilegios.
     security_opt:
       - no-new-privileges:true
+
+    # Sistema de archivos de solo lectura: Nginx solo necesita leer archivos estáticos.
     read_only: true
+
+    # Tmpfs para directorios que Nginx necesita escribir:
+    # - /tmp: archivos temporales de Nginx worker processes.
+    # - /var/cache/nginx: caché de archivos estáticos y conexiones upstream.
+    # - /var/run: archivo PID del proceso Nginx master.
+    # - /var/log/nginx: archivos de log del servidor web.
     tmpfs:
       - /tmp
       - /var/cache/nginx
       - /var/run
       - /var/log/nginx
+
+    # Logs rotados para el servidor frontend.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Healthcheck simple: verifica que Nginx responde en el puerto 80.
+    # wget es más ligero que curl en imágenes Alpine.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      interval: 30s       # Verifica cada 30 segundos
+      timeout: 5s         # 5 segundos de timeout
+      retries: 3          # 3 intentos fallidos antes de unhealthy
+      start_period: 10s   # 10 segundos para que Nginx arranque (muy rápido)
 
+# ─── VOLÚMENES PERSISTENTES ─────────────────────────────────────────────────
+# Volúmenes nombrados para persistencia de datos entre ciclos de vida de contenedores.
 volumes:
+  # Almacena los datos de MySQL (tablas, índices, registros).
+  # Se mantiene incluso después de `docker-compose down`.
   mysql_data:
     driver: local
 
+  # Almacena los logs del backend para análisis posterior.
+  # Permite revisar logs históricos sin acceder al contenedor.
+  backend_logs:
+    driver: local
+
+# ─── RED DE APLICACIÓN ──────────────────────────────────────────────────────
+# Red bridge aislada que permite comunicación interna entre servicios.
+# Los servicios se comunican por nombre de servicio (resolución DNS automática).
+# Ningún servicio expone puertos al mundo exterior excepto los mapeados en ports.
 networks:
   app_network:
     driver: bridge

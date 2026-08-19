@@ -1,15 +1,65 @@
-asgiref==3.11.1
+# ─── FRAMEWORK WEB ──────────────────────────────────────────────────────
+# Django: Framework web Python completo con ORM, admin, autenticación, etc.
 Django==6.0.2
+
+# asgiref: Referencia de ASGI (Asynchronous Server Gateway Interface).
+# Permite que Django maneje peticiones asíncronas y WebSockets.
+asgiref==3.11.1
+
+# ─── API REST ───────────────────────────────────────────────────────────
+# Django REST Framework: Toolkit para construir APIs RESTful con Django.
+# Proporciona serializers, viewsets, autenticación, paginación y más.
 djangorestframework==3.16.1
+
+# djangorestframework-simplejwt: Implementación de JWT (JSON Web Tokens)
+# para autenticación stateless. Permite login/logout sin sesiones de servidor.
 djangorestframework-simplejwt==5.5.1
+
+# ─── BASE DE DATOS ─────────────────────────────────────────────────────
+# mysqlclient: Driver MySQL/MariaDB para Python (reemplaza a MySQL-python).
+# Necesario para conectar Django con bases de datos MySQL en producción.
 mysqlclient==2.2.8
+
+# sqlparse: Analizador sintáctico SQL. Django lo usa internamente para
+# formatear y validar queries SQL en el ORM.
 sqlparse==0.5.5
-tzdata==2026.2
-django-cors-headers==4.7.0
-django-ratelimit==4.1.0
+
+# ─── SEGURIDAD ──────────────────────────────────────────────────────────
+# python-decouple: Lee configuración desde variables de entorno o archivos .env.
+# Separa la configuración del código (12-factor app).
 python-decouple==3.8
-bleach==6.4.0
+
+# argon2-cffi: Implementación de Python del algoritmo de hash Argon2.
+# Ganador del Password Hashing Competition. Más seguro que bcrypt/PBKDF2.
 argon2-cffi==25.1.0
-gunicorn==25.1.0
+
+# bleach: Sanitizador HTML. Limpia contenido HTML para prevenir ataques XSS
+# cuando se procesa contenido de usuarios.
+bleach==6.4.0
+
+# ─── MIDDLEWARES ────────────────────────────────────────────────────────
+# django-cors-headers: Maneja CORS (Cross-Origin Resource Sharing).
+# Permite controlar qué dominios externos pueden acceder a la API.
+django-cors-headers==4.7.0
+
+# django-ratelimit: Limita la tasa de peticiones por IP o usuario.
+# Protección contra ataques de fuerza bruta y abuso de API.
+django-ratelimit==4.1.0
+
+# django-ipware: Middleware para detectar la IP real del cliente.
+# Útil incluso cuando hay proxies/load balancers en medio.
 django-ipware==7.0.0
+
+# ─── SERVIDOR Y CACHÉ ──────────────────────────────────────────────────
+# gunicorn: Servidor HTTP WSGI de alta performance para producción.
+# Concurrency model: pre-fork (múltiples procesos workers).
+gunicorn==25.1.0
+
+# redis: Cliente Python para Redis. Usado como backend de caché
+# para rate limiting y brute force protection entre workers.
 redis==5.3.0
+
+# ─── ZONA HORARIA ──────────────────────────────────────────────────────
+# tzdata: Base de datos de zonas horarias del sistema operativo.
+# Necesario en contenedores Docker (algunas imágenes base no la incluyen).
+tzdata==2026.2

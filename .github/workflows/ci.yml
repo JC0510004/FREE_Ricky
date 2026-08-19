@@ -1,110 +1,183 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# GitHub Actions CI/CD - FREE RICKY
+# Pipeline de integración continua: ejecuta tests, linting, build y Docker.
+# Garantiza que cada push o PR cumple con los estándares de calidad del proyecto.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Nombre del pipeline que aparece en la pestaña "Actions" de GitHub.
 name: CI/CD
 
+# ─── TRIGGERS ───────────────────────────────────────────────────────────────
+# Define en qué eventos se ejecuta el workflow.
 on:
+  # Se ejecuta al hacer push (subir cambios) a las ramas main y develop.
+  # main es la rama de producción; develop es la rama de integración.
   push:
     branches: [main, develop]
+
+  # Se ejecuta al abrir o actualizar un Pull Request hacia main.
+  # Esto permite detectar errores antes de fusionar código nuevo.
   pull_request:
     branches: [main]
 
+# ─── VARIABLES DE ENTORNO GLOBALES ──────────────────────────────────────────
+# Variables disponibles en TODOS los jobs del workflow.
+# Son valores dummy de CI que NO se usan en producción (solo para que Django arranque).
 env:
+  # Clave secreta de Django: necesaria para firmar sesiones y datos cifrados.
+  # En CI no necesita ser segura, pero el-framework la requiere para inicializar.
   SECRET_KEY: 'ci-test-key-not-for-production'
+
+  # Clave para firmar tokens JWT: misma lógica que SECRET_KEY anterior.
   JWT_SECRET_KEY: 'ci-test-jwt-key-not-for-production'
+
+  # DEBUG en False simula comportamiento de producción durante los tests.
   DEBUG: 'False'
 
+# ─── JOBS ───────────────────────────────────────────────────────────────────
+# Cada job se ejecuta en una máquina virtual independiente de GitHub Actions.
 jobs:
+
+  # ─── JOB: TESTS DEL BACKEND ──────────────────────────────────────────────
+  # Ejecuta la suite de tests de Django para validar la lógica de negocio.
   backend-tests:
-    name: Backend Tests
-    runs-on: ubuntu-latest
+    name: Backend Tests                    # Nombre visible en la interfaz de GitHub
+    runs-on: ubuntu-latest                 # Máquina virtual con Ubuntu más reciente
 
     steps:
+      # Clona el repositorio completo (necesario para acceder a archivos del proyecto).
       - uses: actions/checkout@v4
 
+      # Configura Python 3.12 con caché de pip para acelerar instalaciones futuras.
+      # La caché almacena paquetes descargados entre ejecuciones del workflow.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
+          cache: 'pip'                     # Habilita caché basada en requirements.txt
 
+      # Instala dependencias del sistema necesarias para compilar mysqlclient.
+      # libmysqlclient-dev contiene headers de C de MySQL para la compilación.
+      # pkg-config ayuda a localizar las bibliotecas de MySQL durante la instalación.
       - name: Install system dependencies
         run: |
-          sudo apt-get update -qq
+          sudo apt-get update -qq          # Actualiza índices de paquetes silenciosamente
           sudo apt-get install -y -qq default-libmysqlclient-dev pkg-config
 
+      # Instala las dependencias de Python del backend.
+      # pip upgrade garantiza la versión más reciente de pip para mejor resolución.
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      # Verifica que Django carga correctamente con la configuración del proyecto.
+      # Usa SQLite en memoria como BD de prueba para no depender de MySQL en CI.
+      # Imprime la configuración de BD para debugging en los logs de GitHub Actions.
       - name: Verify Django loads
         run: |
           python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup(); print('OK:', django.conf.settings.DATABASES['default'])"
-        working-directory: backend
+        working-directory: backend           # Ejecuta desde el directorio backend
         env:
-          DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
+          DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'    # SQLite temporal para CI
 
+      # Aplica las migraciones de Django para crear el esquema de la base de datos.
+      # --skip-checks omite verificaciones de configuración (no hay BD real en CI).
+      # --traceback muestra trazas completas para debugging de errores de migración.
       - name: Run migrations
         run: python manage.py migrate --skip-checks --traceback --verbosity=2
         working-directory: backend
         env:
           DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
 
+      # Ejecuta todos los tests del módulo 'api' en paralelo para mayor velocidad.
+      # --verbosity=2 muestra detalles de cada test (nombre, resultado, duración).
+      # --traceback muestra trazas completas cuando falla un test.
       - name: Run tests
         run: python manage.py test api --verbosity=2 --traceback --parallel
         working-directory: backend
         env:
           DATABASE_URL: 'sqlite:///tmp/test_db.sqlite3'
 
+  # ─── JOB: LINTING DEL BACKEND ────────────────────────────────────────────
+  # Verifica el estilo del código Python con flake8.
   backend-lint:
     name: Backend Lint
     runs-on: ubuntu-latest
 
     steps:
+      # Clona el repositorio.
       - uses: actions/checkout@v4
 
+      # Configura Python para instalar flake8.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
+      # Instala flake8: linter que detecta errores de estilo y posibles bugs.
       - name: Install flake8
         run: pip install flake8
 
+      # Ejecuta flake8 sobre el directorio api/ con reglas personalizadas:
+      # --max-line-length=120: Permite líneas de hasta 120 caracteres (estándar moderno).
+      # --ignore=E501: Ignora líneas largas que excedan el máximo.
+      # --ignore=W503: Ignora advertencia de operadores binarios al inicio de línea.
+      # Esto mantiene consistencia sin ser excesivamente estricto.
       - name: Lint
         run: flake8 api/ --max-line-length=120 --ignore=E501,W503
         working-directory: backend
 
+  # ─── JOB: BUILD DEL FRONTEND ─────────────────────────────────────────────
+  # Compila la aplicación frontend (React/Vue) para verificar que no hay errores.
   frontend-build:
     name: Frontend Build
     runs-on: ubuntu-latest
 
     steps:
+      # Clona el repositorio.
       - uses: actions/checkout@v4
 
+      # Configura Node.js 20 (LTS actual) con caché basada en package-lock.json.
+      # La caché de npm evita reinstalar las mismas dependencias en cada ejecución.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json   # Archivo que define la caché
 
+      # Instala dependencias de Node de forma limpia (sin modificar package-lock.json).
+      # npm ci es más rápido y seguro que npm install en entornos CI.
       - name: Install dependencies
         run: npm ci
         working-directory: frontend
 
+      # Compila el frontend: detecta errores de TypeScript, imports rotos, etc.
+      # Si falla el build, el PR no puede ser fusionado.
       - name: Build
         run: npm run build
         working-directory: frontend
 
+  # ─── JOB: BUILD DE DOCKER ────────────────────────────────────────────────
+  # Verifica que las imágenes Docker se construyen correctamente.
+  # Solo se ejecuta si los tests y el build del frontend pasaron.
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
+    # Dependencia explícita: este job espera a que backend-tests Y frontend-build
+    # terminen exitosamente antes de ejecutarse. Ahorra tiempo y recursos de CI.
     needs: [backend-tests, frontend-build]
 
     steps:
+      # Clona el repositorio (necesario para los Dockerfiles y archivos de contexto).
       - uses: actions/checkout@v4
 
+      # Construye la imagen Docker del backend usando el Dockerfile en ./backend.
+      # La tag :ci identifica esta imagen como generada por el pipeline de CI.
       - name: Build backend
         run: docker build -t free-ricky-backend:ci ./backend
 
+      # Construye la imagen Docker del frontend usando el Dockerfile en ./frontend.
       - name: Build frontend
         run: docker build -t free-ricky-frontend:ci ./frontend
