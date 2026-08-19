@@ -38,6 +38,8 @@ import Register from './pages/Register.jsx'
 import ForgotPassword from './pages/ForgotPassword.jsx'
 // Admin: panel de administración (solo accesible por usuarios con rol admin)
 import Admin from './pages/Admin.jsx'
+// Home: dashboard principal del juego (solo accesible por usuarios autenticados)
+import Home from './pages/Home.jsx'
 // Settings: página de configuración/cuenta del usuario
 import Settings from './pages/Settings.jsx'
 
@@ -74,6 +76,10 @@ createRoot(document.getElementById('root')).render(
           {/* ─── RUTA DE RECUPERACIÓN DE CONTRASEÑA ───────────── */}
           {/* Permite al usuario recuperar su contraseña olvidada */}
           <Route path="/forgot-password" element={<ForgotPassword />} />
+
+          {/* ─── RUTA PROTEGIDA: DASHBOARD DEL JUEGO ─────── */}
+          {/* Requiere autenticación. Muestra niveles, ranking y partidas */}
+          <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
 
           {/* ─── RUTA PROTEGIDA: PANEL DE ADMINISTRACIÓN ──────── */}
           {/* adminOnly = true indica que solo los usuarios con rol 'admin'

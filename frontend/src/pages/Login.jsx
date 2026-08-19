@@ -49,7 +49,7 @@ export default function Login() {
     try {
       // Llama a la función de login del contexto de autenticación
       await login(formData.username.trim(), formData.password)
-      navigate('/')             // Redirige a la landing page si el login es exitoso
+      navigate('/home')             // Redirige al dashboard si el login es exitoso
     } catch (err) {
       // Extrae el mensaje de error del backend o usa un mensaje genérico
       const message = err?.response?.data?.error || 'Credenciales incorrectas'

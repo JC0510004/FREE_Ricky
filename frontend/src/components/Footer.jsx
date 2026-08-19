@@ -3,37 +3,26 @@
 // redes sociales y copyright. No tiene lógica de estado ni efectos.
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export default function Footer() {
   return (
     <footer className="footer">
-
-      {/* ─── Contenedor del footer ─── */}
-      {/* Centra el contenido y organiza los enlaces en fila */}
       <div className="footer-container">
+        <Link to="/" className="footer-logo">SALT BORN</Link>
 
-        {/* ─── Logo del footer ─── */}
-        {/* Link al inicio con el nombre del proyecto */}
-        <a className="footer-logo" href="#">SALT BORN</a>
-
-        {/* ─── Enlaces legales e informativos ─── */}
-        {/* Contiene enlaces a kit de prensa, PR, copyright y políticas */}
         <div className="footer-links">
-          <a href="#">Kit de Prensa</a>
-          <a href="#">Relaciones Públicas</a>
-          {/* Copyright con el año de los estudios creadores */}
-          <a href="#">© 2024, 1724 Studios</a>
-          <a href="#">Privacidad</a>
-          <a href="#">Términos</a>
+          <a href="#news">Actualizaciones</a>
+          <a href="#team">Tripulación</a>
+          <span>© 2024, 1724 Studios</span>
+          <a href="#community">Comunidad</a>
+          <a href="#manifesto">Historia</a>
         </div>
 
-        {/* ─── Redes sociales ─── */}
-        {/* Links a plataformas sociales: LinkedIn y X (Twitter) */}
         <div className="footer-socials">
-          <a className="social-link" href="#">In</a>
-          <a className="social-link" href="#">X</a>
+          <a className="social-link" href="https://linkedin.com" target="_blank" rel="noopener noreferrer">In</a>
+          <a className="social-link" href="https://x.com" target="_blank" rel="noopener noreferrer">X</a>
         </div>
-
       </div>
     </footer>
   );

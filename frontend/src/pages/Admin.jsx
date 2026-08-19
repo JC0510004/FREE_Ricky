@@ -37,7 +37,7 @@ export default function Admin() {
   useEffect(() => {
     if (isLoading) return
     if (!isAuthenticated) return navigate('/')
-    if (user?.rol !== 'admin') return navigate('/')
+    if (user?.rol !== 'admin') return navigate('/home')
   }, [isLoading, isAuthenticated, user, navigate])
 
   // ─── Guardia de renderizado ───
