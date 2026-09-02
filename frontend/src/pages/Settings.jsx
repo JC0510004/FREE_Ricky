@@ -5,6 +5,7 @@ import API from '../api/axios'
 import {
   ArrowLeft, Check, Gamepad2, KeyRound, LogOut, ShieldCheck, UserRound
 } from 'lucide-react'
+import { extractApiError } from '../utils/format'
 import '../dashboard.css'
 
 function PanelCard({ icon: Icon, title, subtitle, children, wide = false }) {
@@ -77,11 +78,7 @@ export default function Settings() {
       setEmail(data.usuario?.email ?? email.trim())
       setProfileMsg({ tipo: 'ok', texto: 'Perfil actualizado correctamente' })
     } catch (err) {
-      const detail = err?.response?.data
-      const msg =
-        (detail && typeof detail === 'object' ? Object.values(detail).flat().filter(Boolean).join(' · ')
-          : err?.response?.data?.error) || 'Error al actualizar el perfil'
-      setProfileMsg({ tipo: 'error', texto: msg })
+      setProfileMsg({ tipo: 'error', texto: extractApiError(err?.response?.data, 'Error al actualizar el perfil') })
     } finally {
       setSavingProfile(false)
     }
@@ -111,11 +108,7 @@ export default function Settings() {
       setConfirmPassword('')
       setPassMsg({ tipo: 'ok', texto: 'Contraseña actualizada correctamente' })
     } catch (err) {
-      const detail = err?.response?.data
-      const msg =
-        (detail && typeof detail === 'object' ? Object.values(detail).flat().filter(Boolean).join(' · ')
-          : err?.response?.data?.error) || 'Error al cambiar la contraseña'
-      setPassMsg({ tipo: 'error', texto: msg })
+      setPassMsg({ tipo: 'error', texto: extractApiError(err?.response?.data, 'Error al cambiar la contraseña') })
     } finally {
       setSavingPassword(false)
     }

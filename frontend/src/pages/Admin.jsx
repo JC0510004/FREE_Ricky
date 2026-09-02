@@ -7,6 +7,7 @@ import {
   ArrowLeft, BarChart3, Check, Gamepad2, LogOut, Pencil,
   ShieldCheck, Swords, Trash2, Trophy, Users, Zap
 } from 'lucide-react'
+import { extractApiError } from '../utils/format'
 import '../dashboard.css'
 
 /* ─── Tab: Resumen ──────────────────────────────────────────────── */
@@ -95,11 +96,7 @@ function Usuarios() {
       setNotice({ tipo: 'ok', texto: 'Usuario actualizado correctamente' })
       load(null, () => setTimeout(clearNotice, 4000))
     } catch (err) {
-      const detail = err?.response?.data
-      const msg =
-        (detail && typeof detail === 'object' ? Object.values(detail).flat().filter(Boolean).join(' · ')
-          : err?.response?.data?.error) || 'Error al actualizar'
-      setNotice({ tipo: 'error', texto: msg })
+      setNotice({ tipo: 'error', texto: extractApiError(err?.response?.data, 'Error al actualizar') })
     }
   }
 
