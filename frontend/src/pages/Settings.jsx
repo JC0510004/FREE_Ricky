@@ -1,5 +1,7 @@
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
+import API from '../api/axios'
 import {
   ArrowLeft, Check, Gamepad2, KeyRound, LogOut, ShieldCheck, UserRound
 } from 'lucide-react'
@@ -20,20 +22,9 @@ function PanelCard({ icon: Icon, title, subtitle, children, wide = false }) {
   )
 }
 
-function Field({ label, value = '', type = 'text' }) {
+function Label({ children }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-      <span className="fr-label">{label}</span>
-      <input className="fr-input" defaultValue={value} type={type} />
-    </label>
-  )
-}
-
-function PrimaryButton({ children }) {
-  return (
-    <button className="fr-btn-primary" type="button">
-      <Check size={14} />{children}
-    </button>
+    <span className="fr-label">{children}</span>
   )
 }
 
@@ -49,7 +40,86 @@ function InfoRow({ label, value, accent = false }) {
 }
 
 export default function Settings() {
-  const { user, logout } = useAuth()
+  const { user, updateUser, logout } = useAuth()
+
+  // ─── Estado del formulario de perfil ───
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileMsg, setProfileMsg] = useState(null) // { tipo: 'ok'|'error', texto }
+
+  // ─── Estado del formulario de contraseña ───
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [passMsg, setPassMsg] = useState(null)
+
+  // Refresca los valores del perfil cuando cambia el usuario del contexto
+  useEffect(() => {
+    setUsername(user?.username || '')
+    setEmail(user?.email || '')
+  }, [user?.username, user?.email])
+
+  // ─── Guardar cambios de perfil (nombre y correo) ───
+  const handleSaveProfile = useCallback(async (e) => {
+    e.preventDefault()
+    setProfileMsg(null)
+    if (!username.trim() || !email.trim()) {
+      setProfileMsg({ tipo: 'error', texto: 'Completa el nombre de usuario y el correo' })
+      return
+    }
+    setSavingProfile(true)
+    try {
+      const { data } = await API.put(`/usuarios/${user.id}/`, { username: username.trim(), email: email.trim() })
+      updateUser({ username: data.usuario?.username ?? username.trim(), email: data.usuario?.email ?? email.trim() })
+      setUsername(data.usuario?.username ?? username.trim())
+      setEmail(data.usuario?.email ?? email.trim())
+      setProfileMsg({ tipo: 'ok', texto: 'Perfil actualizado correctamente' })
+    } catch (err) {
+      const detail = err?.response?.data
+      const msg =
+        (detail && typeof detail === 'object' ? Object.values(detail).flat().filter(Boolean).join(' · ')
+          : err?.response?.data?.error) || 'Error al actualizar el perfil'
+      setProfileMsg({ tipo: 'error', texto: msg })
+    } finally {
+      setSavingProfile(false)
+    }
+  }, [username, email, user?.id, updateUser])
+
+  // ─── Cambiar contraseña ───
+  const handleChangePassword = useCallback(async (e) => {
+    e.preventDefault()
+    setPassMsg(null)
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setPassMsg({ tipo: 'error', texto: 'Completa todos los campos de contraseña' })
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPassMsg({ tipo: 'error', texto: 'Las contraseñas no coinciden' })
+      return
+    }
+    setSavingPassword(true)
+    try {
+      await API.post('/cambiar-password/', {
+        old_password: oldPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      })
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPassMsg({ tipo: 'ok', texto: 'Contraseña actualizada correctamente' })
+    } catch (err) {
+      const detail = err?.response?.data
+      const msg =
+        (detail && typeof detail === 'object' ? Object.values(detail).flat().filter(Boolean).join(' · ')
+          : err?.response?.data?.error) || 'Error al cambiar la contraseña'
+      setPassMsg({ tipo: 'error', texto: msg })
+    } finally {
+      setSavingPassword(false)
+    }
+  }, [oldPassword, newPassword, confirmPassword])
 
   return (
     <div className="fr-dash">
@@ -84,17 +154,60 @@ export default function Settings() {
 
             {/* Perfil */}
             <PanelCard icon={UserRound} title="Perfil" subtitle="Actualiza tu información personal">
-              <Field label="Nombre de usuario" value={user?.username || ''} />
-              <Field label="Correo electrónico" value={user?.email || ''} />
-              <PrimaryButton>Guardar cambios</PrimaryButton>
+              <form onSubmit={handleSaveProfile} noValidate>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+                    <Label>Nombre de usuario</Label>
+                    <input className="fr-input" value={username} onChange={e => setUsername(e.target.value)} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+                    <Label>Correo electrónico</Label>
+                    <input className="fr-input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+                  </label>
+
+                  {profileMsg && (
+                    <div className={profileMsg.tipo === 'ok' ? 'fr-success' : 'fr-error'}>
+                      {profileMsg.tipo === 'ok' && <Check size={14} />}
+                      <span>{profileMsg.texto}</span>
+                    </div>
+                  )}
+
+                  <button className="fr-btn-primary" type="submit" disabled={savingProfile}>
+                    <Check size={14} />{savingProfile ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                </div>
+              </form>
             </PanelCard>
 
             {/* Seguridad */}
             <PanelCard icon={KeyRound} title="Seguridad" subtitle="Protege tu cuenta">
-              <Field label="Contraseña actual" type="password" />
-              <Field label="Nueva contraseña" type="password" />
-              <Field label="Confirmar nueva contraseña" type="password" />
-              <PrimaryButton>Cambiar contraseña</PrimaryButton>
+              <form onSubmit={handleChangePassword} noValidate>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+                    <Label>Contraseña actual</Label>
+                    <input className="fr-input" type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} autoComplete="current-password" />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+                    <Label>Nueva contraseña</Label>
+                    <input className="fr-input" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+                    <Label>Confirmar nueva contraseña</Label>
+                    <input className="fr-input" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+                  </label>
+
+                  {passMsg && (
+                    <div className={passMsg.tipo === 'ok' ? 'fr-success' : 'fr-error'}>
+                      {passMsg.tipo === 'ok' && <Check size={14} />}
+                      <span>{passMsg.texto}</span>
+                    </div>
+                  )}
+
+                  <button className="fr-btn-primary" type="submit" disabled={savingPassword}>
+                    <Check size={14} />{savingPassword ? 'Cambiando...' : 'Cambiar contraseña'}
+                  </button>
+                </div>
+              </form>
             </PanelCard>
 
             {/* Cuenta - full width */}

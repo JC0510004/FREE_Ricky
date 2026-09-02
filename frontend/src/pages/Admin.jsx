@@ -68,12 +68,13 @@ function Resumen() {
 function Usuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState(null) // { tipo: 'ok'|'error', texto }
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ username: '', email: '', rol: '' })
 
-  const load = (signal) => {
+  const load = (signal, cb) => {
     API.get('/usuarios/', { signal })
-      .then(r => setUsuarios(r.data.results || r.data))
+      .then(r => { setUsuarios(r.data.results || r.data); cb?.() })
       .catch(e => { if (e?.name !== 'CanceledError') setError('Error al cargar') })
   }
 
@@ -83,22 +84,45 @@ function Usuarios() {
     return () => ctrl.abort()
   }, [])
 
-  const startEdit = (u) => { setEditId(u.id); setForm({ username: u.username, email: u.email, rol: u.rol }) }
+  const clearNotice = () => setNotice(null)
+
+  const startEdit = (u) => { clearNotice(); setEditId(u.id); setForm({ username: u.username, email: u.email, rol: u.rol }) }
 
   const save = async (id) => {
-    try { await API.put(`/usuarios/${id}/`, form); setEditId(null); load() }
-    catch { setError('Error al actualizar') }
+    try {
+      await API.put(`/usuarios/${id}/`, { username: form.username, email: form.email })
+      setEditId(null)
+      setNotice({ tipo: 'ok', texto: 'Usuario actualizado correctamente' })
+      load(null, () => setTimeout(clearNotice, 4000))
+    } catch (err) {
+      const detail = err?.response?.data
+      const msg =
+        (detail && typeof detail === 'object' ? Object.values(detail).flat().filter(Boolean).join(' · ')
+          : err?.response?.data?.error) || 'Error al actualizar'
+      setNotice({ tipo: 'error', texto: msg })
+    }
   }
 
   const del = async (id) => {
     if (!confirm('¿Eliminar este usuario?')) return
-    try { await API.delete(`/usuarios/${id}/`); load() }
-    catch { setError('Error al eliminar') }
+    try {
+      await API.delete(`/usuarios/${id}/`)
+      setNotice({ tipo: 'ok', texto: 'Usuario desactivado' })
+      load(null, () => setTimeout(clearNotice, 4000))
+    } catch {
+      setNotice({ tipo: 'error', texto: 'Error al eliminar' })
+    }
   }
 
   return (
     <>
       {error && <div className="fr-error">{error}</div>}
+      {notice && (
+        <div className={notice.tipo === 'ok' ? 'fr-success' : 'fr-error'} style={{ marginBottom: '1rem' }}>
+          {notice.tipo === 'ok' && <Check size={14} />}
+          <span>{notice.texto}</span>
+        </div>
+      )}
       <div className="fr-table-wrap">
         <div className="fr-table-header-row">
           <div className="fr-table-header-text">
