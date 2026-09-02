@@ -93,9 +93,17 @@ API.interceptors.response.use(
     // Solo intentamos renovar si:
     // 1. El error es 401 (No Autorizado - token expirado/inválido)
     // 2. Esta petición NO ha sido reintentada antes (_retry flag)
-    // 3. La petición fallida NO es la de refresh token (para evitar
+    // 3. La petición fallida NO es de refresh token (para evitar
     //    un bucle infinito de refresh fallido → refresh → fail → repeat)
-    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/token/refresh/')) {
+    // 4. La petición NO es de login/register: ahí un 401 significa
+    //    "credenciales incorrectas", no un token expirado. Intentar
+    //    renovar el token en ese caso devolvería un error de refresh
+    //    en lugar del mensaje de credenciales correcto.
+    const isAuthEndpoint =
+      originalRequest.url.includes('/login/') ||
+      originalRequest.url.includes('/register/') ||
+      originalRequest.url.includes('/token/refresh/')
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       // Si ya hay un refresh en curso, encolamos esta petición
       // en lugar de发起 otra petición de refresh
       if (isRefreshing) {
