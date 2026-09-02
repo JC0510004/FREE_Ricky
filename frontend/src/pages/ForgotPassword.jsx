@@ -1,13 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import API from '../api/axios'
+import ErrorMessage from '../components/ErrorMessage'
 
 // ─── Componente de transición post-confirmación ───
 // Se muestra cuando el usuario acaba de confirmar su identidad desde el correo.
 // Muestra una cuenta regresiva antes de redirigir al formulario de nueva contraseña.
 function JustConfirmed({ onReady }) {
   // Estado de la cuenta regresiva (inicia en 3 segundos)
-  const [countdown, setCountdown] = useState(3)
+  const [, setCountdown] = useState(3)
 
   // ─── Timer de cuenta regresiva ───
   // Decrementa cada segundo y ejecuta onReady cuando llega a 0.
@@ -73,26 +74,26 @@ export default function ForgotPassword() {
   // ─── Efecto inicial: verificar token si viene en la URL ───
   // Cuando el usuario abre el enlace desde el correo, se verifica el token automáticamente.
   useEffect(() => {
+    const controller = new AbortController()
     if (urlToken) {
-      tokenRef.current = urlToken   // Almacena el token en la referencia mutable
-      setError('')
-      const isConfirmed = searchParams.get('confirmed') === '1'
-      // Verifica con el backend si el token es válido y si la identidad está confirmada
-      API.get(`/password-reset/verificar/?token=${urlToken}`)
-        .then((res) => {
-          if (res.data?.confirmado) {
-            // Si está confirmado y viene del correo, muestra pantalla de transición
-            if (isConfirmed) {
-              setStep('just-confirmed')
-            } else {
-              setStep('reset')  // Ya confirmado, va directo al formulario
-            }
-          } else {
-            setStep('not-confirmed')  // Token válido pero identidad no confirmada
-          }
+      tokenRef.current = urlToken
+      API.post('/password-reset/confirmar/', { token: urlToken }, { signal: controller.signal })
+        .then(() => {
+          setStep('just-confirmed')
         })
-        .catch(() => {})
+        .catch(() => {
+          API.get(`/password-reset/verificar/?token=${urlToken}`, { signal: controller.signal })
+            .then((res) => {
+              if (res.data?.confirmado) {
+                setStep('reset')
+              } else {
+                setStep('not-confirmed')
+              }
+            })
+            .catch(() => {})
+        })
     }
+    return () => controller.abort()
   }, [urlToken])
 
   // ─── Paso 1: Envío del correo de recuperación ───
@@ -123,24 +124,6 @@ export default function ForgotPassword() {
     }
   }, [email])
 
-  // ─── Verificación manual de confirmación ───
-  // Permite al usuario verificar manualmente si su identidad fue confirmada.
-  const handleCheckConfirm = useCallback(async () => {
-    const t = tokenRef.current || urlToken
-    if (!t) { setError('Token inválido'); return }
-    setError('')
-    try {
-      const res = await API.get(`/password-reset/verificar/?token=${t}`)
-      if (res.data?.confirmado) {
-        setStep('reset')      // Confirmado: avanza al formulario de contraseña
-      } else {
-        setStep('not-confirmed')  // No confirmado: muestra mensaje de espera
-      }
-    } catch {
-      setError('Error al verificar identidad')
-    }
-  }, [urlToken])
-
   // ─── Paso final: restablecimiento de contraseña ───
   // Valida la nueva contraseña y la envía al backend junto con el token.
   const handleResetPassword = useCallback(async (e) => {
@@ -152,7 +135,7 @@ export default function ForgotPassword() {
     if (!/[A-Z]/.test(password)) { setError('Debe tener una mayúscula'); return }
     if (!/[a-z]/.test(password)) { setError('Debe tener una minúscula'); return }
     if (!/[0-9]/.test(password)) { setError('Debe tener un número'); return }
-    if (!/[!@#$%^&*(),.?":{}|<>_\-]/.test(password)) { setError('Debe tener un carácter especial'); return }
+    if (!/[!@#$%^&*(),.?":{}|<>_-]/.test(password)) { setError('Debe tener un carácter especial'); return }
     if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return }
 
     const t = tokenRef.current || urlToken
@@ -317,13 +300,7 @@ export default function ForgotPassword() {
                 </div>
               </div>
 
-              {/* Mensaje de error de validación */}
-              {error && (
-                <div className="auth-general-error">
-                  <span className="material-symbols-outlined">error</span>
-                  <span>{error}</span>
-                </div>
-              )}
+              <ErrorMessage message={error} />
 
               {/* Botón de restablecimiento con texto dinámico */}
               <button type="submit" className="auth-submit" disabled={isLoading}>
@@ -345,13 +322,7 @@ export default function ForgotPassword() {
                 />
               </div>
 
-              {/* Mensaje de error */}
-              {error && (
-                <div className="auth-general-error">
-                  <span className="material-symbols-outlined">error</span>
-                  <span>{error}</span>
-                </div>
-              )}
+              <ErrorMessage message={error} />
 
               {/* Botón de envío con texto dinámico */}
               <button type="submit" className="auth-submit" disabled={isLoading}>

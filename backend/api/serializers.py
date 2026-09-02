@@ -1,7 +1,4 @@
 # ─── IMPORTACIONES ───────────────────────────────────────────────────────────
-# Módulo de registro de eventos de seguridad en bitácora
-import logging
-
 # Serializadores de Django REST Framework para convertir datos entre JSON y modelos
 from rest_framework import serializers
 
@@ -14,11 +11,6 @@ from .utils import (
     sanitize_input, validate_email, validate_username,
     normalize_email, check_password_strength
 )
-
-# ─── LOGGING ─────────────────────────────────────────────────────────────────
-# Logger dedicado al contexto de seguridad; permite rastrear intentos de acceso,
-# registros y otros eventos críticos en un canal específico de bitácora
-logger = logging.getLogger('seguridad')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -113,11 +105,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         usuario.set_password(password)
         # Persiste el usuario en la base de datos
         usuario.save()
-        # Registra el evento de registro exitoso para auditoría de seguridad
-        logger.info(f"Usuario registrado: {usuario.username}", extra={
-            'user_id': usuario.id,
-            'username': usuario.username,
-        })
         return usuario
 
 
@@ -191,6 +178,8 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 # Serializer de solo lectura para exponer información del perfil de usuario.
 # No permite crear ni modificar usuarios; solo mostra datos existentes.
 class UsuarioSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(max_length=100)
+
     class Meta:
         model = Usuario
         # Campos visibles en el perfil: identificador, nombre, email, rol,
@@ -223,15 +212,13 @@ class UsuarioSerializer(serializers.ModelSerializer):
         if not validate_email(sanitized):
             raise serializers.ValidationError('Debe ser un correo electrónico válido')
         normalized = normalize_email(sanitized)
-        # Obtiene la petición actual desde el contexto del serializer
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            # Si el usuario está autenticado, excluye su propio registro
-            # de la verificación de unicidad (puede mantener su mismo email)
-            if Usuario.objects.filter(email__iexact=normalized).exclude(id=request.user.id).exists():
+        # Excluye al propio usuario que se está editando (self.instance),
+        # no al request.user (que podría ser un admin editando a otro)
+        exclude_id = self.instance.id if self.instance else None
+        if exclude_id:
+            if Usuario.objects.filter(email__iexact=normalized).exclude(id=exclude_id).exists():
                 raise serializers.ValidationError('Este correo electrónico no está disponible')
         else:
-            # Sin contexto de petición: verifica unicidad absoluta
             if Usuario.objects.filter(email__iexact=normalized).exists():
                 raise serializers.ValidationError('Este correo electrónico no está disponible')
         return normalized
@@ -246,7 +233,7 @@ class NivelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Nivel
         # Incluye todos los campos del modelo Nivel automáticamente
-        fields = '__all__'
+        fields = ['id', 'nombre', 'dificultad', 'tiempo_limite', 'fecha_creacion']
         # Campos que no deben ser modificados vía API
         read_only_fields = ['id', 'fecha_creacion']
 

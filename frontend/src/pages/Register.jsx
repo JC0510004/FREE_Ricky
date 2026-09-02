@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
+import ErrorMessage from '../components/ErrorMessage'
 
 // ─── Función auxiliar para evaluar la fortaleza de la contraseña ───
 // Asigna un puntaje según múltiples criterios: longitud, mayúsculas, minúsculas,
@@ -12,7 +13,7 @@ function getPasswordStrength(password) {
   if (/[A-Z]/.test(password)) score++     // Tiene al menos una mayúscula
   if (/[a-z]/.test(password)) score++     // Tiene al menos una minúscula
   if (/[0-9]/.test(password)) score++     // Tiene al menos un número
-  if (/[!@#$%^&*(),.?":{}|<>_\-]/.test(password)) score++  // Tiene un carácter especial
+  if (/[!@#$%^&*(),.?":{}|<>_-]/.test(password)) score++  // Tiene un carácter especial
   if (score <= 2) return { score, label: 'Débil', color: '#ef4444' }   // Rojo para débil
   if (score <= 4) return { score, label: 'Media', color: '#eab308' }   // Amarillo para media
   return { score, label: 'Fuerte', color: '#22c55e' }                   // Verde para fuerte
@@ -72,7 +73,7 @@ export default function Register() {
     else if (!/[A-Z]/.test(formData.password)) newErrors.password = 'Debe tener una mayúscula'
     else if (!/[a-z]/.test(formData.password)) newErrors.password = 'Debe tener una minúscula'
     else if (!/[0-9]/.test(formData.password)) newErrors.password = 'Debe tener un número'
-    else if (!/[!@#$%^&*(),.?":{}|<>_\-]/.test(formData.password)) newErrors.password = 'Debe tener un carácter especial'
+    else if (!/[!@#$%^&*(),.?":{}|<>_-]/.test(formData.password)) newErrors.password = 'Debe tener un carácter especial'
 
     // ─── Validación de confirmación de contraseña ───
     if (!formData.confirmPassword) newErrors.confirmPassword = 'Confirma tu contraseña'
@@ -126,7 +127,7 @@ export default function Register() {
     { label: 'Una mayúscula', met: /[A-Z]/.test(formData.password) },
     { label: 'Una minúscula', met: /[a-z]/.test(formData.password) },
     { label: 'Un número', met: /[0-9]/.test(formData.password) },
-    { label: 'Un carácter especial', met: /[!@#$%^&*(),.?":{}|<>_\-]/.test(formData.password) },
+    { label: 'Un carácter especial', met: /[!@#$%^&*(),.?":{}|<>_-]/.test(formData.password) },
   ]
 
   return (
@@ -254,13 +255,7 @@ export default function Register() {
               {errors.confirmPassword && <span className="auth-error">{errors.confirmPassword}</span>}
             </div>
 
-            {/* Mensaje de error general del servidor */}
-            {errors.general && (
-              <div className="auth-general-error">
-                <span className="material-symbols-outlined">error</span>
-                <span>{errors.general}</span>
-              </div>
-            )}
+            <ErrorMessage message={errors.general} />
 
             {/* Botón de envío con texto dinámico según el estado de carga */}
             <button type="submit" className="auth-submit" disabled={isLoading}>

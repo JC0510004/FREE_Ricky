@@ -1,6 +1,5 @@
 :root {
     --primary-color: #ffb68c;
-    --primary-dark: #ffb68c;
     --secondary-color: #0f436f;
     --text-color: #ffffff;
     --text-secondary: #c0c0c0;
@@ -21,6 +20,10 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
+
+:focus:not(:focus-visible) {
+    outline: none;
 }
 
 html {
@@ -70,9 +73,9 @@ body.loading-lock {
 }
 
 .loading-logo {
-    width: 160px;
-    height: 160px;
-    border-radius: 16px;
+    width: 220px;
+    height: 220px;
+    border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     image-rendering: pixelated;
@@ -84,7 +87,7 @@ body.loading-lock {
     inset: 0;
     background-color: var(--primary-color);
     opacity: 0.2;
-    border-radius: 16px;
+    border-radius: 20px;
     animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
@@ -94,7 +97,7 @@ body.loading-lock {
 
 .loading-text h2 {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 32px;
+    font-size: 40px;
     font-weight: 700;
     letter-spacing: 2px;
     text-transform: uppercase;
@@ -247,15 +250,17 @@ body.loading-lock {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 32px;
+    height: 84px;
+    padding: 0 32px;
+    overflow: visible;
 }
 
 .navbar-logo {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 700;
     text-decoration: none;
     color: var(--text-color);
@@ -263,7 +268,7 @@ body.loading-lock {
 }
 
 .navbar-logo-img {
-    height: 32px;
+    height: 72px;
     image-rendering: pixelated;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
@@ -281,7 +286,7 @@ body.loading-lock {
 
 .navbar-link {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 500;
     text-transform: uppercase;
     text-decoration: none;
@@ -304,9 +309,9 @@ body.loading-lock {
 .navbar-button {
     background-color: var(--primary-color);
     color: #321200;
-    padding: 12px 32px;
+    padding: 14px 36px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
     text-transform: uppercase;
     border: none;
@@ -750,7 +755,6 @@ body.loading-lock {
     height: 80px;
     image-rendering: pixelated;
     margin-top: 48px;
-    animation: bounce 0.6s infinite;
     filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.5));
     animation: floatCharacter 4s ease-in-out infinite;
 }
@@ -1594,7 +1598,7 @@ body.loading-lock {
 /* ===== Gaming Dashboard (Home) ===== */
 .gaming-dashboard {
     min-height: 100vh;
-    background: #0a0e1a;
+    background: linear-gradient(to bottom, #8fbed4 0%, #53788d 40%, #022a45 100%);
     position: relative;
 }
 
@@ -1614,7 +1618,7 @@ body.loading-lock {
     max-width: 1400px;
     margin: 0 auto;
     padding: 0 32px;
-    height: 72px;
+    height: 84px;
     display: flex;
     align-items: center;
     gap: 40px;
@@ -1622,19 +1626,19 @@ body.loading-lock {
 
 .gaming-logo {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 700;
     color: #fff;
     text-decoration: none;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     letter-spacing: 1px;
 }
 
 .logo-icon {
     color: #ffb68c;
-    font-size: 24px;
+    font-size: 30px;
 }
 
 .gaming-nav-links {
@@ -1645,9 +1649,9 @@ body.loading-lock {
 .gaming-nav-link {
     color: rgba(255, 255, 255, 0.5);
     text-decoration: none;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
-    padding: 8px 16px;
+    padding: 10px 18px;
     border-radius: 8px;
     transition: all 0.2s;
 }
@@ -1676,16 +1680,16 @@ body.loading-lock {
 }
 
 .gaming-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
     background: linear-gradient(135deg, #ffb68c, #ff7eb3);
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 14px;
+    font-size: 18px;
     color: #0a0e1a;
 }
 
@@ -1696,7 +1700,7 @@ body.loading-lock {
 }
 
 .gaming-username {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 600;
     color: #fff;
     line-height: 1;
@@ -1704,10 +1708,10 @@ body.loading-lock {
 
 .gaming-badge {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 1px;
-    padding: 2px 8px;
+    padding: 3px 10px;
     border-radius: 50px;
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.5);
@@ -1721,13 +1725,13 @@ body.loading-lock {
 }
 
 .gaming-logout-btn {
-    padding: 8px 16px;
+    padding: 10px 18px;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: transparent;
     color: rgba(255, 255, 255, 0.5);
     font-family: 'Work Sans', sans-serif;
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -1738,15 +1742,20 @@ body.loading-lock {
 }
 
 .gaming-main {
-    padding-top: 72px;
+    padding: 48px 0 16px;
     max-width: 1400px;
-    margin: 0 auto;
+    margin: 24px auto 48px;
+    background: rgba(4, 20, 36, 0.5);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 28px;
 }
 
 /* Hero */
 .gaming-hero {
     position: relative;
-    padding: 80px 32px;
+    padding: 56px 32px;
 }
 
 .hero-glow {
@@ -1863,8 +1872,8 @@ body.loading-lock {
 
 .level-card {
     position: relative;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
     padding: 24px;
     transition: all 0.3s ease;
@@ -1953,8 +1962,8 @@ body.loading-lock {
 
 /* Tables */
 .gaming-table-wrap {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
     overflow: hidden;
 }
@@ -2153,10 +2162,10 @@ body.loading-lock {
 
 /* Profile card */
 .gaming-profile-card {
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
     padding: 24px;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(10, 14, 26, 0.6);
 }
 
 .gaming-profile-card .section-header {
@@ -2230,6 +2239,12 @@ body.loading-lock {
 }
 
 @media (max-width: 768px) {
+    .gaming-main {
+        margin: 16px;
+        border-radius: 20px;
+        padding: 32px 0 8px;
+    }
+
     .gaming-nav-inner {
         padding: 0 16px;
         gap: 16px;
@@ -2494,8 +2509,8 @@ body.loading-lock {
 }
 
 .settings-section {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
     padding: 28px;
 }
@@ -2616,8 +2631,8 @@ body.loading-lock {
 }
 
 .stat-card {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
     padding: 24px;
     display: flex;
@@ -2646,8 +2661,8 @@ body.loading-lock {
 
 /* ─── Tabla grid ─── */
 .admin-table {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
     overflow: hidden;
 }
@@ -2759,8 +2774,8 @@ body.loading-lock {
 
 /* ─── Crear nivel card ─── */
 .admin-create-card {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
     padding: 24px;
     margin-bottom: 24px;
@@ -3111,17 +3126,27 @@ body.loading-lock {
     }
 }
 
+/* ─── BARRA SUPERIOR DEL DASHBOARD ──────────────────────────────── */
+.dashboard-top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    margin-top: 20px;
+}
+
 /* ─── BOTÓN VOLVER AL INICIO ─────────────────────────────────────── */
 .back-to-landing {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 10px 20px;
-    margin: 20px 0 0 20px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: rgba(255, 255, 255, 0.7);
+    background: rgba(4, 20, 36, 0.5);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    color: #fff;
     text-decoration: none;
     font-size: 14px;
     font-weight: 500;
@@ -3129,12 +3154,40 @@ body.loading-lock {
 }
 
 .back-to-landing:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(4, 20, 36, 0.65);
     color: #fff;
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .back-to-landing .material-symbols-outlined {
+    font-size: 18px;
+}
+
+/* ─── BOTÓN CERRAR SESIÓN ────────────────────────────────────────── */
+.logout-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: rgba(4, 20, 36, 0.5);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 75, 75, 0.3);
+    border-radius: 10px;
+    color: #ff6b6b;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.logout-btn:hover {
+    background: rgba(4, 20, 36, 0.65);
+    color: #ff6b6b;
+    border-color: rgba(255, 75, 75, 0.5);
+}
+
+.logout-btn .material-symbols-outlined {
     font-size: 18px;
 }
 

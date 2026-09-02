@@ -99,6 +99,7 @@ export const authService = {
       // datos locales de todas formas.
       await API.post('/logout/')
     } catch {
+      // Error al notificar al backend — la sesión local se limpia de todas formas
     }
     // Limpiamos los datos del usuario del localStorage
     localStorage.removeItem(USER_KEY)

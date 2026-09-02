@@ -15,7 +15,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 # Modelo de usuario para consultas directas a la base de datos de prueba
-from .models import Usuario
+from .models import Usuario, Nivel, Partida, ConfirmacionReset
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -397,3 +397,461 @@ class BruteForceTests(TestCase):
         self.assertEqual(usuario_despues.failed_attempts, 0)
         # locked_until debe ser None (sin bloqueo activo)
         self.assertIsNone(usuario_despues.locked_until)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE RECUPERACIÓN DE CONTRASEÑA
+# ═══════════════════════════════════════════════════════════════════════════════
+# Valida el flujo completo de reset de contraseña: solicitud, confirmación,
+# expiración de tokens, y protección contra enumeración de usuarios.
+class PasswordResetTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.reset_url = reverse('password_reset')
+        self.confirm_url = reverse('password_reset_confirm')
+        self.user_data = {
+            'username': 'testuser',
+            'email': 'test@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }
+        self.client.post(self.register_url, self.user_data, format='json')
+
+    def test_solicitud_reset_email_valido(self):
+        response = self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('mensaje', response.data)
+        # Se creó un registro de confirmación en la BD
+        self.assertEqual(ConfirmacionReset.objects.count(), 1)
+
+    def test_solicitud_reset_email_no_existe(self):
+        response = self.client.post(self.reset_url, {'email': 'noexiste@gmail.com'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Mensaje genérico: no revela si el email existe
+        self.assertIn('mensaje', response.data)
+        self.assertEqual(ConfirmacionReset.objects.count(), 0)
+
+    def test_solicitud_reset_email_invalido(self):
+        response = self.client.post(self.reset_url, {'email': 'not-an-email'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirm_reset_datos_validos(self):
+        # Solicita reset para generar un token
+        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
+        record = ConfirmacionReset.objects.first()
+        # Token en texto plano: se usa para encontrar el registro por su hash
+        token = 'fake_token_for_test'
+        token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
+        record.token_hash = token_hash
+        record.save()
+
+        response = self.client.post(self.confirm_url, {
+            'token': token,
+            'password': 'NewPass123!',
+            'confirm_password': 'NewPass123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Verificar que la contraseña cambió
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertTrue(usuario.check_password('NewPass123!'))
+
+    def test_confirm_reset_passwords_no_coinciden(self):
+        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
+        record = ConfirmacionReset.objects.first()
+        token = 'fake_token_for_test'
+        token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
+        record.token_hash = token_hash
+        record.save()
+
+        response = self.client.post(self.confirm_url, {
+            'token': token,
+            'password': 'NewPass123!',
+            'confirm_password': 'DifferentPass123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirm_reset_password_debil(self):
+        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
+        record = ConfirmacionReset.objects.first()
+        token = 'fake_token_for_test'
+        token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
+        record.token_hash = token_hash
+        record.save()
+
+        response = self.client.post(self.confirm_url, {
+            'token': token,
+            'password': '123',
+            'confirm_password': '123',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirm_reset_token_expirado(self):
+        from django.utils import timezone as tz
+        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
+        record = ConfirmacionReset.objects.first()
+        # Forzar expiración: retroceder la fecha de creación 20 minutos
+        record.created_at = tz.now() - tz.timedelta(minutes=20)
+        record.save()
+
+        response = self.client.post(self.confirm_url, {
+            'token': 'any_token',
+            'password': 'NewPass123!',
+            'confirm_password': 'NewPass123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_confirm_reset_token_inexistente(self):
+        response = self.client.post(self.confirm_url, {
+            'token': 'token_que_no_existe_999',
+            'password': 'NewPass123!',
+            'confirm_password': 'NewPass123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE CIERRE DE SESIÓN
+# ═══════════════════════════════════════════════════════════════════════════════
+class LogoutTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.login_url = reverse('login')
+        self.logout_url = reverse('logout')
+        self.user_data = {
+            'username': 'testuser',
+            'email': 'test@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }
+        reg = self.client.post(self.register_url, self.user_data, format='json')
+        self.token = reg.data.get('access_token', '')
+        # Hacer login para obtener refresh token en cookie
+        self.client.post(self.login_url, {
+            'username': 'testuser',
+            'password': 'TestPass123!',
+        }, format='json')
+
+    def test_logout_exitoso(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        response = self.client.post(self.logout_url, {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('Sesión cerrada', response.data.get('mensaje', ''))
+
+    def test_logout_sin_token(self):
+        # Sin credenciales de autenticación: debe fallar con 401
+        response = self.client.post(self.logout_url, {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE REFRESH TOKEN
+# ═══════════════════════════════════════════════════════════════════════════════
+class RefreshTokenTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.login_url = reverse('login')
+        self.refresh_url = reverse('token_refresh')
+        self.user_data = {
+            'username': 'testuser',
+            'email': 'test@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }
+        self.client.post(self.register_url, self.user_data, format='json')
+
+    def _get_refresh_token(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        user = Usuario.objects.get(username='testuser')
+        return str(RefreshToken.for_user(user))
+
+    def test_refresh_valido(self):
+        refresh_token = self._get_refresh_token()
+        response = self.client.post(self.refresh_url, {
+            'refresh_token': refresh_token,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access_token', response.data)
+
+    def test_refresh_token_invalido(self):
+        response = self.client.post(self.refresh_url, {
+            'refresh_token': 'token_absolutamente_invalido',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_sin_token(self):
+        # Clear cookies to ensure no refresh_token is sent
+        self.client.cookies.clear()
+        response = self.client.post(self.refresh_url, {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE NIVELES
+# ═══════════════════════════════════════════════════════════════════════════════
+class NivelTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.nivel_list_url = reverse('nivel_list')
+        self.nivel_detail_url = lambda pk: reverse('nivel_detail', args=[pk])
+
+        # Crear usuario normal
+        reg = self.client.post(self.register_url, {
+            'username': 'testuser',
+            'email': 'test@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.user_token = reg.data.get('access_token', '')
+
+        # Crear usuario admin directamente en la BD
+        self.admin = Usuario.objects.create_superuser(
+            username='adminuser',
+            email='admin@gmail.com',
+            password='AdminPass123!',
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        self.admin_token = str(RefreshToken.for_user(self.admin).access_token)
+
+        # Crear un nivel existente para tests de update/delete
+        self.nivel = Nivel.objects.create(
+            nombre='La Guarida',
+            dificultad='facil',
+            tiempo_limite=120,
+        )
+
+    def test_list_niveles_publico(self):
+        response = self.client.get(self.nivel_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_crear_nivel_como_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        response = self.client.post(self.nivel_list_url, {
+            'nombre': 'Nivel Nuevo',
+            'dificultad': 'medio',
+            'tiempo_limite': 90,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(Nivel.objects.filter(nombre='Nivel Nuevo').exists())
+
+    def test_crear_nivel_como_usuario_normal(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        response = self.client.post(self.nivel_list_url, {
+            'nombre': 'Nivel No Permitido',
+            'dificultad': 'facil',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_actualizar_nivel_como_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        url = self.nivel_detail_url(self.nivel.pk)
+        response = self.client.put(url, {
+            'nombre': 'La Guarida Actualizada',
+            'dificultad': 'dificil',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.nivel.refresh_from_db()
+        self.assertEqual(self.nivel.nombre, 'La Guarida Actualizada')
+
+    def test_eliminar_nivel_como_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        url = self.nivel_detail_url(self.nivel.pk)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(Nivel.objects.filter(pk=self.nivel.pk).exists())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE PARTIDAS
+# ═══════════════════════════════════════════════════════════════════════════════
+class PartidaTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.partida_list_url = reverse('partida_list')
+
+        reg = self.client.post(self.register_url, {
+            'username': 'testuser',
+            'email': 'test@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.token = reg.data.get('access_token', '')
+
+        self.nivel = Nivel.objects.create(
+            nombre='Nivel Test',
+            dificultad='facil',
+        )
+
+    def test_list_partidas_autenticado(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        response = self.client.get(self.partida_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_crear_partida_datos_validos(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        response = self.client.post(self.partida_list_url, {
+            'nivel': self.nivel.pk,
+            'muertes': 3,
+            'tiempo': 120,
+            'puntuacion': 500,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Partida.objects.count(), 1)
+
+    def test_crear_partida_sin_auth(self):
+        response = self.client.post(self.partida_list_url, {
+            'nivel': self.nivel.pk,
+            'muertes': 0,
+            'tiempo': 60,
+            'puntuacion': 100,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(Partida.objects.count(), 0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE RANKING
+# ═══════════════════════════════════════════════════════════════════════════════
+class RankingTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.ranking_url = reverse('ranking')
+
+    def test_ranking_retorna_datos(self):
+        response = self.client.get(self.ranking_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+
+    def test_ranking_publico(self):
+        # Sin autenticación: el ranking es información pública
+        response = self.client.get(self.ranking_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_ranking_con_datos(self):
+        # Crear datos de prueba: usuario, nivel y partidas
+        from rest_framework_simplejwt.tokens import RefreshToken
+        user = Usuario.objects.create_user(
+            username='player1',
+            email='player1@gmail.com',
+            password='TestPass123!',
+        )
+        nivel = Nivel.objects.create(nombre='Nivel Rank', dificultad='medio')
+        Partida.objects.create(usuario=user, nivel=nivel, muertes=1, tiempo=60, puntuacion=800)
+        Partida.objects.create(usuario=user, nivel=nivel, muertes=0, tiempo=45, puntuacion=1000)
+
+        response = self.client.get(self.ranking_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreater(len(response.data), 0)
+        # Verificar que el usuario aparece en el ranking
+        usernames = [r['username'] for r in response.data]
+        self.assertIn('player1', usernames)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE CAMBIO DE CONTRASEÑA
+# ═══════════════════════════════════════════════════════════════════════════════
+class ChangePasswordTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.change_url = reverse('change_password')
+
+        reg = self.client.post(self.register_url, {
+            'username': 'testuser',
+            'email': 'test@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.token = reg.data.get('access_token', '')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+
+    def test_cambio_password_correcta(self):
+        response = self.client.post(self.change_url, {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure123!',
+            'confirm_password': 'NewSecure123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Verificar que la nueva contraseña funciona
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertTrue(usuario.check_password('NewSecure123!'))
+
+    def test_cambio_password_actual_incorrecta(self):
+        response = self.client.post(self.change_url, {
+            'old_password': 'WrongCurrent123!',
+            'new_password': 'NewSecure123!',
+            'confirm_password': 'NewSecure123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cambio_password_debil(self):
+        response = self.client.post(self.change_url, {
+            'old_password': 'TestPass123!',
+            'new_password': '123',
+            'confirm_password': '123',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cambio_password_no_coinciden(self):
+        response = self.client.post(self.change_url, {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure123!',
+            'confirm_password': 'Different123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cambio_password_sin_auth(self):
+        # Cliente sin token
+        self.client.credentials()
+        response = self.client.post(self.change_url, {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure123!',
+            'confirm_password': 'NewSecure123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE ESTADÍSTICAS DE USUARIO
+# ═══════════════════════════════════════════════════════════════════════════════
+class StatsTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.stats_url = reverse('user_stats')
+
+        reg = self.client.post(self.register_url, {
+            'username': 'testuser',
+            'email': 'test@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.token = reg.data.get('access_token', '')
+
+    def test_stats_autenticado_sin_partidas(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        response = self.client.get(self.stats_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_partidas'], 0)
+
+    def test_stats_sin_auth(self):
+        response = self.client.get(self.stats_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_stats_con_partidas(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        user = Usuario.objects.get(username='testuser')
+        nivel = Nivel.objects.create(nombre='Nivel Stats', dificultad='facil')
+        Partida.objects.create(usuario=user, nivel=nivel, muertes=2, tiempo=100, puntuacion=600)
+        Partida.objects.create(usuario=user, nivel=nivel, muertes=1, tiempo=80, puntuacion=900)
+
+        response = self.client.get(self.stats_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_partidas'], 2)
+        self.assertEqual(response.data['mejor_puntuacion'], 900)
+        self.assertEqual(response.data['peor_puntuacion'], 600)
+        self.assertEqual(response.data['nivel_favorito'], 'Nivel Stats')

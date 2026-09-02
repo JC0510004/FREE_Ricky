@@ -20,7 +20,9 @@ COPY package*.json ./
 # npm ci: instala las dependencias exactas según package-lock.json.
 # Es más rápido y reproducible que npm install para CI/CD.
 # Se usa --frozen-lockfile implícitamente con npm ci.
-RUN npm ci
+# Los flags de fetch-retry hacen que npm reintente las caídas de red
+# intermitentes de registry.npmjs.org en vez de abortar el build.
+RUN npm ci --fetch-retries=8 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-retry-factor=3
 
 # Copiamos TODO el código fuente del frontend al contenedor
 COPY . .

@@ -6,7 +6,7 @@
 // - Admins: ven un enlace adicional a "Estadísticas" dentro del menú desplegable
 // El menú desplegable se cierra automáticamente al hacer clic fuera de él.
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 
@@ -84,6 +84,7 @@ export default function Navbar() {
         {/* ─── Logo y nombre del sitio ─── */}
         {/* Link al home; incluye imagen SVG y texto del nombre del proyecto */}
         <Link to="/" className="navbar-logo">
+          {/* TODO: Replace with local asset: import logo from '../../assets/logo.png' */}
           <img
             alt="S&T Logo"
             className="navbar-logo-img"

@@ -5,6 +5,7 @@
 # Importamos los módulos necesarios de Django para crear modelos,
 # hashear contraseñas y manejar el tiempo.
 from django.db import models
+from django.db.models import F
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.utils import timezone
@@ -111,16 +112,16 @@ class Usuario(AbstractBaseUser):
 
     # Determina si la cuenta está temporalmente bloqueada por intentos fallidos.
     def is_locked(self):
-        # Si hay fecha de bloqueo configurada...
         if self.locked_until:
-            # Si la fecha actual es anterior a la fecha de desbloqueo, sigue bloqueada.
             if timezone.now() < self.locked_until:
                 return True
-            # Si ya pasó el tiempo de bloqueo, resetea los contadores y desbloquea.
+        return False
+
+    def clear_lockout(self):
+        if self.locked_until and timezone.now() >= self.locked_until:
             self.failed_attempts = 0
             self.locked_until = None
             self.save(update_fields=['failed_attempts', 'locked_until'])
-        return False
 
     # Calcula la duración del bloqueo en minutos según cuántas veces se ha bloqueado.
     # La escala es: 15min, 60min, 6h, 24h (se incrementa cada vez que se bloquea).
@@ -133,16 +134,19 @@ class Usuario(AbstractBaseUser):
 
     # Incrementa el contador de intentos fallidos. Si llega a 5, bloquea la cuenta.
     def increment_failed_attempts(self):
-        self.failed_attempts += 1
+        # Atomic increment to avoid race conditions between concurrent requests
+        Usuario.objects.filter(pk=self.pk).update(failed_attempts=F('failed_attempts') + 1)
+        self.refresh_from_db()
         # Si ya falló 5 veces seguidas...
         if self.failed_attempts >= 5:
-            self.lockout_count += 1
             # Calcula cuánto tiempo debe estar bloqueada.
             minutes = self._get_lockout_duration()
-            # Establece la fecha/hora de desbloqueo.
-            self.locked_until = timezone.now() + timezone.timedelta(minutes=minutes)
-        # Guarda los cambios en la BD.
-        self.save(update_fields=['failed_attempts', 'lockout_count', 'locked_until'])
+            # Establece la fecha/hora de desbloqueo de forma atómica.
+            Usuario.objects.filter(pk=self.pk).update(
+                lockout_count=F('lockout_count') + 1,
+                locked_until=timezone.now() + timezone.timedelta(minutes=minutes),
+            )
+            self.refresh_from_db()
 
     # Resetea los contadores de intentos fallidos tras un login exitoso.
     def reset_failed_attempts(self):

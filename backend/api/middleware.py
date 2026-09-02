@@ -52,16 +52,18 @@ class SecurityHeadersMiddleware:
         response['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
         response['Cache-Control'] = 'no-store, max-age=0'
         response['Pragma'] = 'no-cache'
-        response['Content-Security-Policy'] = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data:; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none'; "
-            "form-action 'self'"
-        )
+        # CSP is set by nginx; Django only adds when nginx is not in front (direct access).
+        if not request.META.get('HTTP_X_FORWARDED_FOR'):
+            response['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com data:; "
+                "img-src 'self' data:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'; "
+                "form-action 'self'"
+            )
         return response
 
 

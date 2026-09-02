@@ -32,12 +32,12 @@ services:
     # - maxmemory 64mb: Limita el uso de RAM a 64 megabytes para evitar consumo excesivo.
     # - maxmemory-policy allkeys-lru: Elimina las claves menos recientemente usadas (LRU)
     #   cuando se alcanza el límite de memoria, liberando espacio automáticamente.
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-redis_secret_2024} --protected-mode yes
 
     # Verificación de salud: ejecuta un ping a Redis para confirmar que está operativo.
     # Si Redis no responde, Docker lo marca como "unhealthy" y puede reiniciarlo.
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret_2024}", "ping"]
       interval: 10s       # Cada 10 segundos verifica la salud
       timeout: 3s         # Si no responde en 3 segundos, se considera fallido
       retries: 5          # Tras 5 fallos consecutivos, marca el servicio como unhealthy
@@ -52,6 +52,12 @@ services:
       - no-new-privileges:true
 
     # Registro de logs con driver json-file para persistencia y análisis.
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '1.0'
+
     logging:
       driver: json-file
       options:
@@ -87,7 +93,7 @@ services:
     # Variables de entorno para inicialización de MySQL:
     # Se usan valores por defecto si no existen en el archivo .env del proyecto.
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}     # Contraseña del usuario root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}     # Contraseña del usuario root
       MYSQL_DATABASE: ${DB_NAME:-free_ricky}        # Base de datos creada al iniciar
       MYSQL_USER: ${DB_USER:-free_ricky}             # Usuario sin privilegios root
       MYSQL_PASSWORD: ${DB_PASSWORD:-root}           # Contraseña del usuario normal
@@ -108,7 +114,7 @@ services:
 
     # Verificación de salud usando mysqladmin ping para confirmar que MySQL acepta conexiones.
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-root}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
       interval: 10s       # Verifica cada 10 segundos
       timeout: 5s         # Timeout de 5 segundos por intento
       retries: 10         # 10 intentos antes de marcar unhealthy (MySQL tarda en iniciar)
@@ -123,6 +129,12 @@ services:
       - no-new-privileges:true
 
     # Logs rotados para evitar llenado del disco en producción.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
     logging:
       driver: json-file
       options:
@@ -200,7 +212,7 @@ services:
 
       # Conexión a Redis para caché: redis://redis:6379/0
       # Usa el nombre del servicio "redis" como host (resolución DNS de Docker).
-      CACHE_URL: redis://redis:6379/0
+      CACHE_URL: redis://:${REDIS_PASSWORD:-redis_secret_2024}@redis:6379/0
 
       # Redirección SSL en producción: fuerza HTTPS para todas las peticiones.
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
@@ -230,6 +242,12 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
 
     # Healthcheck que verifica la API respondiendo a una petición HTTP real.
     # Usa urllib (stdlib de Python) para evitar dependencias externas en el healthcheck.
@@ -291,6 +309,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
 
     # Healthcheck simple: verifica que Nginx responde en el puerto 80.
     # wget es más ligero que curl en imágenes Alpine.

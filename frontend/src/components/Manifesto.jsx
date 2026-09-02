@@ -2,8 +2,6 @@
 // Componente que presenta la narrativa del juego: la historia del pirata
 // y su búsqueda del tesoro. Incluye una galería de personajes animada.
 
-import React from 'react';
-
 export default function Manifesto() {
   return (
     <section className="manifesto fade-up-element" id="manifesto">
@@ -59,6 +57,7 @@ export default function Manifesto() {
             secuencial de entrada. */}
         <div className="character-gallery">
 
+          {/* TODO: Replace with local asset: import bucanero from '../../assets/bucanero.png' */}
           {/* Personaje principal: el pirata protagonista */}
           <img
             alt="Bucanero"
@@ -67,6 +66,7 @@ export default function Manifesto() {
             style={{ animationDelay: '0s' }}
           />
 
+          {/* TODO: Replace with local asset: import enemigo from '../../assets/enemigo.png' */}
           {/* Enemigo: personaje antagonista */}
           <img
             alt="Enemigo 1"
@@ -75,6 +75,7 @@ export default function Manifesto() {
             style={{ animationDelay: '0.5s' }}
           />
 
+          {/* TODO: Replace with local asset: import marinero from '../../assets/marinero.png' */}
           {/* Marinero: personaje aliado */}
           <img
             alt="Marinero"

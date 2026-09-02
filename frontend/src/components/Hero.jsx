@@ -3,7 +3,7 @@
 // Incluye efecto parallax basado en el movimiento del mouse del usuario
 // para crear sensación de profundidad con múltiples capas.
 
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 export default function Hero() {

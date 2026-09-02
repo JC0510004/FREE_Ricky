@@ -2,8 +2,6 @@
 // Componente que muestra las últimas noticias del juego en formato de tarjetas.
 // Incluye tanto imágenes estáticas como GIFs animados.
 
-import React from 'react';
-
 export default function News() {
   return (
     <section className="news" id="news">

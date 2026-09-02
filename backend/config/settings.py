@@ -8,7 +8,7 @@ import hashlib
 # ─── CONFIGURACIÓN SEGURA ───────────────────────────────────────────────
 # SECRET_KEY: Clave secreta usada para firmar sesiones, tokens CSRF y otros
 # datos sensibles. Se obtiene de variables de entorno con fallback a python-decouple.
-SECRET_KEY = os.environ.get('SECRET_KEY') or config('SECRET_KEY', default='')
+SECRET_KEY = os.environ.get('SECRET_KEY') or config('SECRET_KEY')
 
 # DEBUG: Bandera que activa/desactiva el modo de depuración.
 # Cuando es True, Django muestra páginas de error detalladas y recarga código automáticamente.
@@ -135,8 +135,9 @@ else:
         }
     }
 
-# Lista de checks del sistema que se desactivan silenciosamente.
-SILENCED_SYSTEM_CHECKS = []
+# Silenciar el check de django_ratelimit que exige cache compartida (Redis/memcached).
+# En desarrollo/testing usamos LocMemCache, que es suficiente para single-process.
+SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003']
 
 # ─── DATABASE ──────────────────────────────────────────────────────────
 # Configuración de base de datos dinámica según la variable DATABASE_URL.

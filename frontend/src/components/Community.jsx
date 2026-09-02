@@ -2,7 +2,6 @@
 // Componente simple que invita al usuario a unirse a la comunidad del juego.
 // Usa la clase 'fade-up-element' para animación de entrada al hacer scroll.
 
-import React from 'react';
 import { Link } from 'react-router-dom';
 
 export default function Community() {

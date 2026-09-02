@@ -3,7 +3,7 @@
 // muestra una animación de carga con el logo, y notifica al padre
 // cuando la animación ha terminado para permitir la transición.
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 // ─── Props ───
 // onFinished: callback que se ejecuta cuando la pantalla de carga
@@ -61,6 +61,7 @@ export default function LoadingScreen({ onFinished }) {
         {/* ─── Logo animado con efecto ping ─── */}
         {/* Contiene el logo del juego y un efecto de onda circular (ping) */}
         <div className="loading-logo-container">
+          {/* TODO: Replace with local asset: import logo from '../../assets/logo.png' */}
           <img
             alt="Loading Anchor"
             className="loading-logo"

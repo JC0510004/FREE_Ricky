@@ -8,7 +8,7 @@
 // ─── IMPORTACIONES DE REACT ───────────────────────────────────────────
 // useState: hook para gestionar el estado local del componente
 // useEffect: hook para ejecutar efectos secundarios (como el observer del scroll)
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 // ─── IMPORTACIONES DE COMPONENTES HIJOS ───────────────────────────────
 // LoadingScreen: pantalla de carga animada que se muestra al inicio
@@ -25,7 +25,7 @@ import Team from './components/Team';
 import Community from './components/Community';
 // Footer: pie de página con información de copyright y enlaces
 import Footer from './components/Footer';
-// useAuth: hook para acceder al contexto de autenticación
+import Navbar from './components/Navbar';
 import { useAuth } from './contexts/useAuth';
 
 // ─── COMPONENTE APP ───────────────────────────────────────────────────
@@ -110,6 +110,8 @@ function App() {
   // en el medio, footer abajo, y la pantalla de carga como overlay.
   return (
     <>
+      <Navbar />
+
       {/* Contenido principal de la página */}
       <main className="main-content">
         {/* Sección hero: presentación principal con imagen de fondo y título */}
@@ -148,7 +150,7 @@ function App() {
                 <p className="download-text">
                   Ya eres parte de la tripulación. Descarga la última versión de Salt Born y compite en los niveles.
                 </p>
-                <button type="button" className="download-btn">
+                <button type="button" className="download-btn" disabled title="Próximamente disponible">
                   <span className="material-symbols-outlined">download</span>
                   DESCARGAR AHORA
                 </button>

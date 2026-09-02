@@ -158,6 +158,10 @@ def normalize_email(email):
     # parte local y dominio usando el primer @ como delimitador
     local_part, domain = email.lower().strip().split('@', 1)
 
+    # Valida que la parte local no esté vacía (ej: "@domain.com")
+    if not local_part:
+        raise ValueError("Invalid email: empty local part")
+
     # Elimina el tag de aliasing (parte después del +).
     # Ejemplo: "usuario+trabajo@gmail.com" → "usuario@gmail.com"
     # Esto previene la creación de múltiples cuentas con alias del mismo correo

@@ -3,7 +3,7 @@
 // Incluye navegación por botones y teclado, y cálculo dinámico de altura
 // para evitar saltos de layout al cambiar entre descripciones de distinta longitud.
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // ─── Datos de los miembros del equipo ───
 // Array con información de cada miembro: nombre, rol, descripción e imagen.
@@ -52,6 +52,10 @@ export default function Team() {
   // Controla qué miembro del equipo se muestra en el carrusel (0-based index)
   const [currentMemberIndex, setCurrentMemberIndex] = useState(0);
 
+  // ─── Estado de visibilidad de la sección ───
+  // Controla si la sección del equipo está visible en el viewport
+  const [isInView, setIsInView] = useState(false);
+
   // ─── Referencia al elemento de descripción ───
   // Se usa para medir el texto y calcular la altura mínima necesaria
   const descriptionRef = useRef(null);
@@ -68,9 +72,25 @@ export default function Team() {
     setCurrentMemberIndex((prev) => (prev + 1) % teamMembers.length);
   };
 
-  // ─── Efecto de navegación por teclado ───
-  // Permite usar las flechas izquierda/derecha para navegar el carrusel
+  // ─── Efecto de visibilidad con IntersectionObserver ───
+  // Detecta si la sección del equipo está visible en el viewport.
+  // Solo se activa la navegación por teclado cuando la sección es visible.
   useEffect(() => {
+    const section = document.getElementById('team');
+    if (!section) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsInView(entry.isIntersecting),
+      { threshold: 0.1 }
+    );
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
+
+  // ─── Efecto de navegación por teclado ───
+  // Permite usar las flechas izquierda/derecha para navegar el carrusel.
+  // Solo responde cuando la sección del equipo está visible en el viewport.
+  useEffect(() => {
+    if (!isInView) return;
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === 'ArrowRight') handleNext();
@@ -78,7 +98,7 @@ export default function Team() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isInView]);
 
   // ─── Efecto de cálculo de altura mínima ───
   // Mide todas las descripciones del equipo para establecer una altura mínima
@@ -163,7 +183,7 @@ export default function Team() {
           {/* ─── Contenedor de descripción del miembro ─── */}
           {/* ref se usa para medir el texto y calcular la altura mínima */}
           <div className="team-quote">
-            <p id="team-description" ref={descriptionRef}>
+            <p ref={descriptionRef}>
               {/* Muestra la descripción del miembro actual */}
               {member.description}
             </p>
@@ -171,6 +191,7 @@ export default function Team() {
 
           {/* ─── Imagen decorativa de bomba ─── */}
           {/* Imagen decorativa del lado izquierdo del carrusel */}
+          {/* TODO: Replace with local asset: import bomb from '../../assets/bomb.png' */}
           <img
             alt="Bomb"
             className="bomb-img"
@@ -197,7 +218,6 @@ export default function Team() {
                 key={`img-${currentMemberIndex}`}
                 alt="team-img"
                 className="team-img"
-                id="team-img"
                 src={member.image}
               />
               {/* Gradiente superpuesto sobre la imagen para legibilidad del texto */}
@@ -209,20 +229,19 @@ export default function Team() {
             <h4
               key={`name-${currentMemberIndex}`}
               className="team-member-name"
-              id="team-name"
             >
               {member.name}
             </h4>
 
             {/* ─── Rol del miembro ─── */}
-            <p className="team-member-role" id="team-role">
+            <p className="team-member-role">
               {member.role}
             </p>
 
             {/* ─── Indicador de posición del carrusel ─── */}
             {/* Muestra el índice actual y el total de miembros (1-based) */}
             <div className="team-member-counter">
-              <span id="team-current">{currentMemberIndex + 1}</span> / <span id="team-total">{teamMembers.length}</span>
+              <span>{currentMemberIndex + 1}</span> / <span>{teamMembers.length}</span>
             </div>
 
           </div>

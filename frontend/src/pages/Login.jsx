@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
+import ErrorMessage from '../components/ErrorMessage'
 
 export default function Login() {
   // ─── Hook de navegación para redirigir después del login ───
@@ -123,13 +124,7 @@ export default function Login() {
               {errors.password && <span className="auth-error">{errors.password}</span>}
             </div>
 
-            {/* Mensaje de error general (credenciales incorrectas, etc.) */}
-            {errors.general && (
-              <div className="auth-general-error">
-                <span className="material-symbols-outlined">error</span>
-                <span>{errors.general}</span>
-              </div>
-            )}
+            <ErrorMessage message={errors.general} />
 
             {/* Enlace a recuperación de contraseña */}
             <div className="auth-forgot">

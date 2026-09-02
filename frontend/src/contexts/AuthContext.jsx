@@ -32,6 +32,12 @@ export function AuthProvider({ children }) {
   // Inicia en true y se pone en false cuando termina la verificación.
   const [isLoading, setIsLoading] = useState(true)
 
+  // Flag que indica si el access token ya está disponible en memoria.
+  // Al recargar la página el token inicia en null y el interceptor de
+  // Axios lo renueva vía refresh cookie; los componentes protegidos
+  // DEBEN esperar a que esto sea true antes de hacer peticiones.
+  const [tokenReady, setTokenReady] = useState(false)
+
   // ─── EFECTO: VERIFICACIÓN DE SESIÓN AL MONTAR ─────────────────────
   // Se ejecuta una sola vez al montar el AuthProvider.
   // Verifica si el usuario guardado en localStorage tiene una sesión
@@ -59,6 +65,8 @@ export function AuthProvider({ children }) {
         // Si la sesión no es válida, limpiamos el estado del usuario
         // para que el usuario tenga que iniciar sesión de nuevo
         if (!valid) setUser(null)
+        // El refresh (si fue válido) ya dejó el access token en memoria
+        setTokenReady(true)
         // Terminamos la carga en cualquier caso
         setIsLoading(false)
       }
@@ -79,6 +87,7 @@ export function AuthProvider({ children }) {
     const response = await authService.login(username, password)
     // Actualizamos el estado con los datos del usuario autenticado
     setUser(response.usuario)
+    setTokenReady(true)
   }, [])
 
   // ─── FUNCIÓN: REGISTRAR NUEVO USUARIO ─────────────────────────────
@@ -95,6 +104,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     await authService.logout()
     setUser(null)
+    setTokenReady(false)
   }, [])
 
   // ─── FUNCIÓN: ACTUALIZAR DATOS DEL USUARIO ───────────────────────
@@ -119,6 +129,9 @@ export function AuthProvider({ children }) {
     if (!valid) {
       // Si la sesión ya no es válida, limpiamos el usuario del estado
       setUser(null)
+      setTokenReady(false)
+    } else {
+      setTokenReady(true)
     }
     return valid
   }, [])
@@ -134,8 +147,8 @@ export function AuthProvider({ children }) {
   // lo que causaría re-renderizados innecesarios en todos los
   // componentes hijos que consumen este contexto.
   const value = useMemo(
-    () => ({ user, isAuthenticated, isLoading, login, register, logout, updateUser, checkSession }),
-    [user, isAuthenticated, isLoading, login, register, logout, updateUser, checkSession]
+    () => ({ user, isAuthenticated, isLoading, tokenReady, login, register, logout, updateUser, checkSession }),
+    [user, isAuthenticated, isLoading, tokenReady, login, register, logout, updateUser, checkSession]
   )
 
   // ─── RENDERIZADO ───────────────────────────────────────────────────

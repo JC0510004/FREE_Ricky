@@ -2,7 +2,6 @@
 // Componente estático que muestra el pie de página con enlaces legales,
 // redes sociales y copyright. No tiene lógica de estado ni efectos.
 
-import React from 'react';
 import { Link } from 'react-router-dom';
 
 export default function Footer() {
@@ -14,7 +13,7 @@ export default function Footer() {
         <div className="footer-links">
           <a href="#news">Actualizaciones</a>
           <a href="#team">Tripulación</a>
-          <span>© 2024, 1724 Studios</span>
+          <span>© {new Date().getFullYear()}, 1724 Studios</span>
           <a href="#community">Comunidad</a>
           <a href="#manifesto">Historia</a>
         </div>
