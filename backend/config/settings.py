@@ -61,7 +61,7 @@ INSTALLED_APPS = [
     'corsheaders',                   # Manejo de CORS (Cross-Origin Resource Sharing)
     'rest_framework',                # Django REST Framework para APIs
     'rest_framework_simplejwt',      # Autenticación JWT (JSON Web Tokens)
-    'rest_framework_simplejwt.token_blacklist',  #黑名单 de tokens JWT
+    'rest_framework_simplejwt.token_blacklist',  # Blacklist de tokens JWT
     'django_ratelimit',             # Limitación de tasa de peticiones
     # Local - Aplicaciones propias del proyecto
     'api',                           # App principal con modelos, vistas y lógica de negocio
@@ -184,12 +184,10 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.BCryptSHA256PasswordHasher', # Alternativa BCrypt
 ]
 
-# Parámetros de Argon2 optimizados según OWASP 2023.
-# Estos valores equilibran seguridad y rendimiento.
-ARGON2_TIMEOUT = 3                # Límite de tiempo en segundos para el hash
-ARGON2_MEMORY_COST = 19456        # 19 MB de memoria requerida (mínimo OWASP 2023)
-ARGON2_TIME_COST = 3              # 3 iteraciones de computación
-ARGON2_PARALLELISM = 2            # 2 hilos de procesamiento paralelo
+# Parámetros de Argon2:
+# Django's Argon2PasswordHasher usa sus propios defaults seguros
+# (memory_cost=102400, time_cost=2, parallelism=8), superiores al mínimo OWASP 2023.
+# Para personalizar, crear un hasher heredando de Argon2PasswordHasher.
 
 # ─── PASSWORD VALIDATION ───────────────────────────────────────────────
 # Validadores que se ejecutan al crear/cambiar contraseñas.

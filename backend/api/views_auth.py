@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
 from .models import Usuario
 from .serializers import RegisterSerializer, LoginSerializer, UsuarioSerializer
@@ -200,6 +201,16 @@ class RefreshTokenView(APIView):
 
         try:
             refresh = RefreshToken(refresh_token)
+
+            jti = refresh.payload.get('jti')
+            if jti and OutstandingToken.objects.filter(jti=jti).exists():
+                if BlacklistedToken.objects.filter(token__jti=jti).exists():
+                    logger.warning(f"Refresh token ya fue blacklistado: jti={jti}")
+                    return Response(
+                        {'error': 'Sesión expirada. Inicie sesión nuevamente'},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+
             usuario_id = refresh.payload.get('user_id')
             usuario = Usuario.objects.get(id=usuario_id, is_active=True)
 

@@ -21,7 +21,7 @@ from .models import Usuario, Nivel, Partida, ConfirmacionReset
 # ═══════════════════════════════════════════════════════════════════════════════
 # TESTS DE REGISTRO DE USUARIO
 # ═══════════════════════════════════════════════════════════════════════════════
-# Valida todo el flujo de registro: desde el caso exitoso hasta各种
+# Valida todo el flujo de registro: desde el caso exitoso hastadiferentes
 # escenarios de error (validación, duplicados, XSS, seguridad de contraseñas).
 class RegistroTests(TestCase):
     # Configuración inicial: se ejecuta ANTES de cada método de test.

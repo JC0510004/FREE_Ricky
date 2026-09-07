@@ -105,7 +105,7 @@ API.interceptors.response.use(
       originalRequest.url.includes('/token/refresh/')
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       // Si ya hay un refresh en curso, encolamos esta petición
-      // en lugar de发起 otra petición de refresh
+      // en lugar delanzar otra petición de refresh
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })

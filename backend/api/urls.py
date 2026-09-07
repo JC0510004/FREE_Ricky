@@ -17,7 +17,6 @@ from .views_password_reset import (
     PasswordResetConfirm,
     ConfirmarIdentidad,
     VerificarConfirmacion,
-    VerificarCodigo,
 )
 from .views_game import (
     NivelListView,
@@ -45,7 +44,6 @@ urlpatterns = [
     path('password-reset/confirm/', PasswordResetConfirm.as_view(), name='password_reset_confirm'),
     path('password-reset/confirmar/', ConfirmarIdentidad.as_view(), name='password_reset_confirmar'),
     path('password-reset/verificar/', VerificarConfirmacion.as_view(), name='password_reset_verificar'),
-    path('password-reset/verificar-codigo/', VerificarCodigo.as_view(), name='password_reset_verificar_codigo'),
     path('niveles/', NivelListView.as_view(), name='nivel_list'),
     path('partidas/', PartidaListView.as_view(), name='partida_list'),
     path('partidas/<int:pk>/', PartidaDetailView.as_view(), name='partida_detail'),

@@ -79,7 +79,7 @@ export default function LoadingScreen({ onFinished }) {
           {/* ─── Puntos de carga animados ─── */}
           {/* Tres puntos que aparecen secuencialmente usando animation-delay.
               Cada punto tiene un retraso de 0.15s para crear un efecto
-              de三点 de carga progresiva */}
+              detres etapas de carga progresiva */}
           <div className="loading-dots">
             <div className="dot" style={{ animationDelay: '0s' }}></div>
             <div className="dot" style={{ animationDelay: '0.15s' }}></div>

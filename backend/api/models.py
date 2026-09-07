@@ -13,7 +13,7 @@ import hashlib
 
 
 # ─── GESTOR DE USUARIOS PERSONALIZADO ───────────────────────────────────
-# Django necesita un manager personalizado因为我们 usamos AbstractBaseUser
+# Django necesita un manager personalizado porque usamos AbstractBaseUser
 # en lugar del modelo User por defecto. Este manager se encarga de crear
 # usuarios y superusuarios con la lógica que necesitamos.
 class UsuarioManager(BaseUserManager):

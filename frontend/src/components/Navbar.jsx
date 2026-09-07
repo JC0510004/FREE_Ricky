@@ -140,11 +140,6 @@ export default function Navbar() {
                   <div className="dropdown-divider" />
 
                   {/* Enlaces de navegación del menú */}
-                  <Link to="/home" className="dropdown-item" onClick={closeMenu}>
-                    <span className="material-symbols-outlined">sports_esports</span>
-                    Dashboard
-                  </Link>
-
                   <Link to="/settings" className="dropdown-item" onClick={closeMenu}>
                     <span className="material-symbols-outlined">settings</span>
                     Configuración

@@ -17,7 +17,6 @@ BRUTE_FORCE_PATHS = (
     '/api/register/',
     '/api/password-reset/',
     '/api/password-reset/confirm/',
-    '/api/password-reset/verificar-codigo/',
     '/api/cambiar-password/',
 )
 

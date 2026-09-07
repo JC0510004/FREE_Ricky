@@ -17,6 +17,7 @@ from .models import Usuario, ConfirmacionReset
 from .serializers import PasswordResetSerializer, PasswordResetConfirmSerializer
 from .throttles import PasswordResetThrottle
 
+
 logger = logging.getLogger('seguridad')
 audit_logger = logging.getLogger('auditoria')
 
@@ -310,46 +311,4 @@ class VerificarConfirmacion(APIView):
             return Response({'confirmado': False})
 
 
-class VerificarCodigo(APIView):
-    permission_classes = [AllowAny]
-    throttle_classes = [PasswordResetThrottle]
 
-    def post(self, request):
-        email = request.data.get('email', '').strip().lower()
-        codigo = request.data.get('codigo', '').strip()
-
-        if not email or not codigo:
-            return Response(
-                {'error': 'Email y código requeridos'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        confirmado = ConfirmacionReset.verificar_codigo(email, codigo)
-        if confirmado:
-            try:
-                usuario = Usuario.objects.get(email__iexact=email, is_active=True)
-                token, token_hash = _generate_reset_token()
-
-                updated = ConfirmacionReset.objects.filter(
-                    usuario=usuario,
-                    codigo_hash=hashlib.sha256(codigo.encode()).hexdigest()
-                ).update(
-                    token_hash=token_hash,
-                    codigo_hash=None,
-                )
-
-                if updated == 0:
-                    return Response(
-                        {'valido': False, 'error': 'Código inválido'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-                resp = {'valido': True}
-                return Response(resp)
-            except Usuario.DoesNotExist:
-                pass
-
-        return Response(
-            {'valido': False, 'error': 'Código inválido o expirado'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
