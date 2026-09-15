@@ -222,6 +222,9 @@
     margin-bottom: 2rem;
 }
 
+/* Card que ocupa toda la fila del grid contenedor */
+.fr-card-wide { grid-column: 1 / -1; }
+
 /* ─── ICON TILE ────────────────────────────────────────────────────── */
 .fr-icon-tile {
     display: grid;

@@ -55,6 +55,19 @@ describe('authService', () => {
     expect(result).toEqual({ id: 2 })
   })
 
+  it('register inicia sesión automáticamente si el backend devuelve tokens', async () => {
+    const user = { id: 3, username: 'newuser', rol: 'jugador' }
+    API_MODULE.default.post.mockResolvedValue({
+      data: { usuario: user, access_token: 'jwt-token' },
+    })
+
+    const result = await authService.register({ username: 'newuser' })
+
+    expect(JSON.parse(localStorage.getItem('usuario:v1'))).toEqual(user)
+    expect(tokenStoreModule.getAccessToken()).toBe('jwt-token')
+    expect(result.usuario).toEqual(user)
+  })
+
   it('logout limpia localStorage y memoria aunque falle el backend', async () => {
     localStorage.setItem('usuario:v1', JSON.stringify({ id: 1 }))
     tokenStoreModule.setAccessToken('token')
@@ -66,14 +79,16 @@ describe('authService', () => {
     expect(tokenStoreModule.getAccessToken()).toBeNull()
   })
 
-  it('verifySession retorna true si el backend responde', async () => {
-    API_MODULE.default.get.mockResolvedValue({ data: {} })
-    expect(await authService.verifySession()).toBe(true)
+  it('verifySession devuelve el usuario fresco si la sesión es válida', async () => {
+    const usuario = { id: 1, username: 'testuser', rol: 'jugador' }
+    API_MODULE.default.get.mockResolvedValue({ data: { authenticated: true, usuario } })
+    const result = await authService.verifySession()
+    expect(result.usuario).toEqual(usuario)
   })
 
-  it('verifySession retorna false si falla', async () => {
+  it('verifySession devuelve null si la sesión falla', async () => {
     API_MODULE.default.get.mockRejectedValue(new Error('401'))
-    expect(await authService.verifySession()).toBe(false)
+    expect(await authService.verifySession()).toBeNull()
   })
 
   it('refreshToken guarda el nuevo access token', async () => {

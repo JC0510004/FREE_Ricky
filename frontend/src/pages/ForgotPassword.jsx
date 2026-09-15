@@ -53,8 +53,8 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState('')
 
   // ─── Referencia mutable para el token ───
-  // useRef se usa porque el token puede venir de la URL o de la respuesta del backend,
-  // y no necesita causar re-render cuando cambia.
+  // useRef se usa porque el token llega por la URL cuando el usuario abre
+  // el enlace del correo, y no necesita causar re-render cuando cambia.
   const tokenRef = useRef('')
 
   // ─── Estado de carga y errores ───
@@ -97,7 +97,9 @@ export default function ForgotPassword() {
   }, [urlToken])
 
   // ─── Paso 1: Envío del correo de recuperación ───
-  // Valida el correo, lo envía al backend y guarda el token de la respuesta.
+  // Valida el correo y lo envía al backend. El token de recuperación se
+  // envía SOLO por correo (en el enlace "Sí, soy yo"), por lo que la
+  // respuesta del backend no trae token alguno.
   const handleSubmitEmail = useCallback(async (e) => {
     e.preventDefault()
     setError('')
@@ -113,12 +115,11 @@ export default function ForgotPassword() {
 
     setIsLoading(true)
     try {
-      const res = await API.post('/password-reset/', { email: sanitized.toLowerCase() })
-      // Guarda el token retornado por el backend (para uso futuro)
-      if (res.data?.token) tokenRef.current = res.data.token
+      await API.post('/password-reset/', { email: sanitized.toLowerCase() })
       setStep('sent')  // Avanza al paso de "correo enviado"
-    } catch {
-      setError('Error al procesar la solicitud')
+    } catch (err) {
+      const data = err?.response?.data
+      setError(data?.errores?.email?.[0] || data?.error || 'Error al procesar la solicitud')
     } finally {
       setIsLoading(false)
     }
@@ -186,7 +187,7 @@ export default function ForgotPassword() {
     )
   }
 
-  // Paso: correo enviado, esperando confirmación del usuario
+  // Paso: correo enviado, esperando que el usuario abra el enlace
   if (step === 'sent') {
     return (
       <div className="auth-page">
@@ -197,29 +198,6 @@ export default function ForgotPassword() {
             <p className="auth-subtitle" style={{ marginBottom: 24 }}>
               Revisa tu correo y haz clic en <strong>"Sí, soy yo"</strong>. Serás redirigido automáticamente para restablecer tu contraseña.
             </p>
-
-            {/* Botón para verificar manualmente si la identidad fue confirmada */}
-            <button type="button" onClick={() => {
-              const t = tokenRef.current
-              if (t) {
-                // Consulta al backend si el token ya fue confirmado
-                API.get(`/password-reset/verificar/?token=${t}`)
-                  .then((res) => {
-                    if (res.data?.confirmado) {
-                      setStep('reset')  // Confirmado: avanza al formulario
-                    } else {
-                      setError('Aún no se ha confirmado tu identidad. Revisa tu correo.')
-                    }
-                  })
-                  .catch(() => {
-                    setError('Error al verificar. Intenta de nuevo.')
-                  })
-              } else {
-                setError('No se encontró el token. Solicita un nuevo enlace.')
-              }
-            }} className="auth-submit" style={{ marginBottom: 12 }}>
-              Ya confirmé mi correo
-            </button>
 
             {/* Botón para volver al login */}
             <button type="button" onClick={() => navigate('/login')} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>

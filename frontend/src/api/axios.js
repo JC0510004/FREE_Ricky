@@ -133,7 +133,14 @@ API.interceptors.response.use(
         // withCredentials: true, por lo que no necesitamos enviarlo
         // explícitamente en el body.
         const { data } = await API.post('/token/refresh/')
-        const newToken = data.access_token
+
+        // Validamos que el backend realmente haya devuelto un access token.
+        // Si la respuesta no lo incluye (respuesta inesperada), lo tratamos
+        // como un fallo de refresh y cerramos la sesión.
+        const newToken = data?.access_token
+        if (!newToken) {
+          throw new Error('Respuesta de refresh token inválida')
+        }
 
         // Guardamos el nuevo access token en memoria
         setAccessToken(newToken)
@@ -157,6 +164,11 @@ API.interceptors.response.use(
         // Limpiamos los datos del usuario del localStorage.
         // Esto fuerza al usuario a iniciar sesión nuevamente.
         localStorage.removeItem('usuario:v1')
+
+        // Despachamos un evento global para que AuthContext (que sí vive
+        // en el mundo de React) limpie su estado. Sin esto, la app queda
+        // "autenticada" en memoria aunque la sesión real haya muerto.
+        window.dispatchEvent(new CustomEvent('auth:session-expired'))
 
         return Promise.reject(refreshError)
       } finally {

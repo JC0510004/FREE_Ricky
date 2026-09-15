@@ -66,7 +66,7 @@ function Resumen() {
 }
 
 /* ─── Tab: Usuarios ─────────────────────────────────────────────── */
-function Usuarios() {
+function Usuarios({ currentUserId, onCurrentUserUpdated }) {
   const [usuarios, setUsuarios] = useState([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(null) // { tipo: 'ok'|'error', texto }
@@ -93,14 +93,24 @@ function Usuarios() {
 
   const save = useCallback(async (id) => {
     try {
-      await API.put(`/usuarios/${id}/`, { username: form.username, email: form.email })
+      const { data } = await API.put(`/usuarios/${id}/`, {
+        username: form.username,
+        email: form.email,
+        rol: form.rol,
+      })
+      // Si el admin se editó a sí mismo (por ejemplo, se cambió el rol),
+      // sincronizamos el contexto para que Navbar/ProtectedRoute reflejen
+      // el rol nuevo de inmediato y no queden con un estado desactualizado.
+      if (id === currentUserId && data?.usuario) {
+        onCurrentUserUpdated(data.usuario)
+      }
       setEditId(null)
       setNotice({ tipo: 'ok', texto: 'Usuario actualizado correctamente' })
       load(null, () => setTimeout(clearNotice, 4000))
     } catch (err) {
       setNotice({ tipo: 'error', texto: extractApiError(err?.response?.data, 'Error al actualizar') })
     }
-  }, [form, load, clearNotice])
+  }, [form, load, clearNotice, currentUserId, onCurrentUserUpdated])
 
   const del = useCallback(async (id) => {
     if (!confirm('¿Eliminar este usuario?')) return
@@ -168,7 +178,16 @@ function Usuarios() {
                   ) : (
                     <div className="fr-actions">
                       <button className="fr-action-btn" type="button" onClick={() => startEdit(u)} title="Editar"><Pencil size={16} /></button>
-                      <button className="fr-action-btn fr-delete" type="button" onClick={() => del(u.id)} title="Eliminar"><Trash2 size={16} /></button>
+                      <button
+                        className="fr-action-btn fr-delete"
+                        type="button"
+                        onClick={() => del(u.id)}
+                        title={u.id === currentUserId ? 'No puedes eliminar tu propia cuenta' : 'Eliminar'}
+                        disabled={u.id === currentUserId}
+                        style={u.id === currentUserId ? { opacity: .4, cursor: 'not-allowed' } : undefined}
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   )}
                 </td>
@@ -368,7 +387,7 @@ const TABS = ['Resumen', 'Usuarios', 'Niveles', 'Partidas']
 
 export default function Admin() {
   const navigate = useNavigate()
-  const { user, isAuthenticated, isLoading, tokenReady, logout } = useAuth()
+  const { user, isAuthenticated, isLoading, tokenReady, logout, updateUser } = useAuth()
   const [activeTab, setActiveTab] = useState('Resumen')
 
   useEffect(() => {
@@ -435,7 +454,7 @@ export default function Admin() {
           {/* ── Tab content ── */}
           <div style={{ paddingTop: '1.25rem' }}>
             {activeTab === 'Resumen' && <Resumen />}
-            {activeTab === 'Usuarios' && <Usuarios />}
+            {activeTab === 'Usuarios' && <Usuarios currentUserId={user?.id} onCurrentUserUpdated={updateUser} />}
             {activeTab === 'Niveles' && <Niveles />}
             {activeTab === 'Partidas' && <Partidas />}
           </div>

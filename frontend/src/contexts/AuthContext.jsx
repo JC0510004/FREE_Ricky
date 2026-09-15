@@ -58,13 +58,21 @@ export function AuthProvider({ children }) {
       }
 
       // Si hay usuario guardado, verificamos con el backend si la
-      // sesión sigue siendo válida (el refresh token no expiró)
-      const valid = await authService.verifySession()
+      // sesión sigue siendo válida (el refresh token no expiró).
+      const data = await authService.verifySession()
 
       if (isMounted) {
         // Si la sesión no es válida, limpiamos el estado del usuario
         // para que el usuario tenga que iniciar sesión de nuevo
-        if (!valid) setUser(null)
+        if (!data) {
+          setUser(null)
+        } else if (data.usuario) {
+          // El backend devuelve el usuario fresco (con rol/estado actual).
+          // Lo aplicamos para mantener la app sincronizada (por ejemplo,
+          // si otro admin cambió el rol o desactivó la cuenta).
+          setUser(data.usuario)
+          localStorage.setItem('usuario:v1', JSON.stringify(data.usuario))
+        }
         // El refresh (si fue válido) ya dejó el access token en memoria
         setTokenReady(true)
         // Terminamos la carga en cualquier caso
@@ -92,9 +100,12 @@ export function AuthProvider({ children }) {
 
   // ─── FUNCIÓN: REGISTRAR NUEVO USUARIO ─────────────────────────────
   // Llama al servicio de auth para registrar un nuevo usuario.
-  // NO inicia sesión automáticamente; el usuario debe ir a login.
+  // El backend devuelve tokens (auto-login), por lo que la sesión se
+  // inicia automáticamente y no es necesario un login extra.
   const register = useCallback(async (data) => {
-    await authService.register(data)
+    const response = await authService.register(data)
+    setUser(response.usuario)
+    setTokenReady(true)
   }, [])
 
   // ─── FUNCIÓN: CERRAR SESIÓN ───────────────────────────────────────
@@ -121,19 +132,39 @@ export function AuthProvider({ children }) {
     })
   }, [])
 
+  // ─── EFECTO: CIERRE DE SESIÓN POR EVENTO GLOBAL ──────────────────
+  // El interceptor de Axios no puede tocar el estado de React. Cuando la
+  // renovación del refresh token falla (sesión expirada o invalidada),
+  // despacha un evento global que aquí escuchamos para limpiar el estado
+  // de autenticación y evitar el estado "zombi" (largado de usuario en
+  // memoria con todos los endpoints muriendo en 401).
+  useEffect(() => {
+    const onSessionExpired = () => {
+      setUser(null)
+      setTokenReady(false)
+    }
+    window.addEventListener('auth:session-expired', onSessionExpired)
+    return () => window.removeEventListener('auth:session-expired', onSessionExpired)
+  }, [])
+
   // ─── FUNCIÓN: VERIFICAR SESIÓN ────────────────────────────────────
   // Permite verificar manualmente si la sesión sigue siendo válida.
   // Se usa por ejemplo en ProtectedRoute o al hacer acciones sensibles.
   const checkSession = useCallback(async () => {
-    const valid = await authService.verifySession()
-    if (!valid) {
+    const data = await authService.verifySession()
+    if (!data) {
       // Si la sesión ya no es válida, limpiamos el usuario del estado
       setUser(null)
       setTokenReady(false)
-    } else {
-      setTokenReady(true)
+      return false
     }
-    return valid
+    // Aprovechamos la verificación para refrescar los datos del usuario
+    if (data.usuario) {
+      setUser(data.usuario)
+      localStorage.setItem('usuario:v1', JSON.stringify(data.usuario))
+    }
+    setTokenReady(true)
+    return true
   }, [])
 
   // ─── VALOR DERIVADO: isAuthenticated ──────────────────────────────

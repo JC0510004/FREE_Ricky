@@ -53,13 +53,26 @@ export const authService = {
 
   // ─── MÉTODO: REGISTRO ──────────────────────────────────────────────
   // Envía los datos de registro de un nuevo usuario al backend.
-  // NO inicia sesión automáticamente después del registro; el usuario
-  // debe ir a la página de login para autenticarse.
+  // El backend responde con el usuario creado y los tokens (auto-login),
+  // por lo que se persiste la sesión igual que en login: el usuario queda
+  // autenticado y no necesita iniciar sesión por separado.
   // Parámetro data: objeto con los campos del formulario de registro
   // (nombre de usuario, email, contraseña, etc.)
   async register(data) {
     // Hacemos la petición POST al endpoint de registro
     const { data: response } = await API.post('/register/', data)
+
+    // Si el backend devuelve los datos del usuario, los persistimos en
+    // localStorage para que la sesión sobreviva a recargas de página.
+    if (response.usuario) {
+      localStorage.setItem(USER_KEY, JSON.stringify(response.usuario))
+    }
+
+    // Si viene un access token, lo guardamos en memoria para las peticiones.
+    if (response.access_token) {
+      setAccessToken(response.access_token)
+    }
+
     return response
   },
 
@@ -110,17 +123,19 @@ export const authService = {
   // ─── MÉTODO: VERIFICACIÓN DE SESIÓN ───────────────────────────────
   // Verifica si la sesión del usuario actual es válida haciendo una
   // petición al endpoint de verificación del backend.
-  // Retorna: true si la sesión es válida, false si no lo es.
+  // Retorna: la respuesta del backend (que incluye el usuario fresco, con
+  // su rol/estado actual) si la sesión es válida, o null si no lo es.
   // Esto se usa al cargar la aplicación para verificar si el usuario
-  // sigue autenticado (por si el refresh token expiró).
+  // sigue autenticado (por si el refresh token expiró) y para mantener
+  // los datos del usuario sincronizados con el backend.
   async verifySession() {
     try {
-      await API.get('/verify/')
-      return true
+      const { data } = await API.get('/verify/')
+      return data
     } catch {
       // Si la verificación falla (401, error de red, etc.),
       // la sesión no es válida
-      return false
+      return null
     }
   },
 
