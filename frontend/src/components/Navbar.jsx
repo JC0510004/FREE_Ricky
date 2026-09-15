@@ -144,6 +144,15 @@ export default function Navbar() {
                   <div className="dropdown-divider" />
 
                   {/* Enlaces de navegación del menú */}
+                  {/* El panel de jugador es solo para jugadores; los admins
+                      tienen su propio panel (Estadísticas). */}
+                  {user?.rol !== 'admin' && (
+                    <Link to="/home" className="dropdown-item" onClick={closeMenu}>
+                      <span className="material-symbols-outlined">sports_esports</span>
+                      Mi Panel
+                    </Link>
+                  )}
+
                   <Link to="/settings" className="dropdown-item" onClick={closeMenu}>
                     <span className="material-symbols-outlined">settings</span>
                     Configuración

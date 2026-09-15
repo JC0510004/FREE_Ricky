@@ -61,6 +61,7 @@ describe('Navbar', () => {
     renderNavbar()
     fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }))
     expect(screen.getByText('Configuración')).toBeInTheDocument()
+    expect(screen.getByText('Mi Panel')).toBeInTheDocument()
     expect(screen.getByText('Cerrar Sesión')).toBeInTheDocument()
   })
 
@@ -73,6 +74,8 @@ describe('Navbar', () => {
     renderNavbar()
     fireEvent.click(screen.getByRole('button', { name: 'Menú de usuario' }))
     expect(screen.getByText('Estadísticas')).toBeInTheDocument()
+    // El panel de jugador no aparece en el menú del admin
+    expect(screen.queryByText('Mi Panel')).not.toBeInTheDocument()
   })
 
   it('no muestra enlace de Estadísticas para jugador', () => {

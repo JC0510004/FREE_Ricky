@@ -87,9 +87,15 @@ class RegisterView(APIView):
 
         usuario = serializer.save()
 
-        audit_logger.info(
-            f"REGISTRO nuevo usuario id={usuario.id} username={usuario.username} email={usuario.email}",
-        )
+        if getattr(usuario, '_reactivado', False):
+            audit_logger.info(
+                f"REACTIVACION cuenta desactivada id={usuario.id} "
+                f"username={usuario.username} email={usuario.email}",
+            )
+        else:
+            audit_logger.info(
+                f"REGISTRO nuevo usuario id={usuario.id} username={usuario.username} email={usuario.email}",
+            )
 
         refresh = RefreshToken.for_user(usuario)
         refresh_token = str(refresh)

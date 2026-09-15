@@ -96,6 +96,47 @@ class RegistroTests(TestCase):
         response = self.client.post(self.url, self.valid_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    # Al "eliminar" un usuario, el admin solo lo desactiva (soft delete).
+    # Volver a registrarlo con el mismo username/email debe REACTIVAR esa
+    # misma cuenta (no crear un duplicado ni fallar por "ya existe").
+    def test_registro_reactiva_cuenta_desactivada(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        usuario = Usuario.objects.get(username='testuser')
+        usuario.is_active = False
+        usuario.save(update_fields=['is_active'])
+
+        data = {
+            **self.valid_data,
+            'password': 'NuevaPass123!',
+            'confirm_password': 'NuevaPass123!',
+        }
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.is_active)
+        self.assertTrue(usuario.check_password('NuevaPass123!'))
+        # La cuenta se reutiliza: no queda una fila duplicada
+        self.assertEqual(Usuario.objects.filter(username__iexact='testuser').count(), 1)
+        self.assertEqual(response.data['usuario']['id'], usuario.id)
+
+    # Si una cuenta desactivada tiene el username pero se registra con un
+    # email nuevo, debe poder reactivarse adoptando el email del formulario.
+    def test_registro_reactiva_con_email_nuevo(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        usuario = Usuario.objects.get(username='testuser')
+        usuario.is_active = False
+        usuario.save(update_fields=['is_active'])
+
+        data = {**self.valid_data, 'email': 'nuevo@gmail.com'}
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.is_active)
+        self.assertEqual(usuario.email, 'nuevo@gmail.com')
+        self.assertEqual(Usuario.objects.filter(username__iexact='testuser').count(), 1)
+
     # Verifica que un POST vacío retorne 400 con errores de campo requerido
     # Cubre la validación de campos obligatorios del serializer
     def test_registro_sin_campos(self):

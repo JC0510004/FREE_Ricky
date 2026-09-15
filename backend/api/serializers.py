@@ -37,6 +37,11 @@ class RegisterSerializer(serializers.ModelSerializer):
             # El rol es de solo lectura porque se asigna del lado del servidor
             # (por defecto 'jugador'); nunca debe ser proporcionado por el cliente
             'rol': {'read_only': True},
+            # Quitamos el UniqueValidator automático (que rechazaría cuentas
+            # DESACTIVADAS): la unicidad la validan validate_username/email,
+            # que solo consideran cuentas activas, y create() reactiva la cuenta.
+            'username': {'validators': []},
+            'email': {'validators': []},
         }
 
     # ─── VALIDACIÓN INDIVIDUAL DE CAMPOS ──────────────────────────────────
@@ -44,6 +49,8 @@ class RegisterSerializer(serializers.ModelSerializer):
     # Valida y sanitiza el nombre de usuario antes de guardarlo.
     # Primero elimina caracteres peligrosos (XSS, inyección) y luego
     # verifica que cumpla con las reglas de formato y unicidad.
+    # Un username que solo pertenezca a una cuenta DESACTIVADA (eliminada
+    # por el admin) sí puede volver a usarse: create() reactiva esa cuenta.
     def validate_username(self, value):
         # Sanitiza la entrada eliminando etiquetas HTML y caracteres de control
         sanitized = sanitize_input(value)
@@ -52,13 +59,15 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'El usuario debe tener entre 3 y 50 caracteres alfanuméricos o guión bajo'
             )
-        # Busca si ya existe un usuario con el mismo nombre (case-insensitive)
-        if Usuario.objects.filter(username__iexact=sanitized).exists():
+        # Busca si ya existe un usuario ACTIVO con el mismo nombre (case-insensitive)
+        if Usuario.objects.filter(username__iexact=sanitized, is_active=True).exists():
             raise serializers.ValidationError('Este nombre de usuario no está disponible')
         return sanitized
 
     # Valida y sanitiza el correo electrónico; además lo normaliza
-    # para evitar duplicados por variantes del mismo correo (ej:+tags)
+    # para evitar duplicados por variantes del mismo correo (ej:+tags).
+    # Igual que el username: un correo de una cuenta desactivada puede
+    # volver a usarse (la cuenta se reactiva al registrarse).
     def validate_email(self, value):
         # Limpia la entrada de posibles ataques
         sanitized = sanitize_input(value)
@@ -67,8 +76,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Debe ser un correo electrónico válido')
         # Normaliza el email (minúsculas, remueve alias +) para unicidad real
         normalized = normalize_email(sanitized)
-        # Comprueba que no esté registrado ya (case-insensitive)
-        if Usuario.objects.filter(email__iexact=normalized).exists():
+        # Comprueba que no lo tenga registrado una cuenta ACTIVA (case-insensitive)
+        if Usuario.objects.filter(email__iexact=normalized, is_active=True).exists():
             raise serializers.ValidationError('Este correo electrónico no está disponible')
         return normalized
 
@@ -95,17 +104,62 @@ class RegisterSerializer(serializers.ModelSerializer):
     # ─── CREACIÓN DEL USUARIO ─────────────────────────────────────────────
     # Crea la instancia del usuario en la base de datos, hasheando la
     # contraseña con el algoritmo configurado (argon2) antes de persistir.
+    #
+    # Si el username/email pertenece a una cuenta DESACTIVADA (el admin la
+    # "eliminó" con soft-delete y username/email son únicos en BD), no se
+    # crea una fila nueva: se REACTIVA esa misma cuenta con los datos y la
+    # contraseña del formulario, conservando su historial de partidas.
     def create(self, validated_data):
         # Se extrae la contraseña del diccionario porque set_password
         # la hashea internamente; no se almacena en texto plano
         password = validated_data.pop('password')
-        # Crea la instancia con los campos restantes (username, email, rol)
-        usuario = Usuario(**validated_data)
-        # Hashea la contraseña usando el hasher configurado en settings
-        usuario.set_password(password)
-        # Persiste el usuario en la base de datos
-        usuario.save()
-        return usuario
+        username = validated_data['username']
+        email = validated_data['email']
+
+        # Cuenta desactivada que reclamará estos datos (prioriza el username).
+        candidata = (
+            Usuario.objects.filter(username__iexact=username, is_active=False).first()
+            or Usuario.objects.filter(email__iexact=email, is_active=False).first()
+        )
+
+        if candidata is None:
+            # Alta normal: no existe ninguna cuenta desactivada con estos datos.
+            usuario = Usuario(**validated_data)
+            usuario.set_password(password)
+            usuario.save()
+            return usuario
+
+        # Al reactivar la candidata adoptará el username y email del formulario.
+        # Si algún OTRO usuario (activo o inactivo) ya los ocupa, no podemos
+        # reactivar sin violar las restricciones únicas de la BD.
+        username_taken = (
+            Usuario.objects.filter(username__iexact=username)
+            .exclude(pk=candidata.pk)
+            .exists()
+        )
+        email_taken = (
+            Usuario.objects.filter(email__iexact=email)
+            .exclude(pk=candidata.pk)
+            .exists()
+        )
+        if username_taken or email_taken:
+            raise serializers.ValidationError({
+                'username': ['Este nombre de usuario no está disponible'],
+                'email': ['Este correo electrónico no está disponible'],
+            })
+
+        candidata.username = username
+        candidata.email = email
+        candidata.is_active = True
+        candidata.is_verified = True
+        candidata.failed_attempts = 0
+        candidata.locked_until = None
+        candidata.lockout_count = 0
+        candidata.set_password(password)
+        candidata.save()
+        # Bandera para que la vista pueda auditar la reactivación.
+        candidata._reactivado = True
+        return candidata
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
