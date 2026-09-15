@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
@@ -63,11 +63,16 @@ export default function Settings() {
   const [savingPassword, setSavingPassword] = useState(false)
   const [passMsg, setPassMsg] = useState(null)
 
-  // Refresca los valores del perfil cuando cambia el usuario del contexto
-  useEffect(() => {
+  // Sincroniza el formulario cuando cambia el usuario del contexto.
+  // Se ajusta el estado durante el render (render-phase adjustment) en lugar
+  // de un effect, para no provocar renders en cascada. Requiere que el
+  // componente se monte con user ya definido (ProtectedRoute lo garantiza).
+  const [prevProfileId, setPrevProfileId] = useState(user?.id)
+  if (prevProfileId !== user?.id) {
+    setPrevProfileId(user?.id)
     setUsername(user?.username || '')
     setEmail(user?.email || '')
-  }, [user?.username, user?.email])
+  }
 
   // ─── Guardar cambios de perfil (nombre y correo) ───
   const handleSaveProfile = useCallback(async (e) => {
@@ -89,7 +94,7 @@ export default function Settings() {
     } finally {
       setSavingProfile(false)
     }
-  }, [username, email, user?.id, updateUser])
+  }, [username, email, user, updateUser])
 
   // ─── Cambiar contraseña ───
   const handleChangePassword = useCallback(async (e) => {

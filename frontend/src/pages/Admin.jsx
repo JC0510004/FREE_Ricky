@@ -5,7 +5,7 @@ import API from '../api/axios'
 import LoadingDots from '../components/LoadingDots'
 import {
   ArrowLeft, BarChart3, Check, Gamepad2, LogOut, Pencil,
-  ShieldCheck, Swords, Trash2, Trophy, Users, Zap
+  Swords, Trash2, Trophy, Users, Zap
 } from 'lucide-react'
 import { extractApiError } from '../utils/format'
 import '../dashboard.css'

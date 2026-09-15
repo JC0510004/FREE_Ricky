@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/useAuth'
 import {
   ArrowLeft, BarChart3, Clock3, Gamepad2, LogOut,
-  Medal, Play, ShieldCheck, Swords, Trophy, Zap
+  Medal, Play, Swords, Trophy, Zap
 } from 'lucide-react'
 import '../dashboard.css'
 

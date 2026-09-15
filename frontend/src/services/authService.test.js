@@ -1,5 +1,4 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import API from '../api/axios'
 
 vi.mock('../api/axios', () => ({
   default: { post: vi.fn(), get: vi.fn() },
