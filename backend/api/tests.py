@@ -732,8 +732,8 @@ class RankingTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_ranking_con_datos(self):
-        # Crear datos de prueba: usuario, nivel y partidas
-        from rest_framework_simplejwt.tokens import RefreshToken
+        # Crear datos de prueba: usuario, nivel y partidas.
+        # El ranking es público, por lo que no se necesita token de acceso.
         user = Usuario.objects.create_user(
             username='player1',
             email='player1@gmail.com',
@@ -976,7 +976,6 @@ class FlujoIntegracionTests(TestCase):
             'tiempo_limite': 180,
         }, format='json')
         self.assertEqual(nivel_resp.status_code, status.HTTP_201_CREATED)
-        nivel_id = nivel_resp.data['id']
 
         # Admin stats
         admin_stats = self.client.get(reverse('admin_stats'))
@@ -1297,7 +1296,7 @@ class VerifySessionTests(TestCase):
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_verify_session_token_invalido(self):
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer token_falso')
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer token_falso')
         resp = self.client.get(self.verify_url)
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -1318,7 +1317,6 @@ class StatsAislamientoTests(TestCase):
             'confirm_password': 'TestPass123!',
         }, format='json')
         token1 = reg1.data.get('access_token', '')
-        user1 = Usuario.objects.get(username='iso_user1')
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token1}')
         client.post(reverse('partida_list'), {
             'nivel': nivel.pk, 'muertes': 5, 'tiempo': 120, 'puntuacion': 300,

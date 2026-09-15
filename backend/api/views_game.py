@@ -1,6 +1,6 @@
 import logging
 
-from django.db.models import Q, Avg, Count, Sum, Max, Min
+from django.db.models import Avg, Count, Sum, Max, Min
 
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response

@@ -366,6 +366,3 @@ class VerificarConfirmacion(APIView):
         except ConfirmacionReset.DoesNotExist:
             logger.info(f'[VerificarConfirmacion] Record not found for hash prefix={token_hash[:16]}')
             return Response({'confirmado': False})
-
-
-
