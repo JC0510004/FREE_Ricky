@@ -855,3 +855,520 @@ class StatsTests(TestCase):
         self.assertEqual(response.data['mejor_puntuacion'], 900)
         self.assertEqual(response.data['peor_puntuacion'], 600)
         self.assertEqual(response.data['nivel_favorito'], 'Nivel Stats')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE INTEGRACIÓN: FLUJO COMPLETO DE USUARIO
+# ═══════════════════════════════════════════════════════════════════════════════
+class FlujoIntegracionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+        self.login_url = reverse('login')
+        self.logout_url = reverse('logout')
+        self.verify_url = reverse('verify_session')
+        self.refresh_url = reverse('token_refresh')
+        self.nivel_list_url = reverse('nivel_list')
+        self.partida_list_url = reverse('partida_list')
+        self.stats_url = reverse('user_stats')
+        self.change_pw_url = reverse('change_password')
+        self.ranking_url = reverse('ranking')
+
+    def test_flujo_completo_usuario(self):
+        # 1. Registrar usuario
+        reg = self.client.post(self.register_url, {
+            'username': 'integration_user',
+            'email': 'integration@gmail.com',
+            'password': 'SecurePass123!',
+            'confirm_password': 'SecurePass123!',
+        }, format='json')
+        self.assertEqual(reg.status_code, status.HTTP_201_CREATED)
+        token = reg.data['access_token']
+
+        # 2. Verificar sesión
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        verify = self.client.get(self.verify_url)
+        self.assertEqual(verify.status_code, status.HTTP_200_OK)
+
+        # 3. Login (obtener refresh cookie)
+        login = self.client.post(self.login_url, {
+            'username': 'integration_user',
+            'password': 'SecurePass123!',
+        }, format='json')
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+
+        # 4. Listar niveles (público)
+        niveles = self.client.get(self.nivel_list_url)
+        self.assertEqual(niveles.status_code, status.HTTP_200_OK)
+
+        # 5. Crear partida
+        nivel = Nivel.objects.create(nombre='Nivel Integración', dificultad='medio')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        partida = self.client.post(self.partida_list_url, {
+            'nivel': nivel.pk,
+            'muertes': 2,
+            'tiempo': 90,
+            'puntuacion': 750,
+        }, format='json')
+        self.assertEqual(partida.status_code, status.HTTP_201_CREATED)
+
+        # 6. Ver estadísticas
+        stats = self.client.get(self.stats_url)
+        self.assertEqual(stats.status_code, status.HTTP_200_OK)
+        self.assertEqual(stats.data['total_partidas'], 1)
+        self.assertEqual(stats.data['mejor_puntuacion'], 750)
+
+        # 7. Ranking público
+        ranking = self.client.get(self.ranking_url)
+        self.assertEqual(ranking.status_code, status.HTTP_200_OK)
+        self.assertGreater(len(ranking.data), 0)
+
+        # 8. Refresh token
+        refresh = self.client.post(self.refresh_url, {
+            'refresh_token': str(
+                __import__('rest_framework_simplejwt.tokens', fromlist=['RefreshToken'])
+                .RefreshToken.for_user(Usuario.objects.get(username='integration_user'))
+            ),
+        }, format='json')
+        self.assertEqual(refresh.status_code, status.HTTP_200_OK)
+        new_token = refresh.data['access_token']
+
+        # 9. Verificar sesión con nuevo token
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {new_token}')
+        verify2 = self.client.get(self.verify_url)
+        self.assertEqual(verify2.status_code, status.HTTP_200_OK)
+
+        # 10. Cambiar contraseña
+        change = self.client.post(self.change_pw_url, {
+            'old_password': 'SecurePass123!',
+            'new_password': 'NewSecure456!',
+            'confirm_password': 'NewSecure456!',
+        }, format='json')
+        self.assertEqual(change.status_code, status.HTTP_200_OK)
+
+        # 11. Login con nueva contraseña
+        login2 = self.client.post(self.login_url, {
+            'username': 'integration_user',
+            'password': 'NewSecure456!',
+        }, format='json')
+        self.assertEqual(login2.status_code, status.HTTP_200_OK)
+
+        # 12. Logout
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {new_token}')
+        logout = self.client.post(self.logout_url, {}, format='json')
+        self.assertEqual(logout.status_code, status.HTTP_200_OK)
+
+    def test_flujo_completo_admin(self):
+        # Crear admin
+        admin = Usuario.objects.create_superuser(
+            username='admin_integ',
+            email='admin_integ@gmail.com',
+            password='AdminPass123!',
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        admin_token = str(RefreshToken.for_user(admin).access_token)
+
+        # Crear nivel como admin
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {admin_token}')
+        nivel_resp = self.client.post(self.nivel_list_url, {
+            'nombre': 'Nivel Admin',
+            'dificultad': 'dificil',
+            'tiempo_limite': 180,
+        }, format='json')
+        self.assertEqual(nivel_resp.status_code, status.HTTP_201_CREATED)
+        nivel_id = nivel_resp.data['id']
+
+        # Admin stats
+        admin_stats = self.client.get(reverse('admin_stats'))
+        self.assertEqual(admin_stats.status_code, status.HTTP_200_OK)
+        self.assertEqual(admin_stats.data['total_niveles'], 1)
+
+        # Admin partidas
+        admin_partidas = self.client.get(reverse('admin_partidas'))
+        self.assertEqual(admin_partidas.status_code, status.HTTP_200_OK)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE EDGE CASES - NIVEL
+# ═══════════════════════════════════════════════════════════════════════════════
+class NivelEdgeCaseTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.nivel_list_url = reverse('nivel_list')
+        self.nivel_detail_url = lambda pk: reverse('nivel_detail', args=[pk])
+        self.nivel = Nivel.objects.create(
+            nombre='Nivel Test',
+            dificultad='facil',
+            tiempo_limite=120,
+        )
+
+    def test_nivel_detail_no_existe(self):
+        admin = Usuario.objects.create_superuser(
+            username='admin_detail', email='admin_detail@gmail.com', password='Admin123!'
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(admin).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = self.nivel_detail_url(9999)
+        response = self.client.get(url)
+        # NivelDetailView no soporta GET (solo PUT/DELETE), retorna 405
+        self.assertIn(response.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED])
+
+    def test_nivel_create_campos_requeridos(self):
+        admin = Usuario.objects.create_superuser(
+            username='admin', email='admin@gmail.com', password='Admin123!'
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(admin).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        # Sin nombre
+        resp = self.client.post(self.nivel_list_url, {
+            'dificultad': 'medio',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nivel_create_dificultad_invalida(self):
+        admin = Usuario.objects.create_superuser(
+            username='admin', email='admin@gmail.com', password='Admin123!'
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(admin).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        resp = self.client.post(self.nivel_list_url, {
+            'nombre': 'Nivel',
+            'dificultad': 'extrema',  # valor no válido
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nivel_update_no_existe(self):
+        admin = Usuario.objects.create_superuser(
+            username='admin', email='admin@gmail.com', password='Admin123!'
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(admin).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        url = self.nivel_detail_url(9999)
+        resp = self.client.put(url, {'nombre': 'X'}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_nivel_delete_no_existe(self):
+        admin = Usuario.objects.create_superuser(
+            username='admin', email='admin@gmail.com', password='Admin123!'
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(admin).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        url = self.nivel_detail_url(9999)
+        resp = self.client.delete(url)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE EDGE CASES - PARTIDA
+# ═══════════════════════════════════════════════════════════════════════════════
+class PartidaEdgeCaseTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.partida_list_url = reverse('partida_list')
+        self.partida_detail_url = lambda pk: reverse('partida_detail', args=[pk])
+
+        reg = self.client.post(reverse('register'), {
+            'username': 'user1',
+            'email': 'user1@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.token = reg.data.get('access_token', '')
+        self.nivel = Nivel.objects.create(nombre='Nivel', dificultad='facil')
+
+    def test_crear_partida_nivel_no_existe(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.post(self.partida_list_url, {
+            'nivel': 9999,
+            'muertes': 0,
+            'tiempo': 60,
+            'puntuacion': 100,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_crear_partida_muertes_negativas(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.post(self.partida_list_url, {
+            'nivel': self.nivel.pk,
+            'muertes': -1,
+            'tiempo': 60,
+            'puntuacion': 100,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_crear_partida_puntuacion_negativa(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.post(self.partida_list_url, {
+            'nivel': self.nivel.pk,
+            'muertes': 0,
+            'tiempo': 60,
+            'puntuacion': -100,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_crear_partida_cero_muertes(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.post(self.partida_list_url, {
+            'nivel': self.nivel.pk,
+            'muertes': 0,
+            'tiempo': 30,
+            'puntuacion': 1000,
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+    def test_partida_detail_no_existe(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.get(self.partida_detail_url(9999))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_partida_detail_otro_usuario(self):
+        # Crear otra partida como user1
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.post(self.partida_list_url, {
+            'nivel': self.nivel.pk,
+            'muertes': 1,
+            'tiempo': 60,
+            'puntuacion': 500,
+        }, format='json')
+        partida_id = resp.data['id']
+
+        # Registrar user2
+        reg2 = self.client.post(reverse('register'), {
+            'username': 'user2',
+            'email': 'user2@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        token2 = reg2.data.get('access_token', '')
+
+        # user2 intenta ver la partida de user1 → 403
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token2}')
+        resp2 = self.client.get(self.partida_detail_url(partida_id))
+        self.assertEqual(resp2.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_list_partidas_aislamiento(self):
+        # user1 crea partida
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        self.client.post(self.partida_list_url, {
+            'nivel': self.nivel.pk, 'muertes': 0, 'tiempo': 60, 'puntuacion': 100,
+        }, format='json')
+
+        # user2 no ve las partidas de user1
+        reg2 = self.client.post(reverse('register'), {
+            'username': 'user2_iso',
+            'email': 'user2_iso@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        token2 = reg2.data.get('access_token', '')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token2}')
+        resp = self.client.get(self.partida_list_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        # user2 no tiene partidas, debe retornar lista vacía (paginated)
+        self.assertEqual(len(resp.data.get('results', [])), 0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE PERMISOS DETALLADOS
+# ═══════════════════════════════════════════════════════════════════════════════
+class PermisosDetalladosTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.register_url = reverse('register')
+
+        reg = self.client.post(self.register_url, {
+            'username': 'normal_user',
+            'email': 'normal@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.user_token = reg.data.get('access_token', '')
+
+        self.admin = Usuario.objects.create_superuser(
+            username='admin_user',
+            email='admin_perm@gmail.com',
+            password='AdminPass123!',
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+        self.admin_token = str(RefreshToken.for_user(self.admin).access_token)
+
+    def test_usuario_list_requiere_admin(self):
+        # Normal user → 403
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        resp = self.client.get(reverse('usuario_list'))
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_usuario_list_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.get(reverse('usuario_list'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_usuario_detail_otro_usuario_normal(self):
+        # Normal user intenta ver perfil de admin → 403
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        resp = self.client.get(reverse('usuario_detail', args=[self.admin.pk]))
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_usuario_detail_propio_perfil(self):
+        user = Usuario.objects.get(username='normal_user')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        resp = self.client.get(reverse('usuario_detail', args=[user.pk]))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_usuario_detail_admin_ve_cualquier_usuario(self):
+        user = Usuario.objects.get(username='normal_user')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.get(reverse('usuario_detail', args=[user.pk]))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_usuario_detail_no_existe(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.get(reverse('usuario_detail', args=[9999]))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_admin_partidas_requiere_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        resp = self.client.get(reverse('admin_partidas'))
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_partidas_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.get(reverse('admin_partidas'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_admin_stats_requiere_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        resp = self.client.get(reverse('admin_stats'))
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_stats_admin(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.get(reverse('admin_stats'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('total_usuarios', resp.data)
+        self.assertIn('total_partidas', resp.data)
+
+    def test_usuario_desactivar_por_admin(self):
+        user = Usuario.objects.get(username='normal_user')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.delete(reverse('usuario_detail', args=[user.pk]))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+    def test_usuario_normal_no_puede_desactivar(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        admin_user = Usuario.objects.get(username='admin_user')
+        resp = self.client.delete(reverse('usuario_detail', args=[admin_user.pk]))
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE VERIFICACIÓN DE SESIÓN
+# ═══════════════════════════════════════════════════════════════════════════════
+class VerifySessionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.verify_url = reverse('verify_session')
+        reg = self.client.post(reverse('register'), {
+            'username': 'verify_user',
+            'email': 'verify@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.token = reg.data.get('access_token', '')
+
+    def test_verify_session_valido(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.get(self.verify_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_verify_session_sin_token(self):
+        resp = self.client.get(self.verify_url)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_verify_session_token_invalido(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer token_falso')
+        resp = self.client.get(self.verify_url)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE Aislamiento de Stats
+# ═══════════════════════════════════════════════════════════════════════════════
+class StatsAislamientoTests(TestCase):
+    def test_stats_no_muestra_otro_usuario(self):
+        client = APIClient()
+        nivel = Nivel.objects.create(nombre='Nivel Iso', dificultad='facil')
+
+        # user1 crea partidas
+        reg1 = client.post(reverse('register'), {
+            'username': 'iso_user1',
+            'email': 'iso1@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        token1 = reg1.data.get('access_token', '')
+        user1 = Usuario.objects.get(username='iso_user1')
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token1}')
+        client.post(reverse('partida_list'), {
+            'nivel': nivel.pk, 'muertes': 5, 'tiempo': 120, 'puntuacion': 300,
+        }, format='json')
+
+        # user2 no tiene partidas
+        reg2 = client.post(reverse('register'), {
+            'username': 'iso_user2',
+            'email': 'iso2@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        token2 = reg2.data.get('access_token', '')
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token2}')
+        resp = client.get(reverse('user_stats'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['total_partidas'], 0)
+
+    def test_ranking_muestra_ambos(self):
+        client = APIClient()
+        nivel = Nivel.objects.create(nombre='Nivel Rank Iso', dificultad='medio')
+
+        # user1
+        reg1 = client.post(reverse('register'), {
+            'username': 'rank_iso1',
+            'email': 'rank1@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        token1 = reg1.data.get('access_token', '')
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token1}')
+        client.post(reverse('partida_list'), {
+            'nivel': nivel.pk, 'muertes': 2, 'tiempo': 90, 'puntuacion': 500,
+        }, format='json')
+
+        # user2
+        reg2 = client.post(reverse('register'), {
+            'username': 'rank_iso2',
+            'email': 'rank2@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        token2 = reg2.data.get('access_token', '')
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token2}')
+        client.post(reverse('partida_list'), {
+            'nivel': nivel.pk, 'muertes': 1, 'tiempo': 60, 'puntuacion': 800,
+        }, format='json')
+
+        # Ranking debe mostrar ambos
+        ranking = client.get(reverse('ranking'))
+        usernames = [r['username'] for r in ranking.data]
+        self.assertIn('rank_iso1', usernames)
+        self.assertIn('rank_iso2', usernames)

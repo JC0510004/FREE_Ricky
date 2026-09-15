@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
 import LoadingDots from '../components/LoadingDots'
@@ -73,23 +73,25 @@ function Usuarios() {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ username: '', email: '', rol: '' })
 
-  const load = (signal, cb) => {
+  // Memorizada para reutilizar la misma referencia en useEffect y handlers
+  // (evita re-renderizados por identidad de función).
+  const load = useCallback((signal, cb) => {
     API.get('/usuarios/', { signal })
       .then(r => { setUsuarios(r.data.results || r.data); cb?.() })
       .catch(e => { if (e?.name !== 'CanceledError') setError('Error al cargar') })
-  }
+  }, [])
 
   useEffect(() => {
     const ctrl = new AbortController()
     load(ctrl.signal)
     return () => ctrl.abort()
-  }, [])
+  }, [load])
 
-  const clearNotice = () => setNotice(null)
+  const clearNotice = useCallback(() => setNotice(null), [])
 
-  const startEdit = (u) => { clearNotice(); setEditId(u.id); setForm({ username: u.username, email: u.email, rol: u.rol }) }
+  const startEdit = useCallback((u) => { clearNotice(); setEditId(u.id); setForm({ username: u.username, email: u.email, rol: u.rol }) }, [clearNotice])
 
-  const save = async (id) => {
+  const save = useCallback(async (id) => {
     try {
       await API.put(`/usuarios/${id}/`, { username: form.username, email: form.email })
       setEditId(null)
@@ -98,9 +100,9 @@ function Usuarios() {
     } catch (err) {
       setNotice({ tipo: 'error', texto: extractApiError(err?.response?.data, 'Error al actualizar') })
     }
-  }
+  }, [form, load, clearNotice])
 
-  const del = async (id) => {
+  const del = useCallback(async (id) => {
     if (!confirm('¿Eliminar este usuario?')) return
     try {
       await API.delete(`/usuarios/${id}/`)
@@ -109,7 +111,7 @@ function Usuarios() {
     } catch {
       setNotice({ tipo: 'error', texto: 'Error al eliminar' })
     }
-  }
+  }, [load, clearNotice])
 
   return (
     <>
@@ -191,37 +193,38 @@ function Niveles() {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
 
-  const load = (signal) => {
+  // Memorizada para estabilizar la referencia usada por useEffect y handlers.
+  const load = useCallback((signal) => {
     API.get('/niveles/', { signal })
       .then(r => setNiveles(r.data.results || r.data))
       .catch(e => { if (e?.name !== 'CanceledError') setError('Error al cargar') })
-  }
+  }, [])
 
   useEffect(() => {
     const ctrl = new AbortController()
     load(ctrl.signal)
     return () => ctrl.abort()
-  }, [])
+  }, [load])
 
-  const create = async () => {
+  const create = useCallback(async () => {
     try {
       await API.post('/niveles/', { ...newNivel, tiempo_limite: newNivel.tiempo_limite ? Number(newNivel.tiempo_limite) : null })
       setCreating(false); setNewNivel({ nombre: '', dificultad: 'facil', tiempo_limite: '' }); load()
     } catch { setError('Error al crear') }
-  }
+  }, [newNivel, load])
 
-  const startEdit = (n) => { setEditId(n.id); setForm({ nombre: n.nombre, dificultad: n.dificultad, tiempo_limite: n.tiempo_limite || '' }) }
+  const startEdit = useCallback((n) => { setEditId(n.id); setForm({ nombre: n.nombre, dificultad: n.dificultad, tiempo_limite: n.tiempo_limite || '' }) }, [])
 
-  const save = async (id) => {
+  const save = useCallback(async (id) => {
     try { await API.put(`/niveles/${id}/`, { ...form, tiempo_limite: form.tiempo_limite ? Number(form.tiempo_limite) : null }); setEditId(null); load() }
     catch { setError('Error al actualizar') }
-  }
+  }, [form, load])
 
-  const del = async (id) => {
+  const del = useCallback(async (id) => {
     if (!confirm('¿Eliminar este nivel?')) return
     try { await API.delete(`/niveles/${id}/`); load() }
     catch { setError('Error al eliminar') }
-  }
+  }, [load])
 
   return (
     <>

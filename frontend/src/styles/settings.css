@@ -1,0 +1,81 @@
+.settings-card {
+    background: rgba(4, 20, 36, 0.5);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 600px;
+}
+/* ===== Settings Gaming ===== */
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    padding: 0 32px 48px;
+}
+
+.settings-section {
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 28px;
+}
+
+.settings-section .section-header {
+    margin-bottom: 24px;
+}
+
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.settings-info {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.settings-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.settings-info-row:last-child {
+    border-bottom: none;
+}
+
+.settings-info-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 500;
+}
+
+.settings-info-value {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.settings-info-value.verified {
+    color: #22c55e;
+}
+
+.settings-info-value.unverified {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.settings-info-section {
+    align-self: start;
+}
+
+@media (max-width: 768px) {
+    .settings-grid {
+        grid-template-columns: 1fr;
+        padding: 0 16px 48px;
+    }
+}

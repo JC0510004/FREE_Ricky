@@ -6,8 +6,10 @@ from django.utils import timezone
 
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.views import APIView
+
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -42,6 +44,34 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [RegisterThrottle]
 
+    @extend_schema(
+        tags=['Autenticación'],
+        summary='Registrar usuario',
+        description='Registra un nuevo usuario jugador y devuelve tokens de acceso.',
+        request=RegisterSerializer,
+        responses={
+            201: inline_serializer(
+                'RegistroResponse',
+                {
+                    'mensaje': serializers.CharField(),
+                    'usuario': inline_serializer(
+                        'UsuarioInfo',
+                        {
+                            'id': serializers.IntegerField(),
+                            'username': serializers.CharField(),
+                            'email': serializers.EmailField(),
+                            'rol': serializers.CharField(),
+                        },
+                    ),
+                    'access_token': serializers.CharField(),
+                },
+            ),
+            400: inline_serializer(
+                'RegistroError',
+                {'errores': serializers.DictField(child=serializers.ListField(child=serializers.CharField()))},
+            ),
+        },
+    )
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if not serializer.is_valid():
@@ -90,6 +120,38 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [LoginThrottle]
 
+    @extend_schema(
+        tags=['Autenticación'],
+        summary='Iniciar sesión',
+        description='Autentica un usuario (username o email + contraseña) y devuelve un token '
+        'de acceso. El refresh token se envía en una cookie HTTP-only.',
+        request=LoginSerializer,
+        responses={
+            200: inline_serializer(
+                'LoginResponse',
+                {
+                    'mensaje': serializers.CharField(),
+                    'usuario': inline_serializer(
+                        'UsuarioPerfil',
+                        {
+                            'id': serializers.IntegerField(),
+                            'username': serializers.CharField(),
+                            'email': serializers.EmailField(),
+                            'rol': serializers.CharField(),
+                            'fecha_registro': serializers.DateTimeField(allow_null=True),
+                            'is_verified': serializers.BooleanField(),
+                            'last_login': serializers.DateTimeField(allow_null=True),
+                        },
+                    ),
+                    'access_token': serializers.CharField(),
+                },
+            ),
+            400: inline_serializer('LoginError400', {'error': serializers.CharField()}),
+            401: inline_serializer('LoginError401', {'error': serializers.CharField()}),
+            403: inline_serializer('LoginError403', {'error': serializers.CharField()}),
+            429: inline_serializer('LoginError429', {'error': serializers.CharField()}),
+        },
+    )
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
@@ -191,6 +253,25 @@ class RefreshTokenView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = []
 
+    @extend_schema(
+        tags=['Autenticación'],
+        summary='Renovar token',
+        description='Renueva el access token usando el refresh token (del body o de la cookie '
+        'refresh_token). Rota el refresh token (el anterior queda inutilizado).',
+        request=inline_serializer(
+            'RefreshRequest',
+            {'refresh_token': serializers.CharField(required=False)},
+        ),
+        responses={
+            200: inline_serializer(
+                'RefreshResponse',
+                {'access_token': serializers.CharField()},
+            ),
+            400: inline_serializer('RefreshError400', {'error': serializers.CharField()}),
+            401: inline_serializer('RefreshError401', {'error': serializers.CharField()}),
+            500: inline_serializer('RefreshError500', {'error': serializers.CharField()}),
+        },
+    )
     def post(self, request):
         refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
         if not refresh_token:
@@ -243,6 +324,16 @@ class LogoutView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['Autenticación'],
+        summary='Cerrar sesión',
+        description='Invalida el refresh token (blacklist) y limpia la cookie de sesión.',
+        request=inline_serializer(
+            'LogoutRequest',
+            {'refresh_token': serializers.CharField(required=False)},
+        ),
+        responses={200: inline_serializer('LogoutResponse', {'mensaje': serializers.CharField()})},
+    )
     def post(self, request):
         try:
             refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
@@ -269,6 +360,18 @@ class VerifySessionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['Autenticación'],
+        summary='Verificar sesión',
+        description='Verifica que el token de acceso sea válido y devuelve el perfil del usuario autenticado.',
+        responses={200: inline_serializer(
+            'VerifySessionResponse',
+            {
+                'authenticated': serializers.BooleanField(),
+                'usuario': UsuarioSerializer(),
+            },
+        )},
+    )
     def get(self, request):
         serializer = UsuarioSerializer(request.user)
         return Response({'authenticated': True, 'usuario': serializer.data})

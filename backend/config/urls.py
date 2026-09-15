@@ -18,6 +18,12 @@ Including another URLconf
 from django.contrib import admin
 # Importa path para definir rutas URL e include para delegar rutas a otras apps.
 from django.urls import path, include
+# Vistas de drf-spectacular para servir el esquema OpenAPI y las UIs de Swagger/Redoc.
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 # ─── PATRONES DE URL PRINCIPALES ───────────────────────────────────────
 # urlpatterns: Lista de rutas URL que Django procesa de arriba a abajo.
@@ -27,4 +33,10 @@ urlpatterns = [
     # Todas las rutas de la API se delegan a la app 'api' (api/urls.py).
     # Esto mantiene la separación de concerns y el código organizado.
     path('api/', include('api.urls')),
+    # Esquema OpenAPI 3.0 de la API (formato JSON/YAML descargable).
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    # Documentación interactiva: Swagger UI.
+    path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    # Documentación alternativa: Redoc.
+    path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]

@@ -6,7 +6,7 @@
 // - Admins: ven un enlace adicional a "Estadísticas" dentro del menú desplegable
 // El menú desplegable se cierra automáticamente al hacer clic fuera de él.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 
@@ -63,15 +63,19 @@ export default function Navbar() {
 
   // ─── Cerrar el menú al navegar ───
   // Asegura que el menú se cierre cuando el usuario navega a otra página.
-  const closeMenu = () => setMenuOpen(false);
+  // Memorizada para mantener una referencia estable entre renders.
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   // ─── Manejador de cierre de sesión ───
   // Ejecuta el logout del contexto y redirige al landing page.
-  const handleLogout = async () => {
+  // Memorizada: Navbar re-renderiza con frecuencia (scroll, auth) y esta
+  // función se pasa como handler a botones; una referencia estable evita
+  // re-renderizados innecesarios de componentes hijos.
+  const handleLogout = useCallback(async () => {
     closeMenu();
     await logout();
     navigate('/');
-  };
+  }, [closeMenu, logout, navigate]);
 
   // ─── Extrae la inicial del nombre de usuario ───
   // Se usa como avatar por defecto cuando no hay imagen de perfil.

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FREE_RICKY - Diagramas UML</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --primary: #ffb68c;
+            --bg: #0a0e1a;
+            --card: #0f436f;
+            --text: #ffffff;
+            --muted: #c0c0c0;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            padding: 2rem;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 {
+            color: var(--primary);
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 0.5rem;
+        }
+        .subtitle { color: var(--muted); margin-bottom: 2.5rem; }
+        .diagram-card {
+            background: var(--card);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .diagram-card h2 {
+            color: var(--primary);
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .mermaid { text-align: center; }
+        .mermaid svg { max-width: 100%; height: auto; }
+        nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            padding: 0.75rem 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        nav a {
+            color: var(--text);
+            background: var(--card);
+            text-decoration: none;
+            padding: 0.4rem 0.9rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.2s;
+        }
+        nav a:hover {
+            background: var(--primary);
+            color: #0f436f;
+            border-color: var(--primary);
+        }
+        .error-msg {
+            background: #3b1212;
+            border: 1px solid #e11d48;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            color: #fecaca;
+            font-family: monospace;
+            white-space: pre-wrap;
+            display: none;
+        }
+        container { padding-bottom: 3rem; }
+        .footer-note {
+            color: var(--muted);
+            text-align: center;
+            font-size: 0.85rem;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+
+    <div id="erd" class="diagram-card">
+        <h2>1. Diagrama Entidad-Relación</h2>
+        <pre class="mermaid">
+erDiagram
+    USUARIOS {
+        BigAutoField id PK "Auto-increment"
+        CharField_10 rol "admin | jugador"
+        CharField_50 username UK "Unique"
+        EmailField_100 email UK "Unique"
+        CharField_128 password "Hash Argon2"
+        DateTimeField fecha_registro "auto_now_add"
+        BooleanField is_active "default=True"
+        BooleanField is_verified "default=False"
+        IntegerField failed_attempts "default=0"
+        IntegerField lockout_count "default=0"
+        DateTimeField locked_until "null=True"
+        DateTimeField last_login "null=True"
+    }
+
+    NIVELES {
+        BigAutoField id PK "Auto-increment"
+        CharField_100 nombre "NOT NULL"
+        CharField_10 dificultad "facil | medio | dificil"
+        IntegerField tiempo_limite "segundos, null=True"
+        DateTimeField fecha_creacion "auto_now_add"
+    }
+
+    PARTIDAS {
+        BigAutoField id PK "Auto-increment"
+        ForeignKey usuario_id FK "CASCADE → usuarios"
+        ForeignKey nivel_id FK "CASCADE → niveles"
+        IntegerField muertes "default=0"
+        IntegerField tiempo "segundos, null=True"
+        IntegerField puntuacion "null=True"
+        DateTimeField fecha "auto_now_add"
+    }
+
+    CONFIRMACIONES_RESET {
+        CharField_64 token_hash PK "SHA-256 del UUID"
+        CharField_64 codigo_hash "SHA-256 del código"
+        ForeignKey usuario_id FK "CASCADE → usuarios"
+        DateTimeField created_at "auto_now_add"
+        BooleanField confirmado "default=False"
+    }
+
+    USUARIOS ||--o{ PARTIDAS : "jugó"
+    NIVELES ||--o{ PARTIDAS : "jugado en"
+    USUARIOS ||--o{ CONFIRMACIONES_RESET : "solicita"
+
+    %% Índices: idx_partida_usuario_fecha, idx_partida_nivel_fecha, idx_partida_puntuacion
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="clases" class="diagram-card">
+        <h2>2. Diagrama de Clases Django</h2>
+        <pre class="mermaid">
+classDiagram
+    UsuarioManager : +create_user(username, email, password)
+    UsuarioManager : +create_superuser(username, email, password)
+
+    class Usuario {
+        +String rol
+        +String username
+        +String email
+        +String password
+        +DateTime fecha_registro
+        +boolean is_active
+        +boolean is_verified
+        +int failed_attempts
+        +int lockout_count
+        +DateTime locked_until
+        +is_locked() bool
+        +increment_failed_attempts()
+        +reset_failed_attempts()
+        +set_password(raw_password)
+        +check_password(raw_password) bool
+        +dummy_check_password() static
+    }
+
+    class Nivel {
+        +String nombre
+        +String dificultad
+        +int tiempo_limite
+        +DateTime fecha_creacion
+    }
+
+    class Partida {
+        +Usuario usuario
+        +Nivel nivel
+        +int muertes
+        +int tiempo
+        +int puntuacion
+        +DateTime fecha
+    }
+
+    class ConfirmacionReset {
+        +String token_hash
+        +String codigo_hash
+        +Usuario usuario
+        +DateTime created_at
+        +boolean confirmado
+        +is_expired property
+        +verificar_codigo(email, codigo) static
+    }
+
+    AbstractBaseUser <|-- Usuario : hereda
+    BaseUserManager <|-- UsuarioManager : hereda
+    UsuarioManager --> Usuario : crea
+    Usuario "1" --> "*" Partida : tiene
+    Nivel "1" --> "*" Partida : contiene
+    Usuario "1" --> "*" ConfirmacionReset : solicita
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="secuencia" class="diagram-card">
+        <h2>3. Diagrama de Secuencia - Autenticación</h2>
+        <pre class="mermaid">
+sequenceDiagram
+    actor U as Usuario
+    participant FE as Frontend
+    participant BE as Backend Django
+    participant DB as MySQL
+    participant CA as Redis
+
+    rect rgb(15,67,111)
+    Note over U,CA: FLUJO DE LOGIN
+    end
+
+    U->>FE: 1. Ingresa usuario + contrasena
+    FE->>BE: 2. POST /api/login/
+
+    BE->>CA: 3. Verificar rate limit 5/min
+    alt Rate limit excedido
+        CA-->>BE: Limite alcanzado
+        BE-->>FE: 429 Too Many Requests
+        FE-->>U: Demasiados intentos
+    end
+
+    BE->>DB: 4. SELECT usuario WHERE username = ?
+    alt Usuario no existe
+        DB-->>BE: Sin resultados
+        BE->>BE: 5. dummy_check_password proteccion timing
+        BE-->>FE: 401 Credenciales invalidas
+    end
+
+    DB-->>BE: Usuario encontrado
+    BE->>BE: 6. check_password con Argon2
+
+    alt Contrasena incorrecta
+        BE->>DB: 7. Incrementar failed_attempts
+        alt failed_attempts >= 5
+            BE->>DB: 8. Bloquear cuenta 15-1440 min
+            DB-->>BE: Cuenta bloqueada
+        end
+        BE-->>FE: 401 Credenciales invalidas
+    end
+
+    BE->>DB: 9. Reset failed_attempts update last_login
+    BE->>BE: 10. Generar JWT access + refresh
+    BE->>FE: 11. 200 access_token user
+    FE->>FE: 12. access_token en memoria NO localStorage
+    FE->>U: 13. Login exitoso
+
+    rect rgb(15,67,111)
+    Note over U,CA: PETICION AUTENTICADA
+    end
+
+    U->>FE: 14. Navega a /home
+    FE->>BE: 15. GET /api/partidas/ + Bearer token
+    BE->>BE: 16. Verificar JWT HS256
+
+    alt Token expirado 15 min
+        BE-->>FE: 17. 401 Token expired
+        FE->>BE: 18. POST /api/token/refresh/ cookie HttpOnly
+        BE->>DB: 19. Validar refresh token
+        DB-->>BE: Token valido
+        BE->>BE: 20. Generar nuevo access token
+        BE->>FE: 21. 200 new_access_token
+        FE->>BE: 22. Retry peticion original con nuevo token
+    end
+
+    BE->>DB: 23. SELECT partidas WHERE usuario_id = ?
+    DB-->>BE: Lista de partidas
+    BE->>FE: 24. 200 lista partidas
+    FE->>U: 25. Muestra partidas
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="estados" class="diagram-card">
+        <h2>4. Diagrama de Estados - Bloqueo de Cuenta</h2>
+        <pre class="mermaid">
+stateDiagram-v2
+    [*] --> Activo: Registro exitoso
+    Activo --> Activo: Login exitoso
+    Activo --> Fallo1: 1er fallo
+    Fallo1 --> Fallo2: 2do fallo
+    Fallo2 --> Fallo3: 3er fallo
+    Fallo3 --> Fallo4: 4to fallo
+    Fallo4 --> Bloqueo15: 5to fallo
+
+    state Bloqueo15 {
+        [*] --> Bloqueo_15min
+        Bloqueo_15min --> Activo: Login exitoso
+    }
+
+    state Bloqueo60 {
+        [*] --> Bloqueo_60min
+        Bloqueo_60min --> Activo: Login exitoso
+    }
+
+    state Bloqueo360 {
+        [*] --> Bloqueo_6h
+        Bloqueo_6h --> Activo: Login exitoso
+    }
+
+    state Bloqueo1440 {
+        [*] --> Bloqueo_24h
+        Bloqueo_24h --> Activo: Login exitoso
+    }
+
+    Bloqueo15 --> Bloqueo60: 5 fallos mas
+    Bloqueo60 --> Bloqueo360: 5 fallos mas
+    Bloqueo360 --> Bloqueo1440: 5 fallos mas
+    Bloqueo1440 --> Bloqueo1440: 5 fallos mas
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="flujo" class="diagram-card">
+        <h2>5. Diagrama de Flujo - Recuperación de Contraseña</h2>
+        <pre class="mermaid">
+flowchart TD
+    A[Usuario olvida contrasena] --> B[Ingresa email]
+    B --> C[POST /api/password-reset/]
+    C --> D{Email existe?}
+    D -->|No| E[Mensaje generico: Email enviado]
+    D -->|Si| F[Generar token UUID + codigo]
+    F --> G[Guardar SHA-256 en BD]
+    G --> H[Enviar email con codigo + enlace]
+    H --> I[Usuario recibe email]
+    I --> J[Clic en enlace]
+    J --> K[GET password-reset/confirmar/]
+    K --> L{Token valido?}
+    L -->|No| M[Error: Token invalido]
+    L -->|Si| N[Marcar confirmado=True]
+    N --> O[GET password-reset/verificar/]
+    O --> P{Confirmado?}
+    P -->|No| Q[Error: No confirmado]
+    P -->|Si| R[Formulario nueva contrasena]
+    R --> S[Ingresa codigo + nueva contrasena]
+    S --> T[POST password-reset/verificar-codigo/]
+    T --> U{Codigo valido?}
+    U -->|No| V[Error: Codigo incorrecto]
+    U -->|Si| W[POST password-reset/confirm/]
+    W --> X{Token expirado? 15 min}
+    X -->|Si| Y[Error: Token expirado]
+    X -->|No| Z[Actualizar contrasena Argon2]
+    Z --> AA[Eliminar token usado]
+    AA --> AB[Redirigir a /login]
+    AB --> AC[Ingresa nueva contrasena]
+
+    style A fill:#b3e5fc,color:#0f436f,stroke:#0f436f
+    style AC fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style Y fill:#ffcdd2,color:#0f436f,stroke:#0f436f
+    style M fill:#ffcdd2,color:#0f436f,stroke:#0f436f
+    style V fill:#ffcdd2,color:#0f436f,stroke:#0f436f
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="componentes" class="diagram-card">
+        <h2>6. Diagrama de Componentes - Arquitectura</h2>
+        <pre class="mermaid">
+graph TB
+    subgraph Frontend[Frontend React + Vite]
+        UI[UI Components]
+        AuthC[AuthContext]
+        API[Axios Client]
+        Router[React Router]
+    end
+
+    subgraph Backend[Backend Django + DRF]
+        Views[Views]
+        Serial[Serializers]
+        Models[Models]
+        MW[Middleware]
+        JWT[JWT Auth]
+    end
+
+    subgraph Infra[Infraestructura]
+        Nginx[Nginx]
+        MySQL[(MySQL 8.0)]
+        Redis[(Redis 7)]
+    end
+
+    subgraph Sec[Seguridad]
+        RL[Rate Limiting]
+        BF[Brute Force Protection]
+        AL[Audit Logging]
+        SH[Security Headers]
+    end
+
+    UI --> Router
+    Router --> AuthC
+    AuthC --> API
+    API -->|HTTP| Nginx
+    Nginx -->|proxy api| Views
+    Views --> Serial
+    Serial --> Models
+    Models --> MySQL
+    Views --> JWT
+    JWT --> Redis
+    Views --> MW
+    MW --> RL
+    MW --> BF
+    MW --> AL
+    MW --> SH
+    MW --> Redis
+
+    style UI fill:#bbdefb,color:#0f436f,stroke:#0f436f
+    style Views fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style MySQL fill:#fff9c4,color:#0f436f,stroke:#0f436f
+    style Redis fill:#ffcdd2,color:#0f436f,stroke:#0f436f
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="despliegue" class="diagram-card">
+        <h2>7. Diagrama de Despliegue - Google Cloud Platform</h2>
+        <pre class="mermaid">
+flowchart TB
+    U[Usuarios] -->|HTTPS| DNS[DNS saltborn.com]
+    DNS -->|"A record"| IP[IP externa estática]
+    IP --> FW{{"Firewall GCP\nsolo 80/443"}}
+
+    subgraph VM["Google Cloud · VM e2-standard-2 · 2 vCPU / 8 GB RAM"]
+        subgraph Docker["Docker Engine + docker-compose"]
+            subgraph NET["app_network (bridge)"]
+                FE["Frontend\nNginx + React build\n:80"]
+                BE["Backend\nGunicorn + Django DRF\n:8000"]
+                MY[("MySQL 8.0\nvolumen mysql_data")]
+                RD[("Redis 7\ncaché · JWT · rate-limit")]
+            end
+        end
+    end
+
+    FW -->|"HTTP :80"| FE
+    FE -->|"proxy /api y /admin"| BE
+    BE --> MY
+    BE --> RD
+    VM -.-> LG["docker logs\njson-file · rotación 10m"]
+
+    style FE fill:#bbdefb,color:#0f436f,stroke:#0f436f
+    style BE fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style MY fill:#fff9c4,color:#0f436f,stroke:#0f436f
+    style RD fill:#ffcdd2,color:#0f436f,stroke:#0f436f
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="cicd" class="diagram-card">
+        <h2>8. Diagrama CI/CD - GitHub Actions</h2>
+        <pre class="mermaid">
+flowchart TD
+    T{"Triggers\npush main/develop · PR → main"} --> CK[actions/checkout@v4]
+
+    CK --> BT["backend-tests\nPython 3.12 · migrate · test api --parallel"]
+    CK --> BL["backend-lint\nflake8 api/ · max-line 120"]
+    CK --> FL["frontend-lint\nESLint · npm ci + npm run lint"]
+    CK --> FB["frontend-build\nNode 20 · npm run build"]
+
+    BT & BL & FL & FB --> DB["docker-build\nbackend + frontend :ci"]
+    CK --> SS["security-scan\nsafety check · bandit -ll"]
+
+    DB --> P{Docker OK?}
+    P -->|"Sí"| DEP["Deploy manual a GCP\nVM e2-standard-2"]
+    P -->|"No"| FAIL["Checks fallados\nbloquea merge a main"]
+    SS -.->|"avisa si hay CVEs"| P
+
+    style BT fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style BL fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style FL fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style FB fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style DB fill:#bbdefb,color:#0f436f,stroke:#0f436f
+    style DEP fill:#ffe0b2,color:#0f436f,stroke:#0f436f
+    style FAIL fill:#ffcdd2,color:#0f436f,stroke:#0f436f
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="red" class="diagram-card">
+        <h2>9. Diagrama de Red y Seguridad</h2>
+        <pre class="mermaid">
+flowchart TB
+    U[Usuarios] -->|HTTPS 443| FB[IP externa]
+    FB --> FW{{"Firewall GCP\n80 y 443 únicamente"}}
+
+    subgraph VM["VM e2-standard-2"]
+        subgraph DMZ["Capa pública"]
+            NGX["Nginx\nSecurity Headers · CSP · rate-limit 10 r/s\ndeny dotfiles · gzip · SPA fallback"]
+        end
+        subgraph APP["Capa aplicación · red interna"]
+            BE["Backend Django\nJWT HS256 · Argon2 · bloqueo de cuentas\ndummy check_password · CORS + ALLOWED_HOSTS"]
+            MY[("MySQL 8.0\nusuario sin root · sin puerto externo")]
+            RD[("Redis 7\nrequirepass · protected-mode · 64mb LRU")]
+        end
+    end
+
+    FW -->|"proxy /api y /admin"| NGX
+    NGX -->|"proxy_pass backend:8000"| BE
+    BE --> MY
+    BE --> RD
+
+    subgraph Hardening["Hardening de contenedores"]
+        H1["no-new-privileges:true"]
+        H2["read_only filesystem"]
+        H3["tmpfs /tmp · usuario no-root appuser"]
+        H4["límites CPU/RAM · logs rotados"]
+        H5["secretos en .env fuera del repo"]
+    end
+
+    VM -.-> Hardening
+
+    style NGX fill:#bbdefb,color:#0f436f,stroke:#0f436f
+    style BE fill:#c8e6c9,color:#0f436f,stroke:#0f436f
+    style MY fill:#fff9c4,color:#0f436f,stroke:#0f436f
+    style RD fill:#ffcdd2,color:#0f436f,stroke:#0f436f
+    style FW fill:#ffe0b2,color:#0f436f,stroke:#0f436f
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <p class="footer-note">FREE_RICKY - Diagramas revisados el 2026-09-15 | saltborn.com · Google Cloud (VM e2-standard-2) · 9 diagramas</p>
+</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+            primaryColor: '#0f436f',
+            primaryTextColor: '#ffffff',
+            primaryBorderColor: '#ffb68c',
+            lineColor: '#c0c0c0',
+            secondaryColor: '#2F5166',
+            tertiaryColor: '#0a0e1a'
+        },
+        securityLevel: 'loose',
+        maxTextSize: 90000
+    });
+
+    // Capturar errores de cada diagrama por separado
+    document.querySelectorAll('.mermaid').forEach(function(block) {
+        var card = block.closest('.diagram-card');
+        var errBox = card.querySelector('.error-msg');
+        var content = block.textContent.trim();
+
+        // Verificar sintaxis antes de renderizar
+        try {
+            mermaid.parse(content);
+        } catch (e) {
+            errBox.textContent = 'Error de sintaxis en este diagrama:\n' + e.message;
+            errBox.style.display = 'block';
+            block.style.display = 'none';
+        }
+    });
+</script>
+</body>
+</html>

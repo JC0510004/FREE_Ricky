@@ -48,4 +48,14 @@ export default defineConfig({
       },
     },
   },
+
+  // ─── CONFIGURACIÓN DE TESTS (Vitest) ───────────────────────────────
+  test: {
+    // Entorno DOM para tests de componentes React
+    environment: 'jsdom',
+    // Archivo de setup que se ejecuta antes de cada archivo de test
+    setupFiles: './src/test/setup.js',
+    // Buscar archivos de test .test.jsx/.test.js en toda la carpeta src
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
+  },
 })

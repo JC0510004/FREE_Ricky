@@ -4,9 +4,11 @@ from django.db.models import Q, Avg, Count, Sum, Max, Min
 
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
+
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
@@ -19,6 +21,15 @@ from .permissions import IsAdminRole
 
 logger = logging.getLogger('seguridad')
 audit_logger = logging.getLogger('auditoria')
+
+
+class RankingEntrySerializer(serializers.Serializer):
+    posicion = serializers.IntegerField()
+    usuario_id = serializers.IntegerField()
+    username = serializers.CharField()
+    mejor_puntuacion = serializers.IntegerField(allow_null=True)
+    total_partidas = serializers.IntegerField()
+    promedio_puntuacion = serializers.FloatField(allow_null=True)
 
 
 class NivelListView(APIView):
@@ -35,6 +46,12 @@ class NivelListView(APIView):
             return []
         return [JWTAuthentication()]
 
+    @extend_schema(
+        tags=['Niveles'],
+        summary='Listar niveles',
+        description='Devuelve la lista paginada de niveles del juego ordenados por dificultad.',
+        responses={200: NivelSerializer(many=True)},
+    )
     def get(self, request):
         niveles = Nivel.objects.all().order_by('dificultad', 'nombre')
         paginator = self.pagination_class()
@@ -43,6 +60,19 @@ class NivelListView(APIView):
         serializer = NivelSerializer(page_obj, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(
+        tags=['Niveles'],
+        summary='Crear nivel',
+        description='Crea un nuevo nivel del juego. Solo disponible para administradores.',
+        request=NivelSerializer,
+        responses={
+            201: NivelSerializer,
+            400: inline_serializer(
+                'NivelError400',
+                {'error': serializers.CharField(required=False)},
+            ),
+        },
+    )
     def post(self, request):
         if getattr(request.user, 'rol', None) != 'admin':
             return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
@@ -63,6 +93,23 @@ class NivelDetailView(APIView):
         except Nivel.DoesNotExist:
             return None
 
+    @extend_schema(
+        tags=['Niveles'],
+        summary='Actualizar nivel',
+        description='Actualiza parcialmente un nivel existente. Solo administradores.',
+        request=NivelSerializer,
+        responses={
+            200: NivelSerializer,
+            400: inline_serializer(
+                'NivelUpdateError400',
+                {'error': serializers.CharField(required=False)},
+            ),
+            404: inline_serializer(
+                'NivelNotFound',
+                {'error': serializers.CharField()},
+            ),
+        },
+    )
     def put(self, request, pk):
         nivel = self.get_object(pk)
         if not nivel:
@@ -73,6 +120,21 @@ class NivelDetailView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        tags=['Niveles'],
+        summary='Eliminar nivel',
+        description='Elimina un nivel existente. Solo administradores.',
+        responses={
+            200: inline_serializer(
+                'NivelDeleted',
+                {'mensaje': serializers.CharField()},
+            ),
+            404: inline_serializer(
+                'NivelDeleteNotFound',
+                {'error': serializers.CharField()},
+            ),
+        },
+    )
     def delete(self, request, pk):
         nivel = self.get_object(pk)
         if not nivel:
@@ -87,6 +149,12 @@ class PartidaListView(APIView):
     pagination_class = PageNumberPagination
     page_size = 20
 
+    @extend_schema(
+        tags=['Partidas'],
+        summary='Listar mis partidas',
+        description='Devuelve la lista paginada de partidas del usuario autenticado.',
+        responses={200: PartidaSerializer(many=True)},
+    )
     def get(self, request):
         partidas = Partida.objects.select_related('nivel', 'usuario').filter(usuario=request.user).order_by('-fecha')
         paginator = self.pagination_class()
@@ -95,6 +163,19 @@ class PartidaListView(APIView):
         serializer = PartidaSerializer(page_obj, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(
+        tags=['Partidas'],
+        summary='Registrar partida',
+        description='Registra una nueva partida jugada asociada al usuario autenticado.',
+        request=PartidaCreateSerializer,
+        responses={
+            201: PartidaSerializer,
+            400: inline_serializer(
+                'PartidaError400',
+                {'error': serializers.CharField(required=False)},
+            ),
+        },
+    )
     def post(self, request):
         serializer = PartidaCreateSerializer(data=request.data)
         if serializer.is_valid():
@@ -114,6 +195,23 @@ class PartidaDetailView(APIView):
         except Partida.DoesNotExist:
             return None
 
+    @extend_schema(
+        tags=['Partidas'],
+        summary='Detalle de partida',
+        description='Devuelve una partida individual. Cada usuario solo ve sus propias partidas; '
+        'los administradores pueden ver cualquier partida.',
+        responses={
+            200: PartidaSerializer,
+            403: inline_serializer(
+                'PartidaForbidden',
+                {'error': serializers.CharField()},
+            ),
+            404: inline_serializer(
+                'PartidaNotFound',
+                {'error': serializers.CharField()},
+            ),
+        },
+    )
     def get(self, request, pk):
         partida = self.get_object(pk)
         if not partida:
@@ -127,6 +225,12 @@ class PartidaDetailView(APIView):
 class RankingView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        tags=['Ranking'],
+        summary='Ver ranking',
+        description='Devuelve los 20 mejores jugadores ordenados por mejor puntuación.',
+        responses={200: RankingEntrySerializer(many=True)},
+    )
     def get(self, request):
         ranking = (
             Partida.objects.values('usuario', 'usuario__username')
@@ -156,6 +260,12 @@ class UserStatsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=['Estadísticas'],
+        summary='Estadísticas del usuario',
+        description='Devuelve las estadísticas agregadas de partidas del usuario autenticado.',
+        responses={200: UserStatsSerializer},
+    )
     def get(self, request):
         partidas = Partida.objects.filter(usuario=request.user)
         total = partidas.count()

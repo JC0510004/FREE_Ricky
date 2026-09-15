@@ -1,0 +1,1520 @@
+openapi: 3.0.3
+info:
+  title: Saltborn API
+  version: 1.0.0
+  description: API REST de Saltborn (Free Ricky). Gestiona la autenticación JWT de
+    usuarios, el registro de partidas, el ranking de puntuaciones y las estadísticas
+    de juego.
+paths:
+  /api/admin/partidas/:
+    get:
+      operationId: admin_partidas_list
+      description: Devuelve la lista paginada de todas las partidas de todos los usuarios.
+        Solo administradores.
+      summary: Partidas (admin)
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Administración
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPartidaList'
+          description: ''
+  /api/admin/stats/:
+    get:
+      operationId: admin_stats_retrieve
+      description: 'Devuelve estadísticas globales de la plataforma: totals de usuarios,
+        partidas, niveles, puntuaciones y el jugador más activo.'
+      summary: Estadísticas globales
+      tags:
+      - Administración
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatsResponse'
+          description: ''
+  /api/cambiar-password/:
+    post:
+      operationId: cambiar_password_create
+      description: Cambia la contraseña del usuario autenticado.
+      summary: Cambiar contraseña
+      tags:
+      - Usuarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePasswordOK'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePasswordError400'
+          description: ''
+  /api/estadisticas/:
+    get:
+      operationId: estadisticas_retrieve
+      description: Devuelve las estadísticas agregadas de partidas del usuario autenticado.
+      summary: Estadísticas del usuario
+      tags:
+      - Estadísticas
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+          description: ''
+  /api/login/:
+    post:
+      operationId: login_create
+      description: Autentica un usuario (username o email + contraseña) y devuelve
+        un token de acceso. El refresh token se envía en una cookie HTTP-only.
+      summary: Iniciar sesión
+      tags:
+      - Autenticación
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Login'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Login'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError400'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError401'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError403'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginError429'
+          description: ''
+  /api/logout/:
+    post:
+      operationId: logout_create
+      description: Invalida el refresh token (blacklist) y limpia la cookie de sesión.
+      summary: Cerrar sesión
+      tags:
+      - Autenticación
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+          description: ''
+  /api/niveles/:
+    get:
+      operationId: niveles_list
+      description: Devuelve la lista paginada de niveles del juego ordenados por dificultad.
+      summary: Listar niveles
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Niveles
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNivelList'
+          description: ''
+    post:
+      operationId: niveles_create
+      description: Crea un nuevo nivel del juego. Solo disponible para administradores.
+      summary: Crear nivel
+      tags:
+      - Niveles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Nivel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Nivel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Nivel'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Nivel'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NivelError400'
+          description: ''
+  /api/niveles/{id}/:
+    put:
+      operationId: niveles_update
+      description: Actualiza parcialmente un nivel existente. Solo administradores.
+      summary: Actualizar nivel
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Niveles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Nivel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Nivel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Nivel'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Nivel'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NivelUpdateError400'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NivelNotFound'
+          description: ''
+    delete:
+      operationId: niveles_destroy
+      description: Elimina un nivel existente. Solo administradores.
+      summary: Eliminar nivel
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Niveles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NivelDeleted'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NivelDeleteNotFound'
+          description: ''
+  /api/partidas/:
+    get:
+      operationId: partidas_list
+      description: Devuelve la lista paginada de partidas del usuario autenticado.
+      summary: Listar mis partidas
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Partidas
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPartidaList'
+          description: ''
+    post:
+      operationId: partidas_create
+      description: Registra una nueva partida jugada asociada al usuario autenticado.
+      summary: Registrar partida
+      tags:
+      - Partidas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartidaCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PartidaCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PartidaCreate'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partida'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartidaError400'
+          description: ''
+  /api/partidas/{id}/:
+    get:
+      operationId: partidas_retrieve
+      description: Devuelve una partida individual. Cada usuario solo ve sus propias
+        partidas; los administradores pueden ver cualquier partida.
+      summary: Detalle de partida
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Partidas
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partida'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartidaForbidden'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartidaNotFound'
+          description: ''
+  /api/password-reset/:
+    post:
+      operationId: password_reset_create
+      description: Recibe un email y, si la cuenta existe, envía un enlace de restablecimiento.
+        La respuesta es idéntica sin importar si el email existe o no (prevención
+        de enumeración).
+      summary: Solicitar restablecimiento de contraseña
+      tags:
+      - Contraseña
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordReset'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordReset'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordReset'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetOK'
+          description: ''
+  /api/password-reset/confirm/:
+    post:
+      operationId: password_reset_confirm_create
+      description: Establece la nueva contraseña usando el token recibido por email.
+      summary: Confirmar restablecimiento de contraseña
+      tags:
+      - Contraseña
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetConfirmOK'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetConfirmError'
+          description: ''
+  /api/password-reset/confirmar/:
+    post:
+      operationId: password_reset_confirmar_create
+      description: Endpoint HTML que valida el token del enlace de email para restablecimiento
+        de contraseña. Marca el token como confirmado y redirige al frontend.
+      summary: Confirmar identidad (enlace por email)
+      tags:
+      - Contraseña
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmarIdentidadRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConfirmarIdentidadRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConfirmarIdentidadRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: string
+          description: ''
+  /api/password-reset/verificar/:
+    get:
+      operationId: password_reset_verificar_retrieve
+      description: Comprueba el estado de confirmación de un token de restablecimiento.
+      summary: Verificar si el token fue confirmado
+      tags:
+      - Contraseña
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificarConfirmacionResponse'
+          description: ''
+  /api/ranking/:
+    get:
+      operationId: ranking_list
+      description: Devuelve los 20 mejores jugadores ordenados por mejor puntuación.
+      summary: Ver ranking
+      tags:
+      - Ranking
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RankingEntry'
+          description: ''
+  /api/register/:
+    post:
+      operationId: register_create
+      description: Registra un nuevo usuario jugador y devuelve tokens de acceso.
+      summary: Registrar usuario
+      tags:
+      - Autenticación
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Register'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Register'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Register'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroError'
+          description: ''
+  /api/token/refresh/:
+    post:
+      operationId: token_refresh_create
+      description: Renueva el access token usando el refresh token (del body o de
+        la cookie refresh_token). Rota el refresh token (el anterior queda inutilizado).
+      summary: Renovar token
+      tags:
+      - Autenticación
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshError400'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshError401'
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshError500'
+          description: ''
+  /api/usuarios/:
+    get:
+      operationId: usuarios_list
+      description: Devuelve la lista paginada de usuarios activos. Solo administradores.
+      summary: Listar usuarios
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Usuarios
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsuarioList'
+          description: ''
+  /api/usuarios/{id}/:
+    get:
+      operationId: usuarios_retrieve
+      description: Devuelve el perfil de un usuario. Un usuario solo ve su propio
+        perfil; los administradores pueden ver cualquier perfil.
+      summary: Detalle de usuario
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Usuarios
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usuario'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioForbidden'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioNotFound'
+          description: ''
+    put:
+      operationId: usuarios_update
+      description: Actualiza parcialmente el perfil de un usuario (username/email).
+        Un usuario solo edita su propio perfil; los administradores pueden editar
+        cualquier perfil.
+      summary: Actualizar perfil
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Usuarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Usuario'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Usuario'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Usuario'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioUpdateOK'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioUpdateError400'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioUpdateForbidden'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioUpdateNotFound'
+          description: ''
+    delete:
+      operationId: usuarios_destroy
+      description: Desactiva (soft delete) un usuario. Solo administradores.
+      summary: Desactivar usuario
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Usuarios
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDeleted'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDeleteForbidden'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDeleteNotFound'
+          description: ''
+  /api/verify/:
+    get:
+      operationId: verify_retrieve
+      description: Verifica que el token de acceso sea válido y devuelve el perfil
+        del usuario autenticado.
+      summary: Verificar sesión
+      tags:
+      - Autenticación
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifySessionResponse'
+          description: ''
+components:
+  schemas:
+    AdminStatsResponse:
+      type: object
+      properties:
+        total_usuarios:
+          type: integer
+        total_partidas:
+          type: integer
+        total_niveles:
+          type: integer
+        mejor_puntuacion_global:
+          type: integer
+        promedio_puntuacion_global:
+          type: number
+          format: double
+        total_muertes_global:
+          type: integer
+        jugador_mas_activo:
+          type: string
+          nullable: true
+      required:
+      - jugador_mas_activo
+      - mejor_puntuacion_global
+      - promedio_puntuacion_global
+      - total_muertes_global
+      - total_niveles
+      - total_partidas
+      - total_usuarios
+    ChangePasswordError400:
+      type: object
+      properties:
+        error:
+          type: string
+    ChangePasswordOK:
+      type: object
+      properties:
+        mensaje:
+          type: string
+      required:
+      - mensaje
+    ChangePasswordRequest:
+      type: object
+      properties:
+        old_password:
+          type: string
+          writeOnly: true
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        confirm_password:
+          type: string
+          writeOnly: true
+          minLength: 8
+      required:
+      - confirm_password
+      - new_password
+      - old_password
+    ConfirmarIdentidadRequest:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+      - token
+    DificultadEnum:
+      enum:
+      - facil
+      - medio
+      - dificil
+      type: string
+      description: |-
+        * `facil` - Fácil
+        * `medio` - Medio
+        * `dificil` - Difícil
+    Login:
+      type: object
+      properties:
+        username:
+          type: string
+          maxLength: 50
+        password:
+          type: string
+          maxLength: 128
+      required:
+      - password
+      - username
+    LoginError400:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    LoginError401:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    LoginError403:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    LoginError429:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    LoginResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+        usuario:
+          $ref: '#/components/schemas/UsuarioPerfil'
+        access_token:
+          type: string
+      required:
+      - access_token
+      - mensaje
+      - usuario
+    LogoutRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+    LogoutResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+      required:
+      - mensaje
+    Nivel:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nombre:
+          type: string
+          maxLength: 100
+        dificultad:
+          $ref: '#/components/schemas/DificultadEnum'
+        tiempo_limite:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+        fecha_creacion:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - fecha_creacion
+      - id
+      - nombre
+    NivelDeleteNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    NivelDeleted:
+      type: object
+      properties:
+        mensaje:
+          type: string
+      required:
+      - mensaje
+    NivelError400:
+      type: object
+      properties:
+        error:
+          type: string
+    NivelNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    NivelUpdateError400:
+      type: object
+      properties:
+        error:
+          type: string
+    PaginatedNivelList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Nivel'
+    PaginatedPartidaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Partida'
+    PaginatedUsuarioList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Usuario'
+    Partida:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        usuario:
+          type: integer
+          readOnly: true
+        usuario_username:
+          type: string
+          readOnly: true
+        nivel:
+          type: integer
+        nivel_nombre:
+          type: string
+          readOnly: true
+        nivel_dificultad:
+          type: string
+          readOnly: true
+        muertes:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        tiempo:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+        puntuacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+        fecha:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - fecha
+      - id
+      - nivel
+      - nivel_dificultad
+      - nivel_nombre
+      - usuario
+      - usuario_username
+    PartidaCreate:
+      type: object
+      properties:
+        nivel:
+          type: integer
+        muertes:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        tiempo:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+        puntuacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+      required:
+      - nivel
+    PartidaError400:
+      type: object
+      properties:
+        error:
+          type: string
+    PartidaForbidden:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    PartidaNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    PasswordReset:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+      - email
+    PasswordResetConfirm:
+      type: object
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+          minLength: 8
+        confirm_password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+          minLength: 8
+      required:
+      - confirm_password
+      - password
+      - token
+    PasswordResetConfirmError:
+      type: object
+      properties:
+        error:
+          type: string
+    PasswordResetConfirmOK:
+      type: object
+      properties:
+        mensaje:
+          type: string
+      required:
+      - mensaje
+    PasswordResetOK:
+      type: object
+      properties:
+        mensaje:
+          type: string
+      required:
+      - mensaje
+    RankingEntry:
+      type: object
+      properties:
+        posicion:
+          type: integer
+        usuario_id:
+          type: integer
+        username:
+          type: string
+        mejor_puntuacion:
+          type: integer
+          nullable: true
+        total_partidas:
+          type: integer
+        promedio_puntuacion:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - mejor_puntuacion
+      - posicion
+      - promedio_puntuacion
+      - total_partidas
+      - username
+      - usuario_id
+    RefreshError400:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    RefreshError401:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    RefreshError500:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    RefreshRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+    RefreshResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+      required:
+      - access_token
+    Register:
+      type: object
+      properties:
+        username:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+          maxLength: 100
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+          minLength: 8
+        confirm_password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+          minLength: 8
+        rol:
+          allOf:
+          - $ref: '#/components/schemas/RolEnum'
+          readOnly: true
+      required:
+      - confirm_password
+      - email
+      - password
+      - rol
+      - username
+    RegistroError:
+      type: object
+      properties:
+        errores:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      required:
+      - errores
+    RegistroResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+        usuario:
+          $ref: '#/components/schemas/UsuarioInfo'
+        access_token:
+          type: string
+      required:
+      - access_token
+      - mensaje
+      - usuario
+    RolEnum:
+      enum:
+      - admin
+      - jugador
+      type: string
+      description: |-
+        * `admin` - Admin
+        * `jugador` - Jugador
+    UserStats:
+      type: object
+      properties:
+        total_partidas:
+          type: integer
+        mejor_puntuacion:
+          type: integer
+        peor_puntuacion:
+          type: integer
+        promedio_puntuacion:
+          type: number
+          format: double
+        total_muertes:
+          type: integer
+        promedio_muertes:
+          type: number
+          format: double
+        tiempo_total:
+          type: integer
+        nivel_favorito:
+          type: string
+          nullable: true
+        partidas_por_dificultad:
+          type: object
+          additionalProperties:
+            type: integer
+      required:
+      - mejor_puntuacion
+      - nivel_favorito
+      - partidas_por_dificultad
+      - peor_puntuacion
+      - promedio_muertes
+      - promedio_puntuacion
+      - tiempo_total
+      - total_muertes
+      - total_partidas
+    Usuario:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+          maxLength: 100
+        rol:
+          allOf:
+          - $ref: '#/components/schemas/RolEnum'
+          readOnly: true
+        fecha_registro:
+          type: string
+          format: date-time
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+        is_verified:
+          type: boolean
+          readOnly: true
+        last_login:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - email
+      - fecha_registro
+      - id
+      - is_active
+      - is_verified
+      - last_login
+      - rol
+      - username
+    UsuarioDeleteForbidden:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UsuarioDeleteNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UsuarioDeleted:
+      type: object
+      properties:
+        mensaje:
+          type: string
+      required:
+      - mensaje
+    UsuarioForbidden:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UsuarioInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        rol:
+          type: string
+      required:
+      - email
+      - id
+      - rol
+      - username
+    UsuarioNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UsuarioPerfil:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        rol:
+          type: string
+        fecha_registro:
+          type: string
+          format: date-time
+          nullable: true
+        is_verified:
+          type: boolean
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - email
+      - fecha_registro
+      - id
+      - is_verified
+      - last_login
+      - rol
+      - username
+    UsuarioUpdateError400:
+      type: object
+      properties:
+        error:
+          type: string
+    UsuarioUpdateForbidden:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UsuarioUpdateNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UsuarioUpdateOK:
+      type: object
+      properties:
+        mensaje:
+          type: string
+        usuario:
+          $ref: '#/components/schemas/Usuario'
+      required:
+      - mensaje
+      - usuario
+    VerificarConfirmacionResponse:
+      type: object
+      properties:
+        confirmado:
+          type: boolean
+      required:
+      - confirmado
+    VerifySessionResponse:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        usuario:
+          $ref: '#/components/schemas/Usuario'
+      required:
+      - authenticated
+      - usuario
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+servers:
+- url: /api/

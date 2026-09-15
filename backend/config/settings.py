@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',      # Autenticación JWT (JSON Web Tokens)
     'rest_framework_simplejwt.token_blacklist',  # Blacklist de tokens JWT
     'django_ratelimit',             # Limitación de tasa de peticiones
+    'drf_spectacular',              # Documentación OpenAPI/Swagger de la API
     # Local - Aplicaciones propias del proyecto
     'api',                           # App principal con modelos, vistas y lógica de negocio
 ]
@@ -238,6 +239,33 @@ REST_FRAMEWORK = {
     ),
     # Manejador de excepciones personalizado para respuestas de error consistentes.
     'EXCEPTION_HANDLER': 'api.utils.custom_exception_handler',
+
+    # Generador de esquemas OpenAPI para documentación automática (drf-spectacular).
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# ─── OPENAPI / SWAGGER ──────────────────────────────────────────────────
+# Configuración del esquema OpenAPI 3.0 generado por drf-spectacular.
+SPECTACULAR_SETTINGS = {
+    # Título y descripción que aparecen en la UI de Swagger.
+    'TITLE': 'Saltborn API',
+    'DESCRIPTION': (
+        'API REST de Saltborn (Free Ricky). Gestiona la autenticación JWT de '
+        'usuarios, el registro de partidas, el ranking de puntuaciones y las '
+        'estadísticas de juego.'
+    ),
+    # Versión de la API reflejada en el documento OpenAPI.
+    'VERSION': '1.0.0',
+    # Solo se documenta el esquema por defecto (los componentes de auth JWT
+    # como /token/refresh se documentan explícitamente en api/urls.py).
+    'SERVE_INCLUDE_SCHEMA': False,
+    # Prefijo de la base URL: /api/ para las rutas documentadas.
+    'SERVERS': [{'url': '/api/'}],
+    # Los endpoints que requieren autenticación muestran el esquema Bearer JWT.
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+    },
 }
 
 # En modo testing, se relajan los límites de rate para no fallar tests automatizados.
@@ -338,6 +366,10 @@ USE_TZ = True             # Activa soporte de zona horaria (almacena fechas en U
 # ─── LOGGING DE SEGURIDAD ──────────────────────────────────────────────
 # Sistema de logging configurado para registrar eventos de seguridad y auditoría.
 # Los logs se rotan automáticamente cuando alcanzan 10MB, manteniendo 10 backups.
+# En producción el handler de consola usa formato JSON (fácil de parsear por
+# agregadores como Cloud Logging/CloudWatch); en desarrollo se mantiene texto plano.
+_json_logging = not DEBUG
+
 LOGGING = {
     'version': 1,                          # Versión del formato de logging de Django
     'disable_existing_loggers': False,     # No desactiva loggers existentes de otras apps
@@ -359,14 +391,20 @@ LOGGING = {
             'format': '[{asctime}] {levelname} [AUDITORIA] {message}',
             'style': '{',
         },
+        'json': {
+            # Formato JSON estructurado (una línea JSON por registro).
+            # Solo se usa en producción para facilitar el parseo automático.
+            '()': 'config.logging_formatters.JsonFormatter',
+        },
     },
 
     # Handlers: definen DÓNDE se escriben los logs.
     'handlers': {
         'console': {
             # Envía logs a la consola estándar (útil en desarrollo).
+            # En producción usa JSON; en desarrollo texto plano legible.
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'json' if _json_logging else 'verbose',
         },
         'seguridad_file': {
             # Archivo rotatorio para logs de seguridad.
@@ -375,7 +413,7 @@ LOGGING = {
             'filename': BASE_DIR / 'logs' / 'seguridad.log',
             'maxBytes': 10485760,       # 10 MB por archivo
             'backupCount': 10,          # Mantener 10 archivos de respaldo
-            'formatter': 'seguridad',
+            'formatter': 'json' if _json_logging else 'seguridad',
         },
         'auditoria_file': {
             # Archivo rotatorio para logs de auditoría.
@@ -383,7 +421,7 @@ LOGGING = {
             'filename': BASE_DIR / 'logs' / 'auditoria.log',
             'maxBytes': 10485760,       # 10 MB por archivo
             'backupCount': 10,          # Mantener 10 archivos de respaldo
-            'formatter': 'auditoria',
+            'formatter': 'json' if _json_logging else 'auditoria',
         },
     },
 

@@ -1,0 +1,92 @@
+/* Responsive */
+@media (max-width: 768px) {
+    .navbar-container {
+        padding: 16px 16px;
+    }
+
+    .navbar-auth {
+        gap: 8px;
+    }
+
+    .navbar-button{
+        padding: 8px 16px;
+        font-size: 10px;
+    }
+
+    .navbar-auth .navbar-link {
+        font-size: 10px;
+    }
+    .manifesto-card {
+        padding: 24px;
+    }
+
+    .manifesto-content {
+        font-size: 16px;
+    }
+
+    .character-gallery {
+        gap: 24px;
+    }
+
+    .team-container {
+        padding: 24px;
+        gap: 32px;
+    }
+
+    .team-title {
+        font-size: 36px;
+    }
+}
+/* ===== Responsive Auth/Dashboard ===== */
+@media (max-width: 768px) {
+    .auth-card {
+        padding: 24px;
+    }
+
+    .auth-logo {
+        font-size: 16px;
+        margin-bottom: 24px;
+    }
+
+    .auth-title {
+        font-size: 24px;
+    }
+
+    .dashboard-nav-inner {
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        gap: 12px;
+    }
+
+    .dashboard-nav-links {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .dashboard-user-area {
+        gap: 8px;
+    }
+
+    .dashboard-username {
+        display: none;
+    }
+
+    .dashboard-main {
+        padding: 140px 16px 32px;
+    }
+
+    .dashboard-welcome h1 {
+        font-size: 28px;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 10px 12px;
+        font-size: 12px;
+    }
+
+    .admin-actions {
+        flex-direction: column;
+    }
+}

@@ -2,8 +2,11 @@ from django.db.models import Avg, Count, Sum, Max
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import serializers
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
+
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
@@ -18,6 +21,12 @@ class AdminPartidasView(APIView):
     pagination_class = PageNumberPagination
     page_size = 50
 
+    @extend_schema(
+        tags=['Administración'],
+        summary='Partidas (admin)',
+        description='Devuelve la lista paginada de todas las partidas de todos los usuarios. Solo administradores.',
+        responses={200: PartidaSerializer(many=True)},
+    )
     def get(self, request):
         partidas = Partida.objects.select_related('usuario', 'nivel').order_by('-fecha')
         paginator = self.pagination_class()
@@ -31,6 +40,24 @@ class AdminStatsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminRole]
 
+    @extend_schema(
+        tags=['Administración'],
+        summary='Estadísticas globales',
+        description='Devuelve estadísticas globales de la plataforma: totals de usuarios, '
+        'partidas, niveles, puntuaciones y el jugador más activo.',
+        responses={200: inline_serializer(
+            'AdminStatsResponse',
+            {
+                'total_usuarios': serializers.IntegerField(),
+                'total_partidas': serializers.IntegerField(),
+                'total_niveles': serializers.IntegerField(),
+                'mejor_puntuacion_global': serializers.IntegerField(),
+                'promedio_puntuacion_global': serializers.FloatField(),
+                'total_muertes_global': serializers.IntegerField(),
+                'jugador_mas_activo': serializers.CharField(allow_null=True),
+            },
+        )},
+    )
     def get(self, request):
         total_usuarios = Usuario.objects.count()
         total_partidas = Partida.objects.count()

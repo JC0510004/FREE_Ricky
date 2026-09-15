@@ -32,12 +32,12 @@ services:
     # - maxmemory 64mb: Limita el uso de RAM a 64 megabytes para evitar consumo excesivo.
     # - maxmemory-policy allkeys-lru: Elimina las claves menos recientemente usadas (LRU)
     #   cuando se alcanza el límite de memoria, liberando espacio automáticamente.
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-redis_secret_2024} --protected-mode yes
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD no configurada en .env} --protected-mode yes
 
     # Verificación de salud: ejecuta un ping a Redis para confirmar que está operativo.
     # Si Redis no responde, Docker lo marca como "unhealthy" y puede reiniciarlo.
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret_2024}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD no configurada en .env}", "ping"]
       interval: 10s       # Cada 10 segundos verifica la salud
       timeout: 3s         # Si no responde en 3 segundos, se considera fallido
       retries: 5          # Tras 5 fallos consecutivos, marca el servicio como unhealthy
@@ -64,8 +64,10 @@ services:
         max-size: "10m"   # Cada archivo de log no excede 10 megabytes
         max-file: "3"     # Mantiene un máximo de 3 archivos rotados (30MB total)
 
-  # ─── MYSQL ─────────────────────────────────────────────────────────────────
+# ─── MYSQL ─────────────────────────────────────────────────────────────────
   # Base de datos relacional principal para almacenar datos persistentes de la aplicación.
+  # Sin valores por defecto para credenciales: ${VAR:?error} hace que Compose FALLE
+  # si MYSQL_ROOT_PASSWORD/DB_PASSWORD no están definidas en .env (fail-closed).
   mysql:
     # Imagen oficial de MySQL 8.0 con soporte completo para UTF-8 y autenticación moderna.
     image: mysql:8.0
@@ -90,13 +92,13 @@ services:
       --max-connections=200
       --innodb-buffer-pool-size=256M
 
-    # Variables de entorno para inicialización de MySQL:
-    # Se usan valores por defecto si no existen en el archivo .env del proyecto.
+    # Variables de entorno para inicialización de MySQL.
+    # MYSQL_ROOT_PASSWORD y MYSQL_PASSWORD son OBLIGATORIAS desde .env.
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}     # Contraseña del usuario root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD no configurada en .env}   # Contraseña del usuario root
       MYSQL_DATABASE: ${DB_NAME:-free_ricky}        # Base de datos creada al iniciar
       MYSQL_USER: ${DB_USER:-free_ricky}             # Usuario sin privilegios root
-      MYSQL_PASSWORD: ${DB_PASSWORD:-root}           # Contraseña del usuario normal
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no configurada en .env}   # Contraseña del usuario normal
 
     # Puerto 3307 en el host para evitar conflicto con una posible instalación local de MySQL.
     # El contenedor usa el puerto estándar 3306 internamente.
@@ -114,7 +116,7 @@ services:
 
     # Verificación de salud usando mysqladmin ping para confirmar que MySQL acepta conexiones.
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD no configurada en .env}"]
       interval: 10s       # Verifica cada 10 segundos
       timeout: 5s         # Timeout de 5 segundos por intento
       retries: 10         # 10 intentos antes de marcar unhealthy (MySQL tarda en iniciar)
@@ -172,9 +174,9 @@ services:
     # Cada una puede sobreescribirse en .env para diferentes entornos (dev, staging, prod).
     environment:
       # Claves secretas para firma de sesiones y tokens JWT (OBLIGATORIAS en producción).
-      # Los defaults son solo para desarrollo local con Docker; en prod se debe usar .env.
-      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-change-in-production}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-jwt-insecure-dev-only-change-in-production}
+      # Usan ${VAR:?error}: si no están en .env, Compose FALLA (fail-closed, sin defaults inseguros).
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY no configurada en .env}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY no configurada en .env}
 
       # DEBUG=False en producción para no mostrar trazas de errores al usuario.
       DEBUG: ${DEBUG:-False}
@@ -193,7 +195,7 @@ services:
       # Configuración de base de datos para Django ORM.
       DB_NAME: ${DB_NAME:-free_ricky}
       DB_USER: ${DB_USER:-free_ricky}
-      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no configurada en .env}
       DB_HOST: mysql          # Nombre del servicio Docker (resolución DNS interna)
       DB_PORT: 3306           # Puerto estándar de MySQL dentro de la red Docker
 
@@ -212,7 +214,7 @@ services:
 
       # Conexión a Redis para caché: redis://redis:6379/0
       # Usa el nombre del servicio "redis" como host (resolución DNS de Docker).
-      CACHE_URL: redis://:${REDIS_PASSWORD:-redis_secret_2024}@redis:6379/0
+      CACHE_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD no configurada en .env}@redis:6379/0
 
       # Redirección SSL en producción: fuerza HTTPS para todas las peticiones.
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}

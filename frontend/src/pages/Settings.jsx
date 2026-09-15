@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import API from '../api/axios'
@@ -39,6 +39,13 @@ function InfoRow({ label, value, accent = false }) {
     </div>
   )
 }
+
+// Memoización: InfoRow/Label reciben solo props primitivas (label, value, accent).
+// Al escribir en los formularios de perfil/contraseña, Settings re-renderiza
+// frecuentemente; memo evita re-renderizar las filas de la tarjeta "Cuenta"
+// cuyos valores no han cambiado.
+const MemoInfoRow = memo(InfoRow)
+const MemoLabel = memo(Label)
 
 export default function Settings() {
   const { user, updateUser, logout } = useAuth()
@@ -150,11 +157,11 @@ export default function Settings() {
               <form onSubmit={handleSaveProfile} noValidate>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-                    <Label>Nombre de usuario</Label>
+                    <MemoLabel>Nombre de usuario</MemoLabel>
                     <input className="fr-input" value={username} onChange={e => setUsername(e.target.value)} />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-                    <Label>Correo electrónico</Label>
+                    <MemoLabel>Correo electrónico</MemoLabel>
                     <input className="fr-input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
                   </label>
 
@@ -177,15 +184,15 @@ export default function Settings() {
               <form onSubmit={handleChangePassword} noValidate>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-                    <Label>Contraseña actual</Label>
+                    <MemoLabel>Contraseña actual</MemoLabel>
                     <input className="fr-input" type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} autoComplete="current-password" />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-                    <Label>Nueva contraseña</Label>
+                    <MemoLabel>Nueva contraseña</MemoLabel>
                     <input className="fr-input" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
-                    <Label>Confirmar nueva contraseña</Label>
+                    <MemoLabel>Confirmar nueva contraseña</MemoLabel>
                     <input className="fr-input" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" />
                   </label>
 
@@ -206,15 +213,15 @@ export default function Settings() {
             {/* Cuenta - full width */}
             <div style={{ gridColumn: '1 / -1' }}>
               <PanelCard icon={ShieldCheck} title="Cuenta" subtitle="Estado y permisos" wide>
-                <InfoRow label="Rol" value={user?.rol === 'admin' ? 'Administrador' : 'Jugador'} accent />
-                <InfoRow label="Miembro desde" value={
+                <MemoInfoRow label="Rol" value={user?.rol === 'admin' ? 'Administrador' : 'Jugador'} accent />
+                <MemoInfoRow label="Miembro desde" value={
                   user?.fecha_registro
                     ? new Date(user.fecha_registro).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })
                     : '-'
                 } />
-                <InfoRow label="Email verificado" value={user?.is_verified ? 'Sí' : 'No'} />
+                <MemoInfoRow label="Email verificado" value={user?.is_verified ? 'Sí' : 'No'} />
                 {user?.last_login && (
-                  <InfoRow label="Último acceso" value={
+                  <MemoInfoRow label="Último acceso" value={
                     new Date(user.last_login).toLocaleDateString('es-ES', {
                       year: 'numeric', month: 'long', day: 'numeric',
                       hour: '2-digit', minute: '2-digit'

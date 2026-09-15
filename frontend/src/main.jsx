@@ -6,7 +6,7 @@
 // ─── IMPORTACIONES DE REACT ───────────────────────────────────────────
 // StrictMode activa verificaciones adicionales en desarrollo para detectar
 // problemas potenciales (renderizados dobles, efectos secundarios peligrosos, etc.)
-import { StrictMode } from 'react'
+import { StrictMode, lazy, Suspense } from 'react'
 // createRoot es la API moderna de React 18 para montar la aplicación en el DOM
 // (reemplaza al antiguo ReactDOM.render)
 import { createRoot } from 'react-dom/client'
@@ -28,25 +28,37 @@ import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 
 // ─── IMPORTACIONES DE PÁGINAS ────────────────────────────────────────
-// App es la página principal/landing page de la aplicación
+// App es la página principal/landing page de la aplicación.
+// Se mantiene como import estático por ser la ruta inicial (carga crítica).
 import App from './App.jsx'
-// Login: página de inicio de sesión del usuario
-import Login from './pages/Login.jsx'
-// Register: página de registro de nuevos usuarios
-import Register from './pages/Register.jsx'
-// ForgotPassword: página de recuperación de contraseña
-import ForgotPassword from './pages/ForgotPassword.jsx'
-// Admin: panel de administración (solo accesible por usuarios con rol admin)
-import Admin from './pages/Admin.jsx'
-// Home: dashboard principal del juego (solo accesible por usuarios autenticados)
-import Home from './pages/Home.jsx'
-// Settings: página de configuración/cuenta del usuario
-import Settings from './pages/Settings.jsx'
+
+// Las demás páginas se cargan bajo demanda (code splitting) con React.lazy():
+// el navegador solo descarga el JS de cada página cuando el usuario la visita.
+// - Login: página de inicio de sesión del usuario
+const Login = lazy(() => import('./pages/Login.jsx'))
+// - Register: página de registro de nuevos usuarios
+const Register = lazy(() => import('./pages/Register.jsx'))
+// - ForgotPassword: página de recuperación de contraseña
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'))
+// - Admin: panel de administración (solo accesible por usuarios con rol admin)
+const Admin = lazy(() => import('./pages/Admin.jsx'))
+// - Home: dashboard principal del juego (solo accesible por usuarios autenticados)
+const Home = lazy(() => import('./pages/Home.jsx'))
+// - Settings: página de configuración/cuenta del usuario
+const Settings = lazy(() => import('./pages/Settings.jsx'))
 
 // ─── ESTILOS GLOBALES ────────────────────────────────────────────────
-// Se importan los estilos CSS globales que aplican a toda la aplicación
-// (tipografía, reset de estilos, variables CSS, etc.)
-import './index.css'
+// Se importan los estilos CSS organizados por módulos (orden importa:
+// base y variables primero, responsive al final).
+import './styles/base.css'
+import './styles/loading.css'
+import './styles/navbar.css'
+import './styles/landing.css'
+import './styles/auth.css'
+import './styles/gaming.css'
+import './styles/settings.css'
+import './styles/admin.css'
+import './styles/responsive.css'
 
 // ─── MONTAJE DE LA APLICACIÓN ────────────────────────────────────────
 // Se busca el elemento con id="root" en el HTML y se monta el árbol de React.
@@ -65,31 +77,56 @@ createRoot(document.getElementById('root')).render(
           {/* La ruta "/" muestra la página de aterrizaje pública */}
           <Route path="/" element={<App />} />
 
-          {/* ─── RUTA DE INICIO DE SESIÓN ─────────────────────── */}
-          {/* Permite a los usuarios existentes autenticarse */}
-          <Route path="/login" element={<Login />} />
+          {/* ─── SUSPENSE: fallback mientras se descarga cada página ─── */}
+          {/* Las rutas lazy necesitan Suspense para mostrar un placeholder
+              mientras el lazy() resuelve el chunk JS de la página */}
+          <Route path="/login" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <Login />
+            </Suspense>
+          } />
 
           {/* ─── RUTA DE REGISTRO ─────────────────────────────── */}
           {/* Permite a nuevos usuarios crear una cuenta */}
-          <Route path="/register" element={<Register />} />
+          <Route path="/register" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <Register />
+            </Suspense>
+          } />
 
           {/* ─── RUTA DE RECUPERACIÓN DE CONTRASEÑA ───────────── */}
           {/* Permite al usuario recuperar su contraseña olvidada */}
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/forgot-password" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <ForgotPassword />
+            </Suspense>
+          } />
 
           {/* ─── RUTA PROTEGIDA: DASHBOARD DEL JUEGO ─────── */}
           {/* Requiere autenticación. Muestra niveles, ranking y partidas */}
-          <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/home" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <ProtectedRoute><Home /></ProtectedRoute>
+            </Suspense>
+          } />
 
           {/* ─── RUTA PROTEGIDA: PANEL DE ADMINISTRACIÓN ──────── */}
           {/* adminOnly = true indica que solo los usuarios con rol 'admin'
               pueden acceder a esta ruta. Si el usuario no es admin,
               será redirigido a /home */}
-          <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
+          <Route path="/admin" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <ProtectedRoute adminOnly><Admin /></ProtectedRoute>
+            </Suspense>
+          } />
 
           {/* ─── RUTA PROTEGIDA: CONFIGURACIÓN ────────────────── */}
           {/* Requiere autenticación pero no permisos de admin */}
-          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/settings" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <ProtectedRoute><Settings /></ProtectedRoute>
+            </Suspense>
+          } />
 
           {/* ─── RUTA CATCH-ALL: 404 ──────────────────────────── */}
           {/* Captura cualquier URL no definida y redirige a la landing page */}

@@ -9,9 +9,11 @@ from django.core.mail import send_mail
 
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.views import APIView
 from rest_framework.throttling import AnonRateThrottle
+
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from .models import Usuario, ConfirmacionReset
 from .serializers import PasswordResetSerializer, PasswordResetConfirmSerializer
@@ -87,6 +89,20 @@ class PasswordReset(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [PasswordResetThrottle]
 
+    @extend_schema(
+        tags=['Contraseña'],
+        summary='Solicitar restablecimiento de contraseña',
+        description='Recibe un email y, si la cuenta existe, envía un enlace de '
+        'restablecimiento. La respuesta es idéntica sin importar si el email existe o no '
+        '(prevención de enumeración).',
+        request=PasswordResetSerializer,
+        responses={
+            200: inline_serializer(
+                'PasswordResetOK',
+                {'mensaje': serializers.CharField()},
+            ),
+        },
+    )
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
         if not serializer.is_valid():
@@ -195,6 +211,22 @@ class PasswordResetConfirm(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [PasswordResetThrottle]
 
+    @extend_schema(
+        tags=['Contraseña'],
+        summary='Confirmar restablecimiento de contraseña',
+        description='Establece la nueva contraseña usando el token recibido por email.',
+        request=PasswordResetConfirmSerializer,
+        responses={
+            200: inline_serializer(
+                'PasswordResetConfirmOK',
+                {'mensaje': serializers.CharField()},
+            ),
+            400: inline_serializer(
+                'PasswordResetConfirmError',
+                {'error': serializers.CharField(required=False)},
+            ),
+        },
+    )
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         if not serializer.is_valid():
@@ -251,6 +283,20 @@ class ConfirmarIdentidad(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [AnonRateThrottle]
 
+    @extend_schema(
+        tags=['Contraseña'],
+        summary='Confirmar identidad (enlace por email)',
+        description='Endpoint HTML que valida el token del enlace de email para restablecimiento '
+        'de contraseña. Marca el token como confirmado y redirige al frontend.',
+        request=inline_serializer(
+            'ConfirmarIdentidadRequest',
+            {'token': serializers.CharField()},
+        ),
+        responses={
+            200: serializers.ListSerializer(child=serializers.CharField()),
+            400: serializers.ListSerializer(child=serializers.CharField()),
+        },
+    )
     def post(self, request):
         token = request.data.get('token', '')
 
@@ -292,6 +338,17 @@ class VerificarConfirmacion(APIView):
     permission_classes = [AllowAny]
     throttle_classes = []
 
+    @extend_schema(
+        tags=['Contraseña'],
+        summary='Verificar si el token fue confirmado',
+        description='Comprueba el estado de confirmación de un token de restablecimiento.',
+        responses={
+            200: inline_serializer(
+                'VerificarConfirmacionResponse',
+                {'confirmado': serializers.BooleanField()},
+            ),
+        },
+    )
     def get(self, request):
         token = request.query_params.get('token', '')
         if not token:

@@ -15,6 +15,10 @@ djangorestframework==3.16.1
 # para autenticación stateless. Permite login/logout sin sesiones de servidor.
 djangorestframework-simplejwt==5.5.1
 
+# drf-spectacular: Genera documentación OpenAPI 3.0 y UI de Swagger/Redoc
+# automáticamente a partir de los serializers y viewsets de la API.
+drf-spectacular==0.30.0
+
 # ─── BASE DE DATOS ─────────────────────────────────────────────────────
 # mysqlclient: Driver MySQL/MariaDB para Python (reemplaza a MySQL-python).
 # Necesario para conectar Django con bases de datos MySQL en producción.
