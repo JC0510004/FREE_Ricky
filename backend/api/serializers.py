@@ -185,9 +185,22 @@ class UsuarioSerializer(serializers.ModelSerializer):
         # Campos visibles en el perfil: identificador, nombre, email, rol,
         # fecha de registro, estado activo, verificación y último acceso
         fields = ['id', 'username', 'email', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
-        # Solo campos de solo lectura: id, rol, fecha, estado y verificación
-        # username y email se pueden editar por el propietario del perfil
-        read_only_fields = ['id', 'rol', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
+        # Solo campos de solo lectura: id, fecha, estado y verificación.
+        # username, email y rol se pueden editar; el cambio de rol solo lo
+        # permite un administrador (ver validate_rol).
+        read_only_fields = ['id', 'fecha_registro', 'is_active', 'is_verified', 'last_login']
+
+    # Solo un administrador puede cambiar el rol de un usuario. Esto impide
+    # que un jugador se auto-promocione a admin vía PUT /usuarios/<id>/.
+    def validate_rol(self, value):
+        if value not in ['admin', 'jugador']:
+            raise serializers.ValidationError('El rol debe ser "admin" o "jugador"')
+        if self.instance and value != self.instance.rol:
+            request = self.context.get('request')
+            is_admin = request and getattr(request.user, 'rol', None) == 'admin'
+            if not is_admin:
+                raise serializers.ValidationError('No tienes permisos para cambiar el rol')
+        return value
 
     # Valida que el username no esté en uso por otro usuario
     def validate_username(self, value):
@@ -196,9 +209,11 @@ class UsuarioSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('El nombre de usuario debe tener al menos 3 caracteres')
         if not sanitized.isalnum() and not all(c.isalnum() or c in '_-' for c in sanitized):
             raise serializers.ValidationError('El nombre de usuario solo puede contener letras, números, guiones y guiones bajos')
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            if Usuario.objects.filter(username__iexact=sanitized).exclude(id=request.user.id).exists():
+        # Excluye al propio usuario que se está editando (self.instance),
+        # no al request.user (que podría ser un admin editando a otro).
+        exclude_id = self.instance.id if self.instance else None
+        if exclude_id:
+            if Usuario.objects.filter(username__iexact=sanitized).exclude(id=exclude_id).exists():
                 raise serializers.ValidationError('Este nombre de usuario no está disponible')
         else:
             if Usuario.objects.filter(username__iexact=sanitized).exists():

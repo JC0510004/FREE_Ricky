@@ -15,3 +15,7 @@ class PasswordResetThrottle(AnonRateThrottle):
 
 class ChangePasswordThrottle(UserRateThrottle):
     scope = 'change_password'
+
+
+class RefreshThrottle(AnonRateThrottle):
+    scope = 'refresh'

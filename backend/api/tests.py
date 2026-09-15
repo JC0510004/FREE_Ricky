@@ -444,6 +444,7 @@ class PasswordResetTests(TestCase):
         token = 'fake_token_for_test'
         token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
         record.token_hash = token_hash
+        record.confirmado = True
         record.save()
 
         response = self.client.post(self.confirm_url, {
@@ -455,6 +456,49 @@ class PasswordResetTests(TestCase):
         # Verificar que la contraseña cambió
         usuario = Usuario.objects.get(username='testuser')
         self.assertTrue(usuario.check_password('NewPass123!'))
+
+    def test_confirm_reset_requiere_confirmacion_previa(self):
+        # El token existe pero el usuario NO confirmó su identidad desde el
+        # enlace del correo → el restablecimiento debe ser rechazado.
+        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
+        record = ConfirmacionReset.objects.first()
+        token = 'fake_token_for_test'
+        record.token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
+        record.save()
+
+        response = self.client.post(self.confirm_url, {
+            'token': token,
+            'password': 'NewPass123!',
+            'confirm_password': 'NewPass123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertTrue(usuario.check_password('TestPass123!'))
+
+    def test_confirm_reset_invalida_sesiones_previas(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        usuario = Usuario.objects.get(username='testuser')
+        old_refresh = str(RefreshToken.for_user(usuario))
+
+        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
+        record = ConfirmacionReset.objects.first()
+        token = 'fake_token_for_test'
+        record.token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
+        record.confirmado = True
+        record.save()
+
+        response = self.client.post(self.confirm_url, {
+            'token': token,
+            'password': 'NewPass123!',
+            'confirm_password': 'NewPass123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Un refresh token emitido ANTES del restablecimiento ya no vale.
+        resp_refresh = self.client.post(reverse('token_refresh'), {
+            'refresh_token': old_refresh,
+        }, format='json')
+        self.assertEqual(resp_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_confirm_reset_passwords_no_coinciden(self):
         self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
@@ -586,6 +630,32 @@ class RefreshTokenTests(TestCase):
         self.client.cookies.clear()
         response = self.client.post(self.refresh_url, {}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_refresh_conserva_claims_usuario_rol(self):
+        from rest_framework_simplejwt.tokens import RefreshToken as RT
+        refresh_token = self._get_refresh_token()
+        response = self.client.post(self.refresh_url, {
+            'refresh_token': refresh_token,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # El nuevo refresh token viaja en la cookie; sus claims personalizados
+        # deben conservarse en la rotación.
+        new_refresh_str = self.client.cookies['refresh_token'].value
+        new_refresh = RT(new_refresh_str)
+        self.assertEqual(new_refresh.payload.get('username'), 'testuser')
+        self.assertEqual(new_refresh.payload.get('rol'), 'jugador')
+
+    def test_refresh_usado_dos_veces_rechazado(self):
+        refresh_token = self._get_refresh_token()
+        r1 = self.client.post(self.refresh_url, {
+            'refresh_token': refresh_token,
+        }, format='json')
+        self.assertEqual(r1.status_code, status.HTTP_200_OK)
+        # Reutilizar el mismo refresh tras la rotación debe fallar.
+        r2 = self.client.post(self.refresh_url, {
+            'refresh_token': refresh_token,
+        }, format='json')
+        self.assertEqual(r2.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -813,6 +883,37 @@ class ChangePasswordTests(TestCase):
             'confirm_password': 'NewSecure123!',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_cambio_password_invalida_sesiones_previas(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        usuario = Usuario.objects.get(username='testuser')
+        old_refresh = str(RefreshToken.for_user(usuario))
+
+        response = self.client.post(self.change_url, {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure123!',
+            'confirm_password': 'NewSecure123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Un refresh token emitido antes del cambio de contraseña ya no vale.
+        resp_refresh = self.client.post(reverse('token_refresh'), {
+            'refresh_token': old_refresh,
+        }, format='json')
+        self.assertEqual(resp_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_cambio_password_cuenta_bloqueada(self):
+        from django.utils import timezone as tz
+        usuario = Usuario.objects.get(username='testuser')
+        usuario.locked_until = tz.now() + tz.timedelta(minutes=5)
+        usuario.save(update_fields=['locked_until'])
+
+        response = self.client.post(self.change_url, {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure123!',
+            'confirm_password': 'NewSecure123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1270,6 +1371,67 @@ class PermisosDetalladosTests(TestCase):
         resp = self.client.delete(reverse('usuario_detail', args=[admin_user.pk]))
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_admin_no_puede_desactivarse_a_si_mismo(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.delete(reverse('usuario_detail', args=[self.admin.pk]))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+
+    def test_admin_puede_cambiar_rol(self):
+        user = Usuario.objects.get(username='normal_user')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.put(reverse('usuario_detail', args=[user.pk]), {
+            'username': 'normal_user',
+            'email': 'normal@gmail.com',
+            'rol': 'admin',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertEqual(user.rol, 'admin')
+
+    def test_admin_puede_degradar_rol(self):
+        user = Usuario.objects.get(username='normal_user')
+        user.rol = 'admin'
+        user.save(update_fields=['rol'])
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.put(reverse('usuario_detail', args=[user.pk]), {
+            'username': 'normal_user',
+            'email': 'normal@gmail.com',
+            'rol': 'jugador',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertEqual(user.rol, 'jugador')
+
+    def test_usuario_normal_no_puede_cambiarse_rol(self):
+        user = Usuario.objects.get(username='normal_user')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        resp = self.client.put(reverse('usuario_detail', args=[user.pk]), {
+            'username': 'normal_user',
+            'email': 'normal@gmail.com',
+            'rol': 'admin',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertEqual(user.rol, 'jugador')
+
+    def test_usuario_normal_no_puede_cambiar_rol_de_otro(self):
+        other = Usuario.objects.create_user(
+            username='victima',
+            email='victima@gmail.com',
+            password='TestPass123!',
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.user_token}')
+        resp = self.client.put(reverse('usuario_detail', args=[other.pk]), {
+            'username': 'victima',
+            'email': 'victima@gmail.com',
+            'rol': 'admin',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        other.refresh_from_db()
+        self.assertEqual(other.rol, 'jugador')
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TESTS DE VERIFICACIÓN DE SESIÓN
@@ -1370,3 +1532,22 @@ class StatsAislamientoTests(TestCase):
         usernames = [r['username'] for r in ranking.data]
         self.assertIn('rank_iso1', usernames)
         self.assertIn('rank_iso2', usernames)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE RESILIENCIA DE CACHÉ
+# ═══════════════════════════════════════════════════════════════════════════════
+class CacheResilienciaTests(TestCase):
+    def test_fallback_con_redis_caido_no_rompe_operaciones(self):
+        from api.cache_backend import ResilientRedisCache
+
+        # Puerto muerto: cualquier operación contra Redis lanzará excepción.
+        cache = ResilientRedisCache('redis://127.0.0.1:6399/0', {})
+
+        cache.set('clave', 42)
+        self.assertEqual(cache.get('clave'), 42)
+        self.assertTrue(cache.add('otra', 1))
+        self.assertEqual(cache.get('otra'), 1)
+        cache.delete('clave')
+        self.assertIsNone(cache.get('clave'))
+        self.assertTrue(cache.has_key('otra'))

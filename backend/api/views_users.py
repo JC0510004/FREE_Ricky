@@ -9,6 +9,8 @@ from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema, inline_serializer
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
 from .models import Usuario
 from .serializers import UsuarioSerializer
@@ -143,6 +145,10 @@ class UsuarioDetailView(APIView):
                 'UsuarioDeleted',
                 {'mensaje': serializers.CharField()},
             ),
+            400: inline_serializer(
+                'UsuarioDeleteSelf',
+                {'error': serializers.CharField()},
+            ),
             403: inline_serializer(
                 'UsuarioDeleteForbidden',
                 {'error': serializers.CharField()},
@@ -164,6 +170,11 @@ class UsuarioDetailView(APIView):
             return Response(
                 {'error': 'No encontrado'},
                 status=status.HTTP_404_NOT_FOUND
+            )
+        if usuario.id == request.user.id:
+            return Response(
+                {'error': 'No puedes eliminar tu propia cuenta'},
+                status=status.HTTP_400_BAD_REQUEST
             )
         usuario.is_active = False
         usuario.save(update_fields=['is_active'])
@@ -212,6 +223,12 @@ class ChangePasswordView(APIView):
         new_password = request.data.get('new_password', '')
         confirm_password = request.data.get('confirm_password', '')
 
+        if usuario.is_locked():
+            return Response(
+                {'error': 'Cuenta temporalmente bloqueada. Intente más tarde'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         if not usuario.check_password(old_password):
             return Response(
                 {'error': 'La contraseña actual no es correcta'},
@@ -232,7 +249,22 @@ class ChangePasswordView(APIView):
             )
 
         usuario.set_password(new_password)
-        usuario.save(update_fields=['password'])
+        usuario.failed_attempts = 0
+        usuario.locked_until = None
+        usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
+
+        # Invalida las sesiones de TODOS los dispositivos excepto la actual
+        # (cuyo refresh token viene en la cookie), para no desloguear al
+        # usuario que acaba de cambiar su contraseña desde este navegador.
+        current_jti = None
+        raw = request.COOKIES.get('refresh_token')
+        if raw:
+            try:
+                current_jti = RefreshToken(raw).payload.get('jti')
+            except Exception:
+                current_jti = None
+        for ot in OutstandingToken.objects.filter(user=usuario).exclude(jti=current_jti):
+            BlacklistedToken.objects.get_or_create(token=ot)
 
         logger.info(f"Contraseña cambiada: {usuario.username}", extra={
             'user_id': usuario.id,

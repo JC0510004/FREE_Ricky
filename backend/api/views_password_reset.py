@@ -19,6 +19,8 @@ from .models import Usuario, ConfirmacionReset
 from .serializers import PasswordResetSerializer, PasswordResetConfirmSerializer
 from .throttles import PasswordResetThrottle
 
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+
 
 logger = logging.getLogger('seguridad')
 audit_logger = logging.getLogger('auditoria')
@@ -250,6 +252,14 @@ class PasswordResetConfirm(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # El token solo es válido si el usuario confirmó su identidad desde
+            # el enlace del correo ("Sí, soy yo"). El frontend ya lo exige así.
+            if not reset_record.confirmado:
+                return Response(
+                    {'error': 'Primero confirma tu identidad desde el enlace del correo'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             usuario = reset_record.usuario
 
             if not usuario.is_active:
@@ -262,6 +272,12 @@ class PasswordResetConfirm(APIView):
             usuario.failed_attempts = 0
             usuario.locked_until = None
             usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
+
+            # Invalida todas las sesiones existentes: tras restablecer la
+            # contraseña, cualquier refresh token emitido antes deja de valer
+            # (los access tokens expiran solos en unos minutos).
+            for ot in OutstandingToken.objects.filter(user=usuario):
+                BlacklistedToken.objects.get_or_create(token=ot)
 
             reset_record.delete()
 

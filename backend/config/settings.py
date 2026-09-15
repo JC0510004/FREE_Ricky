@@ -8,11 +8,13 @@ import hashlib
 # ─── CONFIGURACIÓN SEGURA ───────────────────────────────────────────────
 # SECRET_KEY: Clave secreta usada para firmar sesiones, tokens CSRF y otros
 # datos sensibles. Se obtiene de variables de entorno con fallback a python-decouple.
-SECRET_KEY = os.environ.get('SECRET_KEY') or config('SECRET_KEY')
+# config() prioriza las variables reales del sistema (como las que inyecta
+# docker-compose) y, si no existen, lee el archivo .env del proyecto.
+SECRET_KEY = config('SECRET_KEY')
 
 # DEBUG: Bandera que activa/desactiva el modo de depuración.
 # Cuando es True, Django muestra páginas de error detalladas y recarga código automáticamente.
-DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+DEBUG = config('DEBUG', default='False').lower() == 'true'
 
 # BASE_DIR: Ruta base del proyecto, usada para resolver rutas relativas
 # como archivos estáticos, base de datos SQLite y archivos de logs.
@@ -21,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ─── HOSTS SEGUROS ─────────────────────────────────────────────────────
 # ALLOWED_HOSTS: Lista de hosts/domains que pueden servir la aplicación.
 # Previene ataques de tipo Host header injection.
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,testserver').split(',')
 
 # SECURE_PROXY_SSL_HEADER: Indica a Django que confíe en el header X-Forwarded-Proto
 # cuando está detrás de un proxy inverso (nginx, load balancer, etc).
@@ -33,15 +35,15 @@ USE_X_FORWARDED_HOST = True
 
 # TRUSTED_PROXIES: Lista de IPs/rangos de proxies que Django debe confiar
 # para headers de seguridad como X-Forwarded-For.
-TRUSTED_PROXIES = os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16').split(',')
+TRUSTED_PROXIES = config('TRUSTED_PROXIES', default='127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16').split(',')
 
 # ─── FRONTEND / API URLS (configurables por env) ───────────────────────
 # FRONTEND_URL: URL base del frontend, usada en CORS y redirecciones.
 # Cambia entre desarrollo (localhost:5173) y producción según entorno.
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
 # API_BASE_URL: URL base de la API, usada en emails y notificaciones.
-API_BASE_URL = os.environ.get('API_BASE_URL', 'http://localhost:8000')
+API_BASE_URL = config('API_BASE_URL', default='http://localhost:8000')
 
 # ─── APPLICATION DEFINITION ────────────────────────────────────────────
 # AUTH_USER_MODEL: Indica a Django que el modelo de usuario personalizado
@@ -118,12 +120,15 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # entre múltiples workers/procesos. Si se usa LocMemCache, cada proceso
 # tiene su propia caché independiente (no compartida).
 # Ejemplo Redis: CACHE_URL=redis://127.0.0.1:6379/0
-_cache_url = os.environ.get('CACHE_URL', '')
-if _cache_url and 'redis' in _cache_url:
+_cache_url = config('CACHE_URL', default='')
+if _cache_url and 'redis' in _cache_url and 'test' not in sys.argv:
     # Redis: caché compartida entre todos los workers del servidor.
+    # Se usa el backend resiliente: si Redis cae o rechaza la autenticación,
+    # las operaciones degradan a LocMemCache sin provocar 500 (crítico para
+    # que el rate limiting y la protección brute force no derriben la API).
     CACHES = {
         'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'BACKEND': 'api.cache_backend.ResilientRedisCache',
             'LOCATION': _cache_url,
         }
     }
@@ -143,7 +148,7 @@ SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003']
 # ─── DATABASE ──────────────────────────────────────────────────────────
 # Configuración de base de datos dinámica según la variable DATABASE_URL.
 # Soporta SQLite para desarrollo/testing y MySQL para producción.
-_database_url = os.environ.get('DATABASE_URL', '')
+_database_url = config('DATABASE_URL', default='')
 if _database_url.startswith('sqlite'):
     # SQLite: base de datos en archivo, ideal para desarrollo y tests.
     DATABASES = {
@@ -158,11 +163,11 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': os.environ.get('DB_NAME') or config('DB_NAME', default=''),
-            'USER': os.environ.get('DB_USER') or config('DB_USER', default=''),
-            'PASSWORD': os.environ.get('DB_PASSWORD') or config('DB_PASSWORD', default=''),
-            'HOST': os.environ.get('DB_HOST') or config('DB_HOST', default=''),
-            'PORT': os.environ.get('DB_PORT') or config('DB_PORT', default=''),
+            'NAME': config('DB_NAME', default=''),
+            'USER': config('DB_USER', default=''),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default=''),
+            'PORT': config('DB_PORT', default=''),
             'OPTIONS': {
                 # STRICT_TRANS_TABLES: Fuerza validación estricta en tablas de transacciones.
                 # Previene datos inconsistentes al rechazar valores inválidos.
@@ -202,8 +207,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # ─── REST FRAMEWORK + JWT ──────────────────────────────────────────────
 # Duración de tokens JWT configurable por variables de entorno.
-_access_minutes = int(os.environ.get('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', '15'))
-_refresh_days = int(os.environ.get('JWT_REFRESH_TOKEN_LIFETIME_DAYS', '1'))
+_access_minutes = int(config('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', default='15'))
+_refresh_days = int(config('JWT_REFRESH_TOKEN_LIFETIME_DAYS', default='1'))
 
 # Configuración global de Django REST Framework.
 REST_FRAMEWORK = {
@@ -231,6 +236,7 @@ REST_FRAMEWORK = {
         'register': '3/minute',        # Registro: 3 por minuto (anti spam)
         'password_reset': '3/hour',    # Reset password: 3 por hora
         'change_password': '10/minute', # Cambio de contraseña: 10 por minuto
+        'refresh': '30/minute',        # Refresh token: 30 por minuto por IP
     },
 
     # Solo renderiza JSON (sinBrowsable API por seguridad).
@@ -274,6 +280,7 @@ if 'test' in sys.argv:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['register'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['change_password'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['refresh'] = '100/minute'
     REST_FRAMEWORK['PAGE_SIZE'] = 100  # Más elementos por página en tests
 
 # En modo DEBUG se relajan los límites para facilitar el desarrollo.
@@ -284,7 +291,7 @@ if DEBUG:
 # JWT_SECRET_KEY: Clave separada para firmar tokens JWT.
 # En producción es OBLIGATORIO definir JWT_SECRET_KEY en las variables de entorno.
 # En desarrollo se genera una clave derivada de SECRET_KEY usando SHA-256.
-_jwt_secret = os.environ.get('JWT_SECRET_KEY', '')
+_jwt_secret = config('JWT_SECRET_KEY', default='')
 if not _jwt_secret:
     if not DEBUG:
         # En producción, sin JWT_SECRET_KEY no se puede arrancar (error de seguridad).
@@ -313,9 +320,9 @@ SIMPLE_JWT = {
 # CORS: Cross-Origin Resource Sharing.
 # Controla qué dominios externos pueden hacer peticiones a esta API.
 CORS_ALLOW_ALL_ORIGINS = False  # NUNCA permitir todos los orígenes en producción
-CORS_ALLOWED_ORIGINS = os.environ.get(
+CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173'  # Frontend en desarrollo (Vite)
+    default='http://localhost:5173,http://127.0.0.1:5173'  # Frontend en desarrollo (Vite)
 ).split(',')
 CORS_ALLOW_CREDENTIALS = True   # Permite cookies y headers de autenticación
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']  # Headers expuestos al frontend
@@ -450,8 +457,8 @@ LOGGING = {
 
 # ─── EMAIL ──────────────────────────────────────────────────────────────
 # Configuración de correo electrónico para envío de notificaciones.
-_email_user = os.environ.get('EMAIL_HOST_USER', '')
-_email_pass = os.environ.get('EMAIL_HOST_PASSWORD', '')
+_email_user = config('EMAIL_HOST_USER', default='')
+_email_pass = config('EMAIL_HOST_PASSWORD', default='')
 
 # Si hay credenciales de SMTP configuradas, usa el backend real.
 # Si no, usa el backend de consola (imprime emails en la terminal, útil en desarrollo).
@@ -460,12 +467,12 @@ EMAIL_BACKEND = (
     if _email_user and _email_pass
     else 'django.core.mail.backends.console.EmailBackend'
 )
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')       # Servidor SMTP
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))             # Puerto SMTP (587 = TLS)
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'  # Usar cifrado TLS
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')       # Servidor SMTP
+EMAIL_PORT = int(config('EMAIL_PORT', default='587'))             # Puerto SMTP (587 = TLS)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default='True').lower() == 'true'  # Usar cifrado TLS
 EMAIL_HOST_USER = _email_user       # Usuario/correo SMTP
 EMAIL_HOST_PASSWORD = _email_pass   # Contraseña SMTP (app password de Gmail)
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@free-ricky.com')  # Email remitente
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@free-ricky.com')  # Email remitente
 
 # ─── STATIC ────────────────────────────────────────────────────────────
 # STATIC_URL: URL base para archivos estáticos (CSS, JS, imágenes).

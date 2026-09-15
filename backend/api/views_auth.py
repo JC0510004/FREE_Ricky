@@ -1,6 +1,7 @@
 import logging
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -18,7 +19,7 @@ from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, Bl
 
 from .models import Usuario
 from .serializers import RegisterSerializer, LoginSerializer, UsuarioSerializer
-from .throttles import LoginThrottle, RegisterThrottle
+from .throttles import LoginThrottle, RegisterThrottle, RefreshThrottle
 
 logger = logging.getLogger('seguridad')
 audit_logger = logging.getLogger('auditoria')
@@ -251,7 +252,7 @@ class LoginView(APIView):
 
 class RefreshTokenView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = []
+    throttle_classes = [RefreshThrottle]
 
     @extend_schema(
         tags=['Autenticación'],
@@ -284,22 +285,35 @@ class RefreshTokenView(APIView):
             refresh = RefreshToken(refresh_token)
 
             jti = refresh.payload.get('jti')
-            if jti and OutstandingToken.objects.filter(jti=jti).exists():
-                if BlacklistedToken.objects.filter(token__jti=jti).exists():
+
+            # Envolvemos la rotación en una transacción con bloqueo de fila
+            # sobre el OutstandingToken del refresh usado. Así, dos peticiones
+            # concurrentes con el MISMO refresh no pueden emitir dos tokens
+            # nuevos: la segunda espera y ve el token ya blacklisteado.
+            with transaction.atomic():
+                ot = (
+                    OutstandingToken.objects.select_for_update().filter(jti=jti).first()
+                    if jti else None
+                )
+                if ot and BlacklistedToken.objects.filter(token=ot).exists():
                     logger.warning(f"Refresh token ya fue blacklistado: jti={jti}")
                     return Response(
                         {'error': 'Sesión expirada. Inicie sesión nuevamente'},
                         status=status.HTTP_401_UNAUTHORIZED
                     )
 
-            usuario_id = refresh.payload.get('user_id')
-            usuario = Usuario.objects.get(id=usuario_id, is_active=True)
+                usuario = Usuario.objects.get(id=refresh.payload.get('user_id'), is_active=True)
 
-            new_refresh = RefreshToken.for_user(usuario)
-            access_token = str(new_refresh.access_token)
-            new_refresh_token = str(new_refresh)
+                new_refresh = RefreshToken.for_user(usuario)
+                # Conservamos los claims personalizados que sí lleva el token
+                # original (username/rol) al rotarlo; RefreshToken.for_user
+                # por defecto no los copia.
+                new_refresh['username'] = usuario.username
+                new_refresh['rol'] = usuario.rol
+                access_token = str(new_refresh.access_token)
+                new_refresh_token = str(new_refresh)
 
-            refresh.blacklist()
+                refresh.blacklist()
 
             response = Response({
                 'access_token': access_token,
