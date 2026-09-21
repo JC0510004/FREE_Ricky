@@ -136,10 +136,12 @@ def validate_username(username):
     # Longitud máxima de 50: limita el espacio en base de datos y UI
     if len(username) < 3 or len(username) > 50:
         return False
-    # Solo permite letras (a-z, A-Z), números (0-9) y guión bajo (_).
+    # Solo permite letras (a-z, A-Z), números (0-9), guión bajo (_) y guión (-).
+    # El guión se acepta también en la edición de perfil (UsuarioSerializer),
+    # por lo que el registro usa el MISMO conjunto para evitar inconsistencias.
     # Bloquea caracteres especiales, espacios y emojis que podrían
     # causar problemas de encoding o inyección
-    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+    if not re.match(r'^[a-zA-Z0-9_-]+$', username):
         return False
     return True
 

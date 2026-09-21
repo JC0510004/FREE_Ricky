@@ -24,8 +24,9 @@ audit_logger = logging.getLogger('auditoria')
 
 
 class RankingEntrySerializer(serializers.Serializer):
+    # El ranking es público: no se expone el id interno del usuario, solo el
+    # username (identificador público de cara al juego).
     posicion = serializers.IntegerField()
-    usuario_id = serializers.IntegerField()
     username = serializers.CharField()
     mejor_puntuacion = serializers.IntegerField(allow_null=True)
     total_partidas = serializers.IntegerField()
@@ -245,7 +246,6 @@ class RankingView(APIView):
         data = [
             {
                 'posicion': i + 1,
-                'usuario_id': r['usuario'],
                 'username': r['usuario__username'],
                 'mejor_puntuacion': r['mejor_puntuacion'],
                 'total_partidas': r['total_partidas'],

@@ -57,7 +57,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         # Verifica que el nombre cumpla con largo y caracteres permitidos
         if not validate_username(sanitized):
             raise serializers.ValidationError(
-                'El usuario debe tener entre 3 y 50 caracteres alfanuméricos o guión bajo'
+                'El usuario debe tener entre 3 y 50 caracteres, y solo letras, números, guiones o guión bajo'
             )
         # Busca si ya existe un usuario ACTIVO con el mismo nombre (case-insensitive)
         if Usuario.objects.filter(username__iexact=sanitized, is_active=True).exists():
@@ -150,8 +150,12 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         candidata.username = username
         candidata.email = email
-        candidata.is_active = True
-        candidata.is_verified = True
+        # La cuenta PERMANECE desactivada hasta que el propietario confirme el
+        # email desde el enlace que se acaba de enviar: nadie puede reclamar y
+        # operar una cuenta desactivada sin control del correo. La activación
+        # la hace VerificarEmailView (que además marca is_verified=True).
+        candidata.is_active = False
+        candidata.is_verified = False
         candidata.failed_attempts = 0
         candidata.locked_until = None
         candidata.lockout_count = 0
@@ -203,10 +207,13 @@ class PasswordResetSerializer(serializers.Serializer):
 # SERIALIZER DE CONFIRMACIÓN DE RESTABLECIMIENTO
 # ═══════════════════════════════════════════════════════════════════════════════
 # Se usa cuando el usuario hace clic en el enlace del correo y establece
-# una nueva contraseña. El token se valida en la vista, no aquí.
+# una nueva contraseña. El token y el código se validan en la vista, no aquí.
 class PasswordResetConfirmSerializer(serializers.Serializer):
     # Token único generado en el paso anterior (validado en la vista)
     token = serializers.CharField()
+    # Código numérico de 6 dígitos recibido por email (segundo factor).
+    # Se exige además del clic en el enlace para fijar la nueva contraseña.
+    codigo = serializers.RegexField(r'^\d{6}$', error_messages={'invalid': 'El código debe ser de 6 dígitos'})
     # Nueva contraseña con restricciones de longitud
     password = serializers.CharField(write_only=True, min_length=8, max_length=128)
     # Confirmación de la nueva contraseña para evitar errores de tipeo

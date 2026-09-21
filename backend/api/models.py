@@ -102,6 +102,18 @@ class Usuario(AbstractBaseUser):
     def has_module_perms(self, app_label):
         return self.rol == 'admin'
 
+    # Propiedades que exige el admin de Django (login, has_permission, etc.).
+    # Se derivan del rol: un usuario con rol 'admin' es staff y superuser.
+    # Sin estas propiedades, el login del panel admin revienta con AttributeError.
+    # Son propiedades (no campos): no requieren migración.
+    @property
+    def is_staff(self):
+        return self.rol == 'admin'
+
+    @property
+    def is_superuser(self):
+        return self.rol == 'admin'
+
     # Hashea la contraseña en texto plano y la guarda en el campo password.
     def set_password(self, raw_password):
         self.password = make_password(raw_password)
@@ -231,7 +243,9 @@ class Partida(models.Model):
 class ConfirmacionReset(models.Model):
     # Hash SHA-256 del token UUID. Es la clave primaria (el token real viaja por email).
     token_hash = models.CharField(max_length=64, primary_key=True)
-    # Hash SHA-256 del código de verificación (para flujo de 2 pasos).
+    # Hash SHA-256 del código numérico de 6 dígitos (segundo factor de verificación).
+    # El código viaja en el mismo email que el enlace y se exige al fijar la nueva
+    # contraseña, de forma que el restablecimiento requiere clic en el enlace + código.
     codigo_hash = models.CharField(max_length=64, db_index=True, null=True)
     # Referencia al usuario que solicitó el reset.
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
@@ -239,9 +253,15 @@ class ConfirmacionReset(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     # Indica si el usuario ya confirmó su identidad haciendo clic en el email.
     confirmado = models.BooleanField(default=False)
+    # Intentos fallidos al verificar el código de 6 dígitos. Cuando alcanzan el
+    # máximo (MAX_INTENTOS_CODIGO) el registro se invalida: hace inviable la
+    # fuerza bruta del código buscando el número correcto por el endpoint.
+    failed_attempts = models.IntegerField(default=0)
 
     # Tiempo de vida del token: 15 minutos.
     TOKEN_EXPIRY_MINUTES = 15
+    # Máximo de fallos al adivinar el código antes de invalidar el token.
+    MAX_INTENTOS_CODIGO = 10
 
     class Meta:
         db_table = 'confirmaciones_reset'
@@ -254,17 +274,49 @@ class ConfirmacionReset(models.Model):
     def is_expired(self):
         return timezone.now() > self.created_at + timezone.timedelta(minutes=self.TOKEN_EXPIRY_MINUTES)
 
-    # Método de clase que verifica si un código dado coincide con uno almacenado.
-    # Recibe el email del usuario y el código en texto plano.
+    # Verifica si el código de 6 dígitos en texto plano coincide con el hash
+    # almacenado para el email dado (y que el usuario esté activo y no haya expirado).
     @classmethod
     def verificar_codigo(cls, email: str, codigo: str) -> bool:
         # Hashea el código para compararlo con el hash guardado en la BD.
         h = hashlib.sha256(codigo.encode()).hexdigest()
-        # Busca un registro que coincida con: hash del código, email del usuario,
-        # que el usuario esté activo, y que no haya expirado.
         return cls.objects.filter(
             codigo_hash=h,
             usuario__email__iexact=email,
             usuario__is_active=True,
             created_at__gte=timezone.now() - timezone.timedelta(minutes=cls.TOKEN_EXPIRY_MINUTES),
         ).exists()
+
+    # Incrementa el contador de fallos de código de forma atómica (bloquea la
+    # fila) y devuelve el total. Evita que peticiones concurrentes pierdan fallos.
+    def incrementar_intentos_fallidos(self):
+        type(self).objects.filter(pk=self.pk).update(failed_attempts=F('failed_attempts') + 1)
+        self.refresh_from_db()
+        return self.failed_attempts
+
+
+# ─── MODELO DE VERIFICACIÓN DE EMAIL ──────────────────────────────────────
+# Token de un solo uso para confirmar la propiedad del correo. Se emite en el
+# registro y en la reactivación de cuentas desactivadas (en ese caso, además,
+# es la llave que vuelve a activar la cuenta). Guarda solo el hash SHA-256
+# por si el token se filtra en la base de datos.
+class VerificacionEmail(models.Model):
+    # Hash SHA-256 del token UUID: clave primaria (el token real viaja por email).
+    token_hash = models.CharField(max_length=64, primary_key=True)
+    # Usuario que debe confirmar su correo.
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+    # Fecha/hora de emisión (para calcular expiración).
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Tiempo de vida del token: 60 minutos.
+    TOKEN_EXPIRY_MINUTES = 60
+
+    class Meta:
+        db_table = 'verificaciones_email'
+
+    def __str__(self):
+        return f"Verificación de email para {self.usuario.username}"
+
+    @property
+    def is_expired(self):
+        return timezone.now() > self.created_at + timezone.timedelta(minutes=self.TOKEN_EXPIRY_MINUTES)

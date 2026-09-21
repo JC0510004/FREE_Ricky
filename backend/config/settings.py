@@ -64,7 +64,6 @@ INSTALLED_APPS = [
     'rest_framework',                # Django REST Framework para APIs
     'rest_framework_simplejwt',      # Autenticación JWT (JSON Web Tokens)
     'rest_framework_simplejwt.token_blacklist',  # Blacklist de tokens JWT
-    'django_ratelimit',             # Limitación de tasa de peticiones
     'drf_spectacular',              # Documentación OpenAPI/Swagger de la API
     # Local - Aplicaciones propias del proyecto
     'api',                           # App principal con modelos, vistas y lógica de negocio
@@ -140,10 +139,6 @@ else:
             'LOCATION': 'default-cache',
         }
     }
-
-# Silenciar el check de django_ratelimit que exige cache compartida (Redis/memcached).
-# En desarrollo/testing usamos LocMemCache, que es suficiente para single-process.
-SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003']
 
 # ─── DATABASE ──────────────────────────────────────────────────────────
 # Configuración de base de datos dinámica según la variable DATABASE_URL.
@@ -229,14 +224,22 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.AnonRateThrottle',  # Limita usuarios anónimos
         'rest_framework.throttling.UserRateThrottle',   # Limita usuarios autenticados
     ],
+    # Número de proxies inversos de confianza entre el cliente y Django.
+    # Con NUM_PROXIES=1, AnonRateThrottle usa el ÚLTIMO valor de
+    # X-Forwarded-For (el que añadió nginx = IP real). Sin esto usaría el
+    # PRIMERO, que el cliente puede inventar (spoofing del rate limit).
+    'NUM_PROXIES': 1,
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',           # Anónimos: 60 peticiones por minuto
         'user': '120/minute',          # Autenticados: 120 peticiones por minuto
         'login': '5/minute',           # Login: 5 intentos por minuto (anti brute force)
+        'admin_login': '5/minute',     # Admin login: mismo ritmo que /api/login/
         'register': '3/minute',        # Registro: 3 por minuto (anti spam)
         'password_reset': '3/hour',    # Reset password: 3 por hora
+        'password_reset_codigo': '10/minute',  # Verificación de código: 10 por minuto (anti fuerza bruta)
         'change_password': '10/minute', # Cambio de contraseña: 10 por minuto
         'refresh': '30/minute',        # Refresh token: 30 por minuto por IP
+        'verificar_email': '5/hour',   # Verificación de email: evita fuerza bruta por token
     },
 
     # Solo renderiza JSON (sinBrowsable API por seguridad).
@@ -276,11 +279,16 @@ SPECTACULAR_SETTINGS = {
 
 # En modo testing, se relajan los límites de rate para no fallar tests automatizados.
 if 'test' in sys.argv:
-    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '100/minute'
-    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['register'] = '100/minute'
+    # register/login se comparten por IP en la caché del proceso entre TODOS
+    # los tests: la cota debe superar el nº de registros/logins de la suite.
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '1000/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['admin_login'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['register'] = '1000/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_codigo'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['change_password'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['refresh'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['verificar_email'] = '100/minute'
     REST_FRAMEWORK['PAGE_SIZE'] = 100  # Más elementos por página en tests
 
 # En modo DEBUG se relajan los límites para facilitar el desarrollo.

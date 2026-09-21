@@ -104,49 +104,52 @@ erDiagram
     USUARIOS {
         BigAutoField id PK "Auto-increment"
         CharField_10 rol "admin | jugador"
-        CharField_50 username UK "Unique"
-        EmailField_100 email UK "Unique"
+        CharField_50 username UK "Unique · credencial de login"
+        EmailField_100 email UK "Unique · normalizado"
         CharField_128 password "Hash Argon2"
         DateTimeField fecha_registro "auto_now_add"
         BooleanField is_active "default=True"
         BooleanField is_verified "default=False"
         IntegerField failed_attempts "default=0"
         IntegerField lockout_count "default=0"
-        DateTimeField locked_until "null=True"
-        DateTimeField last_login "null=True"
+        DateTimeField locked_until "null=True · bloqueo progresivo"
+        DateTimeField last_login "actualizado en cada login"
     }
 
     NIVELES {
         BigAutoField id PK "Auto-increment"
         CharField_100 nombre "NOT NULL"
         CharField_10 dificultad "facil | medio | dificil"
-        IntegerField tiempo_limite "segundos, null=True"
+        IntegerField tiempo_limite "segundos · null=True"
         DateTimeField fecha_creacion "auto_now_add"
     }
 
     PARTIDAS {
         BigAutoField id PK "Auto-increment"
-        ForeignKey usuario_id FK "CASCADE → usuarios"
-        ForeignKey nivel_id FK "CASCADE → niveles"
+        BigIntegerField usuario_id FK "CASCADE → USUARIOS"
+        BigIntegerField nivel_id FK "CASCADE → NIVELES"
         IntegerField muertes "default=0"
-        IntegerField tiempo "segundos, null=True"
+        IntegerField tiempo "segundos · null=True"
         IntegerField puntuacion "null=True"
         DateTimeField fecha "auto_now_add"
     }
 
     CONFIRMACIONES_RESET {
         CharField_64 token_hash PK "SHA-256 del UUID"
-        CharField_64 codigo_hash "SHA-256 del código"
-        ForeignKey usuario_id FK "CASCADE → usuarios"
-        DateTimeField created_at "auto_now_add"
+        CharField_64 codigo_hash INDEX "SHA-256 del código 6-dígitos"
+        BigIntegerField usuario_id FK "CASCADE → USUARIOS"
+        DateTimeField created_at "auto_now_add · expira 15 min"
         BooleanField confirmado "default=False"
     }
 
-    USUARIOS ||--o{ PARTIDAS : "jugó"
-    NIVELES ||--o{ PARTIDAS : "jugado en"
-    USUARIOS ||--o{ CONFIRMACIONES_RESET : "solicita"
+    USUARIOS ||--o{ PARTIDAS : "juega (1:N)"
+    NIVELES ||--o{ PARTIDAS : "es escenario de (1:N)"
+    USUARIOS ||--o{ CONFIRMACIONES_RESET : "solicita reset (1:N)"
 
-    %% Índices: idx_partida_usuario_fecha, idx_partida_nivel_fecha, idx_partida_puntuacion
+    %% Índices compuestos definidos en models.Partida:
+    %%   idx_partida_usuario_fecha (usuario, -fecha) → "Mis partidas"
+    %%   idx_partida_nivel_fecha   (nivel, -fecha)  → partidas por nivel
+    %%   idx_partida_puntuacion    (-puntuacion)    → ranking top-20
         </pre>
         <div class="error-msg"></div>
     </div>

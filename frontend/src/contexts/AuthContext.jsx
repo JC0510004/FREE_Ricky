@@ -100,12 +100,17 @@ export function AuthProvider({ children }) {
 
   // ─── FUNCIÓN: REGISTRAR NUEVO USUARIO ─────────────────────────────
   // Llama al servicio de auth para registrar un nuevo usuario.
-  // El backend devuelve tokens (auto-login), por lo que la sesión se
-  // inicia automáticamente y no es necesario un login extra.
+  // Si el backend emite tokens (auto-login), la sesión se inicia
+  // automáticamente. En reactivaciones de cuenta desactivada el backend NO
+  // devuelve access_token (la cuenta sigue inactiva hasta confirmar el
+  // email), por lo que aquí NO se marca sesión iniciada.
   const register = useCallback(async (data) => {
     const response = await authService.register(data)
-    setUser(response.usuario)
-    setTokenReady(true)
+    if (response.access_token) {
+      setUser(response.usuario)
+      setTokenReady(true)
+    }
+    return response
   }, [])
 
   // ─── FUNCIÓN: CERRAR SESIÓN ───────────────────────────────────────

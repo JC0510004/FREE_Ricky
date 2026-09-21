@@ -199,9 +199,9 @@ export default function Home() {
                     </thead>
                     <tbody>
                       {(loadingRanking ? [] : rankingData || []).map((entry, i) => {
-                        const esYo = entry.username === user?.username
-                        return (
-                          <tr key={entry.usuario_id ?? entry.username} className={esYo ? 'fr-current-row' : ''}>
+const esYo = entry.username === user?.username
+                          return (
+                            <tr key={entry.username} className={esYo ? 'fr-current-row' : ''}>
                             <td>{i === 0 ? <Medal size={16} style={{ color: 'var(--fr-primary)' }} /> : i + 1}</td>
                             <td className="fr-bold">
                               {entry.username}

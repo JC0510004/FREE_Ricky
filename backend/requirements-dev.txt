@@ -1,0 +1,22 @@
+# ─── DEPENDENCIAS DE DESARROLLO ────────────────────────────────────────
+# Instala primero las dependencias de runtime y luego las de desarrollo:
+#   pip install -r requirements.txt
+#   pip install -r requirements-dev.txt
+# (o directamente: pip install -r requirements-dev.txt, que ya incluye runtime)
+
+# Incluye las dependencias de producción (Django, DRF, JWT, etc).
+-r requirements.txt
+
+# ─── LINTER Y ESTILO ───────────────────────────────────────────────────
+# flake8: Analizador estático de estilo y posibles bugs. Combina PyFlakes,
+# pycodestyle y McCabe. Es el linter que usa el CI para el backend.
+flake8==7.3.0
+
+# ─── SEGURIDAD EN DESARROLLO ───────────────────────────────────────────
+# safety: Escanea las dependencias instaladas contra la base de datos de
+# vulnerabilidades conocidas (CVE) del proyecto Safety.
+safety==3.8.1
+
+# bandit: Escáner de vulnerabilidades para código Python. Detecta patrones
+# de riesgo como, por ejemplo, uso inseguro de subprocess, eval, etc.
+bandit==1.9.4

@@ -46,10 +46,6 @@ bleach==6.4.0
 # Permite controlar qué dominios externos pueden acceder a la API.
 django-cors-headers==4.7.0
 
-# django-ratelimit: Limita la tasa de peticiones por IP o usuario.
-# Protección contra ataques de fuerza bruta y abuso de API.
-django-ratelimit==4.1.0
-
 # django-ipware: Middleware para detectar la IP real del cliente.
 # Útil incluso cuando hay proxies/load balancers en medio.
 django-ipware==7.0.0

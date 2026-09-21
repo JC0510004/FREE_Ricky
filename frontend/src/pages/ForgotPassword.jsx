@@ -66,6 +66,7 @@ export default function ForgotPassword() {
   const [step, setStep] = useState('form')
 
   // ─── Estado del formulario de nueva contraseña ───
+  const [codigo, setCodigo] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -126,10 +127,15 @@ export default function ForgotPassword() {
   }, [email])
 
   // ─── Paso final: restablecimiento de contraseña ───
-  // Valida la nueva contraseña y la envía al backend junto con el token.
+  // Valida el código de 6 dígitos (recibido por email) y la nueva contraseña,
+  // y los envía al backend junto con el token. El código se valida primero
+  // de forma independiente para dar feedback inmediato antes de la contraseña.
   const handleResetPassword = useCallback(async (e) => {
     e.preventDefault()
     setError('')
+
+    // ─── Validación del código de verificación ───
+    if (!/^\d{6}$/.test(codigo)) { setError('El código debe ser de 6 dígitos'); return }
 
     // ─── Validación de contraseña ───
     if (password.length < 8) { setError('Mínimo 8 caracteres'); return }
@@ -144,8 +150,16 @@ export default function ForgotPassword() {
 
     setIsLoading(true)
     try {
+      // Primer paso: validar el código del email con el token.
+      const verificado = await API.post('/password-reset/verificar-codigo/', { token: t, codigo })
+      if (!verificado.data?.valido) {
+        setError('Código de verificación inválido')
+        return
+      }
+      // Segundo paso: fijar la nueva contraseña (el backend revalida el código).
       await API.post('/password-reset/confirm/', {
         token: t,
+        codigo,
         password,
         confirm_password: confirmPassword,
       })
@@ -159,7 +173,7 @@ export default function ForgotPassword() {
     } finally {
       setIsLoading(false)
     }
-  }, [urlToken, password, confirmPassword])
+  }, [urlToken, password, confirmPassword, codigo])
 
   // ─── Renderizado condicional según el paso actual del flujo ───
 
@@ -196,7 +210,7 @@ export default function ForgotPassword() {
             <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#22c55e', marginBottom: 16 }}>mail</span>
             <h1 className="auth-title">Correo Enviado</h1>
             <p className="auth-subtitle" style={{ marginBottom: 24 }}>
-              Revisa tu correo y haz clic en <strong>"Sí, soy yo"</strong>. Serás redirigido automáticamente para restablecer tu contraseña.
+              Revisa tu correo: haz clic en <strong>"Sí, soy yo"</strong> y anota el <strong>código de 6 dígitos</strong>. Serás redirigido automáticamente para restablecer tu contraseña.
             </p>
 
             {/* Botón para volver al login */}
@@ -242,6 +256,20 @@ export default function ForgotPassword() {
 
           {step === 'reset' ? (
             <form onSubmit={handleResetPassword} className="auth-form" noValidate>
+              {/* Campo del código de verificación de 6 dígitos */}
+              <div className="auth-field">
+                <label htmlFor="codigo">Código de Verificación</label>
+                <input
+                  id="codigo" inputMode="numeric" maxLength={6}
+                  value={codigo}
+                  onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="••••••"
+                  autoComplete="one-time-code"
+                  disabled={isLoading}
+                />
+                <small className="auth-hint">Revisa tu correo: el código de 6 dígitos viene junto al enlace.</small>
+              </div>
+
               {/* Campo de nueva contraseña */}
               <div className="auth-field">
                 <label htmlFor="password">Nueva Contraseña</label>

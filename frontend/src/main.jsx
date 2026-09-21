@@ -6,7 +6,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import App from './App.jsx'
 import {
-  Login, Register, ForgotPassword, Admin, Home, Settings
+  Login, Register, ForgotPassword, VerificarEmail, Admin, Home, Settings
 } from './routes/lazyPages'
 
 import './styles/base.css'
@@ -53,6 +53,15 @@ createRoot(document.getElementById('root')).render(
           <Route path="/forgot-password" element={
             <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
               <ForgotPassword />
+            </Suspense>
+          } />
+
+          {/* ─── VERIFICACIÓN DE CORREO ────────────────────────── */}
+          {/* Pública: se abre desde el enlace de confirmación del email
+              (/verificar-email?token=...) */}
+          <Route path="/verificar-email" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <VerificarEmail />
             </Suspense>
           } />
 

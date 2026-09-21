@@ -37,6 +37,12 @@ export default function Register() {
   // ─── Estado de carga para deshabilitar el formulario durante la petición ───
   const [isLoading, setIsLoading] = useState(false)
 
+  // ─── Mensaje de éxito (reactivación de cuenta desactivada) ───
+  // Cuando el backend responde que la cuenta fue reactivada NO emite
+  // access_token (la cuenta queda inactiva hasta confirmar el email), así
+  // que no hay auto-login ni navegación: se muestra este mensaje.
+  const [successMessage, setSuccessMessage] = useState('')
+
   // ─── Estados para alternar visibilidad de contraseñas ───
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -61,7 +67,7 @@ export default function Register() {
     const newErrors = {}
     if (!formData.username.trim()) newErrors.username = 'El usuario es requerido'
     else if (formData.username.trim().length < 3) newErrors.username = 'Mínimo 3 caracteres'
-    else if (!/^[a-zA-Z0-9_]+$/.test(formData.username.trim())) newErrors.username = 'Solo letras, números y _'
+    else if (!/^[a-zA-Z0-9_-]+$/.test(formData.username.trim())) newErrors.username = 'Solo letras, números, _ y -'
 
     // ─── Validación del correo electrónico ───
     if (!formData.email.trim()) newErrors.email = 'El correo es requerido'
@@ -86,17 +92,25 @@ export default function Register() {
     }
 
     setIsLoading(true)
+    setSuccessMessage('')  // Limpia mensajes previos de éxito
     try {
-      // Envía los datos al endpoint de registro del backend. El backend
-      // responde con los tokens (auto-login), así que la sesión ya queda
-      // iniciada y solo falta redirigir a la Landing Page.
-      await register({
+      // Envía los datos al endpoint de registro del backend. En registros
+      // nuevos el backend responde con tokens (auto-login) y la sesión ya
+      // queda iniciada. En reactivaciones de cuentas desactivadas responde
+      // SIN access_token: se muestra el mensaje de éxito en vez de navegar.
+      const response = await register({
         username: formData.username.trim(),
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         confirm_password: formData.confirmPassword,
       })
-      navigate('/')  // Redirige a la Landing Page
+      if (response?.access_token) {
+        navigate('/')  // Redirige a la Landing Page (auto-login)
+      } else {
+        setSuccessMessage(
+          response?.mensaje || 'Cuenta reactivada. Revisa tu correo para confirmar el email.'
+        )
+      }
     } catch (err) {
       // ─── Manejo de errores del servidor ───
       // El backend puede retornar errores por campo específico
@@ -129,6 +143,28 @@ export default function Register() {
     { label: 'Un número', met: /[0-9]/.test(formData.password) },
     { label: 'Un carácter especial', met: /[!@#$%^&*(),.?":{}|<>_-]/.test(formData.password) },
   ]
+
+  // ─── Pantalla de éxito (reactivación de cuenta) ───
+  // El backend no emitió tokens: la cuenta quedó inactiva hasta confirmar el
+  // email desde el correo, así que mostramos un mensaje en vez del formulario.
+  if (successMessage) {
+    return (
+      <div className="auth-page">
+        <div className="auth-container">
+          <div className="auth-card" style={{ textAlign: 'center' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#22c55e', marginBottom: 16 }}>
+              mark_email_read
+            </span>
+            <h1 className="auth-title">Revisa tu Correo</h1>
+            <p className="auth-subtitle" style={{ marginBottom: 24 }}>{successMessage}</p>
+            <button type="button" onClick={() => navigate('/login')} className="auth-submit">
+              Iniciar Sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="auth-page">

@@ -1,5 +1,7 @@
+import ipaddress
 import logging
 import time
+
 from django.core.cache import cache
 from django.conf import settings
 from django.http import JsonResponse
@@ -11,31 +13,101 @@ CACHE_PREFIX_BLOCK = 'bf_block:'
 
 LOCKOUT_MINUTES = [15, 60, 360, 1440]
 
-# Endpoints that record failures for IP-level brute force blocking
+# Endpoints that record failures for IP-level brute force blocking.
+# NOTA: /api/register/ queda fuera deliberadamente: un atacante puede provocar
+# 400 a voluntad, y contar esos fallos permitiría auto-bloquear a víctimas
+# (ataque de denegación de servicio por IP compartida).
+# NOTA: /admin/login/ está incluido porque el panel de administración es el
+# activo más crítico. Un login fallido del admin devuelve 200 (no 401/403),
+# así que el Middleware por sí solo no lo cuenta: SecureAdminSite.login
+# registra los fallos explícitamente vía registrar_fallo_ip().
 BRUTE_FORCE_PATHS = (
     '/api/login/',
-    '/api/register/',
     '/api/password-reset/',
     '/api/password-reset/confirm/',
+    '/api/password-reset/verificar-codigo/',
     '/api/cambiar-password/',
+    '/admin/login/',
 )
 
 
-def get_client_ip(request):
-    """Extrae la IP real del cliente, saltándose proxies de confianza.
+# Redes que consideramos proxies inversos propios (nginx). Una conexión cuyo
+# REMOTE_ADDR esté en esta lista es confiable para leer headers de reenvío.
+_TRUSTED_NETWORKS = []
+for _net in getattr(settings, 'TRUSTED_PROXIES', ''):
+    try:
+        _TRUSTED_NETWORKS.append(ipaddress.ip_network(_net.strip()))
+    except ValueError:
+        continue
 
-    Usa django-ipware que respeta el orden de X-Forwarded-For / X-Real-IP
-    y descarta las IPs de TRUSTED_PROXIES configuradas en settings.
+
+def _ip_en_proxies_confiables(ip):
+    try:
+        la = ipaddress.ip_address(ip or '')
+    except ValueError:
+        return False
+    return any(la in net for net in _TRUSTED_NETWORKS)
+
+
+def get_client_ip(request):
+    """Extrae la IP real del cliente sin permitir spoofing de X-Forwarded-For.
+
+    Regla que hace imposible el spoofing:
+    - Si el REMOTE_ADDR NO es un proxy de confianza, el cliente conecta
+      directamente: se usa REMOTE_ADDR e IGNORAMOS cualquier X-Forwarded-For
+      (ahí no hay proxy nuestro que lo haya añadido).
+    - Si REMOTE_ADDR SÍ es confiable (detrás de nginx), nginx fija X-Real-IP
+      con $remote_addr; si existe, esa es la IP real. Como fallback se toma el
+      ÚLTIMO elemento de X-Forwarded-For, que es el que nginx añade con
+      $proxy_add_x_forwarded_for; cualquier elemento anterior es spoofeable.
     """
-    from ipware import get_client_ip as _get_client_ip
-    ip, _ = _get_client_ip(
-        request,
-        request_header_order=['X_FORWARDED_FOR', 'X_REAL_IP'],
-        proxy_trusted_ips=settings.TRUSTED_PROXIES,
-    )
-    if ip:
-        return ip
-    return request.META.get('REMOTE_ADDR')
+    remote_addr = request.META.get('REMOTE_ADDR') or ''
+
+    if _ip_en_proxies_confiables(remote_addr):
+        # Detrás de nuestro proxy: X-Real-IP siempre lo fija nginx con la IP
+        # real del cliente (no es spoofeable a través del proxy).
+        x_real_ip = (request.META.get('HTTP_X_REAL_IP') or '').strip()
+        if x_real_ip:
+            return x_real_ip
+        xff = request.META.get('HTTP_X_FORWARDED_FOR') or ''
+        ips = [p.strip() for p in xff.split(',') if p.strip()]
+        if ips:
+            # El último valor es el que añadió nginx = cliente real.
+            return ips[-1]
+
+    return remote_addr
+
+
+def _get_block_key(ip):
+    return f'{CACHE_PREFIX_BLOCK}{ip}'
+
+
+def _get_attempts_key(ip, path_prefix):
+    return f'{CACHE_PREFIX_IP}{ip}:{path_prefix}'
+
+
+def ip_bloqueada(ip):
+    """Devuelve True si la IP está en lockout por demasiados intentos fallidos."""
+    return cache.get(_get_block_key(ip)) is not None
+
+
+def registrar_fallo_ip(ip, path_prefix):
+    """Cuenta un intento fallido de la IP para el path_prefix dado.
+
+    Al llegar a MAX_ATTEMPTS mete la IP en lockout (BLOCK_SECONDS) y devuelve
+    True. Se usa tanto por BruteForceIPMiddleware (respuestas 400/401/403/429)
+    como por SecureAdminSite.login, donde el login fallido del admin devuelve
+    200 y no lo detectaría el middleware solo.
+    """
+    key = _get_attempts_key(ip, path_prefix)
+    attempts = cache.get(key, 0) + 1
+    cache.set(key, attempts, BruteForceIPMiddleware.WINDOW_SECONDS)
+
+    if attempts >= BruteForceIPMiddleware.MAX_ATTEMPTS:
+        cache.set(_get_block_key(ip), True, BruteForceIPMiddleware.BLOCK_SECONDS)
+        logger.warning(f"IP bloqueada por ataque: {ip} ({attempts} intentos en {path_prefix})")
+        return True
+    return False
 
 
 class SecurityHeadersMiddleware:
@@ -46,13 +118,18 @@ class SecurityHeadersMiddleware:
         response = self.get_response(request)
         response['X-Content-Type-Options'] = 'nosniff'
         response['X-Frame-Options'] = 'DENY'
-        response['X-XSS-Protection'] = '1; mode=block'
+        # Desactivamos el filtro XSS del navegador ('0'): además de obsoleto e
+        # ineficaz, nginx lo fija en '0' para no entrar en conflicto (Django
+        # no puede pisar el header que nginx ya envió, doblando políticas).
+        response['X-XSS-Protection'] = '0'
         response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
         response['Cache-Control'] = 'no-store, max-age=0'
         response['Pragma'] = 'no-cache'
-        # CSP is set by nginx; Django only adds when nginx is not in front (direct access).
-        if not request.META.get('HTTP_X_FORWARDED_FOR'):
+        # CSP se fija en nginx; Django solo la añade cuando NINGÚN proxy la ha
+        # añadido (acceso directo a Django en desarrollo). nginx siempre envía
+        # X-Forwarded-Proto; su ausencia indica acceso directo.
+        if not request.META.get('HTTP_X_FORWARDED_PROTO'):
             response['Content-Security-Policy'] = (
                 "default-src 'self'; "
                 "script-src 'self'; "
@@ -105,25 +182,16 @@ class BruteForceIPMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
-    def _get_block_key(self, ip):
-        return f'{CACHE_PREFIX_BLOCK}{ip}'
-
-    def _get_attempts_key(self, ip, path_prefix):
-        return f'{CACHE_PREFIX_IP}{ip}:{path_prefix}'
-
     def _is_blocked(self, ip):
-        return cache.get(self._get_block_key(ip)) is not None
+        return ip_bloqueada(ip)
 
     def _record_failure(self, ip, path_prefix):
-        key = self._get_attempts_key(ip, path_prefix)
-        attempts = cache.get(key, 0) + 1
-        cache.set(key, attempts, self.WINDOW_SECONDS)
+        return registrar_fallo_ip(ip, path_prefix)
 
-        if attempts >= self.MAX_ATTEMPTS:
-            cache.set(self._get_block_key(ip), True, self.BLOCK_SECONDS)
-            logger.warning(f"IP bloqueada por ataque: {ip} ({attempts} intentos en {path_prefix})")
-            return True
-        return False
+    # Aliases estáticos para que otras vistas/tests puedan usar la misma lógica
+    # de lockout sin instanciar el middleware.
+    ip_bloqueada = staticmethod(ip_bloqueada)
+    registrar_fallo_ip = staticmethod(registrar_fallo_ip)
 
     def _get_path_prefix(self, path):
         best = None

@@ -17,6 +17,11 @@ from .views_password_reset import (
     PasswordResetConfirm,
     ConfirmarIdentidad,
     VerificarConfirmacion,
+    VerificarCodigo,
+)
+from .views_email import (
+    VerificarEmailView,
+    ReenviarVerificacionView,
 )
 from .views_game import (
     NivelListView,
@@ -37,6 +42,8 @@ urlpatterns = [
     path('token/refresh/', RefreshTokenView.as_view(), name='token_refresh'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('verify/', VerifySessionView.as_view(), name='verify_session'),
+    path('verificar-email/', VerificarEmailView.as_view(), name='verificar_email'),
+    path('verificar-email/reenviar/', ReenviarVerificacionView.as_view(), name='reenviar_verificacion'),
     path('ranking/', RankingView.as_view(), name='ranking'),
     path('usuarios/', UsuarioListView.as_view(), name='usuario_list'),
     path('usuarios/<int:pk>/', UsuarioDetailView.as_view(), name='usuario_detail'),
@@ -44,6 +51,7 @@ urlpatterns = [
     path('password-reset/confirm/', PasswordResetConfirm.as_view(), name='password_reset_confirm'),
     path('password-reset/confirmar/', ConfirmarIdentidad.as_view(), name='password_reset_confirmar'),
     path('password-reset/verificar/', VerificarConfirmacion.as_view(), name='password_reset_verificar'),
+    path('password-reset/verificar-codigo/', VerificarCodigo.as_view(), name='password_reset_verificar_codigo'),
     path('niveles/', NivelListView.as_view(), name='nivel_list'),
     path('partidas/', PartidaListView.as_view(), name='partida_list'),
     path('partidas/<int:pk>/', PartidaDetailView.as_view(), name='partida_detail'),

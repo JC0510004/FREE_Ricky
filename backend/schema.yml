@@ -520,6 +520,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/VerificarConfirmacionResponse'
           description: ''
+  /api/password-reset/verificar-codigo/:
+    post:
+      operationId: password_reset_verificar_codigo_create
+      description: Valida el código de 6 dígitos recibido por email contra el token
+        de restablecimiento. Permite al frontend confirmar el código antes de enviar
+        la nueva contraseña.
+      summary: Verificar código de restablecimiento
+      tags:
+      - Contraseña
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificarCodigoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerificarCodigoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerificarCodigoRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificarCodigoOK'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificarCodigoError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificarCodigoLimit'
+          description: ''
   /api/ranking/:
     get:
       operationId: ranking_list
@@ -753,6 +796,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/UsuarioDeleted'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioDeleteSelf'
+          description: ''
         '403':
           content:
             application/json:
@@ -764,6 +813,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UsuarioDeleteNotFound'
+          description: ''
+  /api/verificar-email/:
+    post:
+      operationId: verificar_email_create
+      description: Valida el token recibido por email y marca el correo del usuario
+        como verificado. En la reactivación de cuentas desactivadas, este token además
+        vuelve a activar la cuenta.
+      summary: Confirmar correo electrónico
+      tags:
+      - Autenticación
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificarEmailRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerificarEmailRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerificarEmailRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificarEmailOK'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificarEmailError'
+          description: ''
+  /api/verificar-email/reenviar/:
+    post:
+      operationId: verificar_email_reenviar_create
+      description: Genera y envía un nuevo token de verificación al correo del usuario
+        autenticado (invalida el token anterior).
+      summary: Reenviar correo de verificación
+      tags:
+      - Autenticación
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReenviarVerificacionOK'
           description: ''
   /api/verify/:
     get:
@@ -1153,6 +1256,9 @@ components:
       properties:
         token:
           type: string
+        codigo:
+          type: string
+          pattern: ^\d{6}$
         password:
           type: string
           writeOnly: true
@@ -1164,6 +1270,7 @@ components:
           maxLength: 128
           minLength: 8
       required:
+      - codigo
       - confirm_password
       - password
       - token
@@ -1191,8 +1298,6 @@ components:
       properties:
         posicion:
           type: integer
-        usuario_id:
-          type: integer
         username:
           type: string
         mejor_puntuacion:
@@ -1210,7 +1315,13 @@ components:
       - promedio_puntuacion
       - total_partidas
       - username
-      - usuario_id
+    ReenviarVerificacionOK:
+      type: object
+      properties:
+        mensaje:
+          type: string
+      required:
+      - mensaje
     RefreshError400:
       type: object
       properties:
@@ -1356,9 +1467,7 @@ components:
           format: email
           maxLength: 100
         rol:
-          allOf:
-          - $ref: '#/components/schemas/RolEnum'
-          readOnly: true
+          $ref: '#/components/schemas/RolEnum'
         fecha_registro:
           type: string
           format: date-time
@@ -1381,7 +1490,6 @@ components:
       - is_active
       - is_verified
       - last_login
-      - rol
       - username
     UsuarioDeleteForbidden:
       type: object
@@ -1391,6 +1499,13 @@ components:
       required:
       - error
     UsuarioDeleteNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    UsuarioDeleteSelf:
       type: object
       properties:
         error:
@@ -1494,6 +1609,37 @@ components:
       required:
       - mensaje
       - usuario
+    VerificarCodigoError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    VerificarCodigoLimit:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    VerificarCodigoOK:
+      type: object
+      properties:
+        valido:
+          type: boolean
+      required:
+      - valido
+    VerificarCodigoRequest:
+      type: object
+      properties:
+        token:
+          type: string
+        codigo:
+          type: string
+      required:
+      - codigo
+      - token
     VerificarConfirmacionResponse:
       type: object
       properties:
@@ -1501,6 +1647,30 @@ components:
           type: boolean
       required:
       - confirmado
+    VerificarEmailError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    VerificarEmailOK:
+      type: object
+      properties:
+        mensaje:
+          type: string
+        is_verified:
+          type: boolean
+      required:
+      - is_verified
+      - mensaje
+    VerificarEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+      - token
     VerifySessionResponse:
       type: object
       properties:

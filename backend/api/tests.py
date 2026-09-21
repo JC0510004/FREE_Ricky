@@ -1,7 +1,16 @@
 # ─── IMPORTACIONES ───────────────────────────────────────────────────────────
 # TestCase de Django: clase base para tests unitarios con base de datos
 # de prueba aislada (se crea y destruye automáticamente por cada test)
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.core import mail
+from django.core.cache import cache as django_cache
+from django.conf import settings as django_settings
+
+# Expresiones regulares para extraer tokens de los emails de prueba
+import re
+
+# Hash de tokens/códigos de reset conocidos en los tests
+import hashlib
 
 # Función reverse: resuelve URLs desde su nombre de ruta definido en urls.py
 # Evita hardcodear paths que podrían romperse al refactorizar
@@ -16,6 +25,9 @@ from rest_framework.test import APIClient
 
 # Modelo de usuario para consultas directas a la base de datos de prueba
 from .models import Usuario, Nivel, Partida, ConfirmacionReset
+# Middleware de brute force: sus umbrales (MAX_ATTEMPTS) y helpers de lockout
+# se reutilizan en los tests del panel de administración.
+from .middleware import BruteForceIPMiddleware
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -98,7 +110,9 @@ class RegistroTests(TestCase):
 
     # Al "eliminar" un usuario, el admin solo lo desactiva (soft delete).
     # Volver a registrarlo con el mismo username/email debe REACTIVAR esa
-    # misma cuenta (no crear un duplicado ni fallar por "ya existe").
+    # misma cuenta (no crear un duplicado ni fallar por "ya existe"), PERO la
+    # cuenta permanece inactiva hasta que el propietario confirma el email
+    # desde el enlace: nadie puede reclamar una cuenta desactivada en su lugar.
     def test_registro_reactiva_cuenta_desactivada(self):
         self.client.post(self.url, self.valid_data, format='json')
         usuario = Usuario.objects.get(username='testuser')
@@ -114,14 +128,28 @@ class RegistroTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
         usuario.refresh_from_db()
-        self.assertTrue(usuario.is_active)
+        # La cuenta sigue desactivada hasta confirmar el correo.
+        self.assertFalse(usuario.is_active)
         self.assertTrue(usuario.check_password('NuevaPass123!'))
         # La cuenta se reutiliza: no queda una fila duplicada
         self.assertEqual(Usuario.objects.filter(username__iexact='testuser').count(), 1)
         self.assertEqual(response.data['usuario']['id'], usuario.id)
+        # Sin sesión: la reactivación NO emite tokens hasta verificar el email.
+        self.assertNotIn('access_token', response.data)
+
+        # El email de reactivación lleva el token que activa la cuenta.
+        self.assertEqual(len(mail.outbox), 2)
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[-1].body)
+        self.assertIsNotNone(match)
+        resp = self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.is_active)
+        self.assertTrue(usuario.is_verified)
 
     # Si una cuenta desactivada tiene el username pero se registra con un
-    # email nuevo, debe poder reactivarse adoptando el email del formulario.
+    # email nuevo, debe poder reactivarse adoptando el email del formulario
+    # (siempre tras confirmar el correo).
     def test_registro_reactiva_con_email_nuevo(self):
         self.client.post(self.url, self.valid_data, format='json')
         usuario = Usuario.objects.get(username='testuser')
@@ -130,12 +158,62 @@ class RegistroTests(TestCase):
 
         data = {**self.valid_data, 'email': 'nuevo@gmail.com'}
         response = self.client.post(self.url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
         usuario.refresh_from_db()
-        self.assertTrue(usuario.is_active)
+        self.assertFalse(usuario.is_active)
+        self.assertNotIn('access_token', response.data)
         self.assertEqual(usuario.email, 'nuevo@gmail.com')
         self.assertEqual(Usuario.objects.filter(username__iexact='testuser').count(), 1)
+
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[-1].body)
+        resp = self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.is_active)
+
+    # El registro de un usuario nuevo envía un email de verificación, pero NO
+    # bloquea el auto-login (acceso inmediato con banner de "verifica tu correo").
+    def test_registro_envia_email_verificacion(self):
+        response = self.client.post(self.url, self.valid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('access_token', response.data)
+
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertFalse(usuario.is_verified)
+
+        self.assertEqual(len(mail.outbox), 1)
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        self.assertIsNotNone(match)
+        resp = self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.is_verified)
+
+    # Un token de verificación inválido o expirado debe ser rechazado.
+    def test_registro_verificacion_token_invalido(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        resp = self.client.post(reverse('verificar_email'), {'token': 'a' * 32}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        # El usuario conserva su estado: sin verificar y activo (auto-login).
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertFalse(usuario.is_verified)
+        self.assertTrue(usuario.is_active)
+
+    # El token de verificación de email es de un solo uso: tras verificar, no sirve de nuevo.
+    def test_registro_verificacion_token_un_solo_uso(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        token = match.group(1)
+        self.assertEqual(self.client.post(reverse('verificar_email'), {'token': token}, format='json').status_code, 200)
+        resp = self.client.post(reverse('verificar_email'), {'token': token}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # El registro acepta guiones en el username (igual que la edición de perfil).
+    def test_registro_username_con_guion(self):
+        data = {**self.valid_data, 'username': 'test-user'}
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
     # Verifica que un POST vacío retorne 400 con errores de campo requerido
     # Cubre la validación de campos obligatorios del serializer
@@ -451,6 +529,7 @@ class PasswordResetTests(TestCase):
         self.register_url = reverse('register')
         self.reset_url = reverse('password_reset')
         self.confirm_url = reverse('password_reset_confirm')
+        self.verificar_codigo_url = reverse('password_reset_verificar_codigo')
         self.user_data = {
             'username': 'testuser',
             'email': 'test@gmail.com',
@@ -458,6 +537,31 @@ class PasswordResetTests(TestCase):
             'confirm_password': 'TestPass123!',
         }
         self.client.post(self.register_url, self.user_data, format='json')
+        self.token = 'fake_token_for_test'
+        self.codigo = '123456'
+
+    def _crear_reset(self, confirmado=True):
+        """Crea directamente un registro de reset con token y código conocidos.
+
+        Nota: se crea en la BD con esos valores en vez de solicitar por HTTP
+        y sobreescribir el token_hash: cambiar la PK de un objeto persistido y
+        hacer .save() provoca INSERT + fila huérfana (UPDATE a 0 filas).
+        """
+        ConfirmacionReset.objects.all().delete()
+        return ConfirmacionReset.objects.create(
+            usuario=Usuario.objects.get(username='testuser'),
+            token_hash=hashlib.sha256(self.token.encode()).hexdigest(),
+            codigo_hash=hashlib.sha256(self.codigo.encode()).hexdigest(),
+            confirmado=confirmado,
+        )
+
+    def _confirmar(self, token=None, codigo=None, password='NewPass123!', confirm_password='NewPass123!'):
+        return self.client.post(self.confirm_url, {
+            'token': token or self.token,
+            'codigo': codigo or self.codigo,
+            'password': password,
+            'confirm_password': confirm_password,
+        }, format='json')
 
     def test_solicitud_reset_email_valido(self):
         response = self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
@@ -478,21 +582,8 @@ class PasswordResetTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_confirm_reset_datos_validos(self):
-        # Solicita reset para generar un token
-        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
-        record = ConfirmacionReset.objects.first()
-        # Token en texto plano: se usa para encontrar el registro por su hash
-        token = 'fake_token_for_test'
-        token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
-        record.token_hash = token_hash
-        record.confirmado = True
-        record.save()
-
-        response = self.client.post(self.confirm_url, {
-            'token': token,
-            'password': 'NewPass123!',
-            'confirm_password': 'NewPass123!',
-        }, format='json')
+        self._crear_reset(confirmado=True)
+        response = self._confirmar()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que la contraseña cambió
         usuario = Usuario.objects.get(username='testuser')
@@ -501,38 +592,106 @@ class PasswordResetTests(TestCase):
     def test_confirm_reset_requiere_confirmacion_previa(self):
         # El token existe pero el usuario NO confirmó su identidad desde el
         # enlace del correo → el restablecimiento debe ser rechazado.
-        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
-        record = ConfirmacionReset.objects.first()
-        token = 'fake_token_for_test'
-        record.token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
-        record.save()
+        self._crear_reset(confirmado=False)
+        response = self._confirmar()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertTrue(usuario.check_password('TestPass123!'))
 
+    def test_confirm_reset_codigo_incorrecto(self):
+        # Clic en el enlace pero código erróneo → rechazado y contraseña intacta.
+        self._crear_reset(confirmado=True)
+        response = self._confirmar(codigo='999999')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertTrue(usuario.check_password('TestPass123!'))
+
+    def test_confirm_reset_codigo_requerido(self):
+        self._crear_reset(confirmado=True)
+        # Sin codigo → 400 por validación del serializer.
         response = self.client.post(self.confirm_url, {
-            'token': token,
+            'token': self.token,
             'password': 'NewPass123!',
             'confirm_password': 'NewPass123!',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_verificar_codigo_valido(self):
+        self._crear_reset()
+        response = self.client.post(self.verificar_codigo_url, {
+            'token': self.token,
+            'codigo': self.codigo,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['valido'])
+
+    def test_verificar_codigo_incorrecto(self):
+        self._crear_reset()
+        response = self.client.post(self.verificar_codigo_url, {
+            'token': self.token,
+            'codigo': '000000',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # La fuerza bruta del código de 6 dígitos por verificar-codigo/ debe ser
+    # inviable: al superar MAX_INTENTOS_CODIGO (10) el token se invalida.
+    def test_verificar_codigo_bloquea_fuerza_bruta(self):
+        self._crear_reset()
+        for _ in range(ConfirmacionReset.MAX_INTENTOS_CODIGO):
+            response = self.client.post(self.verificar_codigo_url, {
+                'token': self.token,
+                'codigo': '111111',
+            }, format='json')
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # El registro se invalidó: el token ya no existe.
+        self.assertEqual(ConfirmacionReset.objects.count(), 0)
+
+    # Unos pocos fallos NO invalidan el token: el código correcto sigue valiendo.
+    def test_verificar_codigo_correcto_tras_fallos(self):
+        self._crear_reset()
+        for _ in range(5):
+            self.client.post(self.verificar_codigo_url, {
+                'token': self.token,
+                'codigo': '111111',
+            }, format='json')
+        record = ConfirmacionReset.objects.get()
+        self.assertEqual(record.failed_attempts, 5)
+        response = self.client.post(self.verificar_codigo_url, {
+            'token': self.token,
+            'codigo': self.codigo,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['valido'])
+
+    # Lo mismo protege el confirmar/ (donde también se exige el código).
+    def test_confirm_reset_bloquea_fuerza_bruta(self):
+        self._crear_reset(confirmado=True)
+        for _ in range(ConfirmacionReset.MAX_INTENTOS_CODIGO):
+            response = self._confirmar(codigo='999999')
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         usuario = Usuario.objects.get(username='testuser')
         self.assertTrue(usuario.check_password('TestPass123!'))
+        self.assertEqual(ConfirmacionReset.objects.count(), 0)
+
+    def test_verificar_codigo_token_expirado(self):
+        from django.utils import timezone as tz
+        record = self._crear_reset()
+        record.created_at = tz.now() - tz.timedelta(minutes=20)
+        record.save()
+
+        response = self.client.post(self.verificar_codigo_url, {
+            'token': self.token,
+            'codigo': self.codigo,
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_confirm_reset_invalida_sesiones_previas(self):
         from rest_framework_simplejwt.tokens import RefreshToken
         usuario = Usuario.objects.get(username='testuser')
         old_refresh = str(RefreshToken.for_user(usuario))
 
-        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
-        record = ConfirmacionReset.objects.first()
-        token = 'fake_token_for_test'
-        record.token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
-        record.confirmado = True
-        record.save()
-
-        response = self.client.post(self.confirm_url, {
-            'token': token,
-            'password': 'NewPass123!',
-            'confirm_password': 'NewPass123!',
-        }, format='json')
+        self._crear_reset(confirmado=True)
+        response = self._confirmar()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Un refresh token emitido ANTES del restablecimiento ya no vale.
@@ -542,56 +701,27 @@ class PasswordResetTests(TestCase):
         self.assertEqual(resp_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_confirm_reset_passwords_no_coinciden(self):
-        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
-        record = ConfirmacionReset.objects.first()
-        token = 'fake_token_for_test'
-        token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
-        record.token_hash = token_hash
-        record.save()
-
-        response = self.client.post(self.confirm_url, {
-            'token': token,
-            'password': 'NewPass123!',
-            'confirm_password': 'DifferentPass123!',
-        }, format='json')
+        self._crear_reset(confirmado=True)
+        response = self._confirmar(confirm_password='DifferentPass123!')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_confirm_reset_password_debil(self):
-        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
-        record = ConfirmacionReset.objects.first()
-        token = 'fake_token_for_test'
-        token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
-        record.token_hash = token_hash
-        record.save()
-
-        response = self.client.post(self.confirm_url, {
-            'token': token,
-            'password': '123',
-            'confirm_password': '123',
-        }, format='json')
+        self._crear_reset()
+        response = self._confirmar(password='123', confirm_password='123')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_confirm_reset_token_expirado(self):
         from django.utils import timezone as tz
-        self.client.post(self.reset_url, {'email': 'test@gmail.com'}, format='json')
-        record = ConfirmacionReset.objects.first()
+        record = self._crear_reset()
         # Forzar expiración: retroceder la fecha de creación 20 minutos
         record.created_at = tz.now() - tz.timedelta(minutes=20)
         record.save()
 
-        response = self.client.post(self.confirm_url, {
-            'token': 'any_token',
-            'password': 'NewPass123!',
-            'confirm_password': 'NewPass123!',
-        }, format='json')
+        response = self._confirmar()
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_confirm_reset_token_inexistente(self):
-        response = self.client.post(self.confirm_url, {
-            'token': 'token_que_no_existe_999',
-            'password': 'NewPass123!',
-            'confirm_password': 'NewPass123!',
-        }, format='json')
+        response = self._confirmar(token='token_que_no_existe_999')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
@@ -1592,3 +1722,87 @@ class CacheResilienciaTests(TestCase):
         cache.delete('clave')
         self.assertIsNone(cache.get('clave'))
         self.assertTrue(cache.has_key('otra'))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE SEGURIDAD DEL PANEL DE ADMINISTRACIÓN
+# ═══════════════════════════════════════════════════════════════════════════════
+# El login de Django admin no cuenta con protección anti fuerza bruta propia
+# (falla con 200, no 401/403). SecureAdminSite añade rate limit DRF por IP y
+# lockout con los mismos umbrales que /api/login/. Estas tests validan ambas
+# capas sin depender del BruteForceIPMiddleware (que no se carga en tests).
+
+@override_settings(ROOT_URLCONF='api.urls_admin_test')
+class AdminSeguridadTests(TestCase):
+    def setUp(self):
+        django_cache.clear()
+        self.login_url = '/admin/login/'
+        self.admin = Usuario.objects.create_user(
+            username='root',
+            email='root@gmail.com',
+            password='AdminPass123!',
+            rol='admin',
+        )
+        self._rate_admin_login = django_settings.REST_FRAMEWORK[
+            'DEFAULT_THROTTLE_RATES'
+        ].get('admin_login')
+
+    def tearDown(self):
+        django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['admin_login'] = (
+            self._rate_admin_login
+        )
+        django_cache.clear()
+
+    def _post_login(self, password='mala', username='root'):
+        return self.client.post(
+            self.login_url,
+            {'username': username, 'password': password},
+        )
+
+    def test_login_admin_valido_redirige(self):
+        # El form de login de Django admin incluye un campo hidden 'next'
+        # apuntando al índice del admin; sin él, LoginView caería al
+        # LOGIN_REDIRECT_URL por defecto.
+        response = self.client.post(
+            self.login_url,
+            {'username': 'root', 'password': 'AdminPass123!', 'next': '/admin/'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/admin/')
+
+    def test_credenciales_incorrectas_renderiza_200(self):
+        # Django admin devuelve 200 en fallo: por eso SecureAdminSite registra
+        # el fallo explícitamente (el middleware no lo detecta por status).
+        response = self._post_login(password='incorrecta')
+        self.assertEqual(response.status_code, 200)
+
+    def test_rate_limit_login_admin_bloquea_intentos_adicionales(self):
+        # Ritmo reducido solo para este test: 2 permitidos y el 3º se corta
+        # ANTES de intentar autenticar (no consume credenciales).
+        django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['admin_login'] = '2/minute'
+        for _ in range(2):
+            response = self._post_login(password='incorrecta')
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'Demasiados intentos de inicio de sesión')
+
+        response = self._post_login(password='incorrecta')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Demasiados intentos de inicio de sesión')
+
+    def test_lockout_ip_tras_max_intentos(self):
+        # Con el ritmo por defecto de tests (relajado) se cuentan los fallos
+        # reales: al llegar a MAX_ATTEMPTS la IP queda en lockout y el POST
+        # siguiente no intenta autenticar.
+        for _ in range(BruteForceIPMiddleware.MAX_ATTEMPTS):
+            response = self._post_login(password='incorrecta')
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'bloqueada')
+
+        self.assertTrue(BruteForceIPMiddleware.ip_bloqueada('127.0.0.1'))
+
+        response = self._post_login(password='incorrecta')
+        self.assertContains(response, 'bloqueada')
+
+    def test_ip_distinta_no_esta_bloqueada(self):
+        # Sanity: los fallos se cuentan por IP y prefijo de path concretos.
+        self.assertFalse(BruteForceIPMiddleware.ip_bloqueada('8.8.8.8'))

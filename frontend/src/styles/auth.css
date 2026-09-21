@@ -99,6 +99,12 @@
     color: rgba(255, 255, 255, 0.3);
 }
 
+.auth-hint {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+    line-height: 1.4;
+}
+
 .auth-password-wrapper {
     position: relative;
 }

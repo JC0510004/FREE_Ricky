@@ -62,42 +62,21 @@ export const authService = {
     // Hacemos la petición POST al endpoint de registro
     const { data: response } = await API.post('/register/', data)
 
-    // Si el backend devuelve los datos del usuario, los persistimos en
-    // localStorage para que la sesión sobreviva a recargas de página.
-    if (response.usuario) {
-      localStorage.setItem(USER_KEY, JSON.stringify(response.usuario))
-    }
-
-    // Si viene un access token, lo guardamos en memoria para las peticiones.
+    // Con access_token → auto-login: se persiste la sesión igual que en login.
+    // Sin access_token → reactivación de una cuenta desactivada: el backend NO
+    // emite tokens hasta que el usuario confirme el email desde el correo, así
+    // que NO se deja autenticado: se limpian datos previos y memoria.
     if (response.access_token) {
+      if (response.usuario) {
+        localStorage.setItem(USER_KEY, JSON.stringify(response.usuario))
+      }
       setAccessToken(response.access_token)
+    } else {
+      localStorage.removeItem(USER_KEY)
+      clearAccessToken()
     }
 
     return response
-  },
-
-  // ─── MÉTODO: RENOVACIÓN DE TOKEN ──────────────────────────────────
-  // Solicita un nuevo access token al backend usando el refresh token
-  // (que se envía automáticamente como cookie HttpOnly).
-  // Retorna: el nuevo access token si fue exitoso, o null si falló.
-  // El interceptor de Axios también maneja esta lógica, pero este método
-  // permite una renovación manual cuando se necesita.
-  async refreshToken() {
-    try {
-      const { data } = await API.post('/token/refresh/')
-      if (data.access_token) {
-        // Guardamos el nuevo token en memoria para las siguientes peticiones
-        setAccessToken(data.access_token)
-        return data.access_token
-      }
-      return null
-    } catch {
-      // Si el refresh falló, la sesión ha expirado completamente.
-      // Limpiamos todos los datos de autenticación del cliente.
-      localStorage.removeItem(USER_KEY)
-      clearAccessToken()
-      return null
-    }
   },
 
   // ─── MÉTODO: CIERRE DE SESIÓN ─────────────────────────────────────

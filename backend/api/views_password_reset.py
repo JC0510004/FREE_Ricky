@@ -1,8 +1,11 @@
 import hashlib
+import hmac
 import logging
+import random
 from uuid import uuid4
 
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from django.core.mail import send_mail
@@ -17,7 +20,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 
 from .models import Usuario, ConfirmacionReset
 from .serializers import PasswordResetSerializer, PasswordResetConfirmSerializer
-from .throttles import PasswordResetThrottle
+from .throttles import PasswordResetThrottle, CodigoResetThrottle
 
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
@@ -30,6 +33,37 @@ def _generate_reset_token():
     token = uuid4().hex
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     return token, token_hash
+
+
+def _generate_reset_code():
+    # Código numérico de 6 dígitos criptográficamente seguro (segundo factor).
+    code = f"{random.SystemRandom().randint(0, 999999):06d}"
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    return code, code_hash
+
+
+def _codigo_es_valido(reset_record, codigo):
+    """Compara el código en texto plano contra el hash en tiempo constante."""
+    if not reset_record.codigo_hash:
+        return False
+    candidato = hashlib.sha256(codigo.encode()).hexdigest()
+    return hmac.compare_digest(reset_record.codigo_hash, candidato)
+
+
+def _registrar_fallo_codigo(reset_record):
+    """Incrementa los fallos del código; al llegar al máximo invalida el token.
+
+    Devuelve True si el token fue invalidado por demasiados intentos.
+    """
+    intentos = reset_record.incrementar_intentos_fallidos()
+    if intentos >= ConfirmacionReset.MAX_INTENTOS_CODIGO:
+        reset_record.delete()
+        logger.warning(
+            f"Token de reset invalidado: {intentos} intentos fallidos de código "
+            f"user={reset_record.usuario_id}",
+        )
+        return True
+    return False
 
 
 SUCCESS_HTML = """<!DOCTYPE html>
@@ -122,6 +156,7 @@ class PasswordReset(APIView):
             usuario = Usuario.objects.get(email__iexact=email, is_active=True)
 
             token, token_hash = _generate_reset_token()
+            codigo, codigo_hash = _generate_reset_code()
 
             ConfirmacionReset.objects.filter(usuario=usuario).delete()
 
@@ -129,10 +164,19 @@ class PasswordReset(APIView):
                 created_at__lt=timezone.now() - timezone.timedelta(minutes=ConfirmacionReset.TOKEN_EXPIRY_MINUTES)
             ).delete()
 
-            ConfirmacionReset.objects.create(usuario=usuario, token_hash=token_hash)
+            ConfirmacionReset.objects.create(usuario=usuario, token_hash=token_hash, codigo_hash=codigo_hash)
 
             si_url = f"{settings.FRONTEND_URL}/forgot-password?token={token}"
             no_url = f"{settings.FRONTEND_URL}/login"
+            codigo_bloque = f"""
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto 0;">
+                  <tr>
+                    <td align="center" style="background:#f4f6f9;border:1px dashed #cbd5e1;border-radius:12px;padding:16px 32px;">
+                      <p style="margin:0 0 4px;font-size:12px;color:#6b7280;letter-spacing:1px;text-transform:uppercase;">Tu código de verificación</p>
+                      <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#1a1a2e;">{codigo}</p>
+                    </td>
+                  </tr>
+                </table>"""
 
             html_message = f"""
             <!DOCTYPE html>
@@ -165,6 +209,7 @@ class PasswordReset(APIView):
                               </td>
                             </tr>
                           </table>
+                          {codigo_bloque}
                         </td>
                       </tr>
                       <tr>
@@ -173,7 +218,8 @@ class PasswordReset(APIView):
                             <tr>
                               <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
                                 <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
-                                  Este enlace expira en 15 minutos. Si no solicitaste este cambio, puedes ignorar este correo.
+                                  Haz clic en "Sí, soy yo" <strong>y</strong> usa el código de arriba para restablecer tu contraseña.
+                                  El enlace y el código expiran en 15 minutos. Si no solicitaste este cambio, puedes ignorar este correo.
                                 </p>
                               </td>
                             </tr>
@@ -190,7 +236,14 @@ class PasswordReset(APIView):
 
             send_mail(
                 subject='¿Eres tú? - FREE RICKY',
-                message=f'¿Eres tú? Se solicitó un restablecimiento de contraseña para {email}.\n\nSí, soy yo: {si_url}\nNo, cancelar: {no_url}\n\nEste enlace expira en 15 minutos.',
+                message=(
+                    f'¿Eres tú? Se solicitó un restablecimiento de contraseña para {email}.\n\n'
+                    f'Tu código de verificación: {codigo}\n\n'
+                    f'Sí, soy yo: {si_url}\n'
+                    f'No, cancelar: {no_url}\n\n'
+                    f'Haz clic en "Sí, soy yo" y usa el código para restablecer tu contraseña.\n'
+                    f'El enlace y el código expiran en 15 minutos.'
+                ),
                 html_message=html_message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[email],
@@ -239,6 +292,7 @@ class PasswordResetConfirm(APIView):
 
         token = serializer.validated_data['token']
         password = serializer.validated_data['password']
+        codigo = serializer.validated_data['codigo']
 
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         try:
@@ -260,6 +314,18 @@ class PasswordResetConfirm(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Además del clic en el enlace, exige el código de 6 dígitos recibido
+            # por email (segundo factor). El hash nunca es null cuando el token
+            # se generó por el flujo normal. La comparación es en tiempo
+            # constante y los fallos cuentan: al superar MAX_INTENTOS_CODIGO
+            # (10) el token se invalida (anti fuerza bruta del código).
+            if not _codigo_es_valido(reset_record, codigo):
+                _registrar_fallo_codigo(reset_record)
+                return Response(
+                    {'error': 'Código de verificación incorrecto'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             usuario = reset_record.usuario
 
             if not usuario.is_active:
@@ -268,18 +334,40 @@ class PasswordResetConfirm(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            usuario.set_password(password)
-            usuario.failed_attempts = 0
-            usuario.locked_until = None
-            usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
+            # Cambio atómico: se bloquea la fila del usuario mientras se aplica
+            # el reset y se invalidan sesiones, de modo que dos reset simultáneos
+            # no pueden pisarse mutuamente ni quedar un token sin borrar.
+            with transaction.atomic():
+                blocked_usuario = Usuario.objects.select_for_update().get(pk=usuario.pk)
 
-            # Invalida todas las sesiones existentes: tras restablecer la
-            # contraseña, cualquier refresh token emitido antes deja de valer
-            # (los access tokens expiran solos en unos minutos).
-            for ot in OutstandingToken.objects.filter(user=usuario):
-                BlacklistedToken.objects.get_or_create(token=ot)
+                blocked_usuario.set_password(password)
+                blocked_usuario.failed_attempts = 0
+                blocked_usuario.locked_until = None
+                blocked_usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
 
-            reset_record.delete()
+                # Invalida todas las sesiones existentes: tras restablecer la
+                # contraseña, cualquier refresh token emitido antes deja de valer
+                # (los access tokens expiran solos en unos minutos).
+                for ot in OutstandingToken.objects.filter(user=blocked_usuario):
+                    BlacklistedToken.objects.get_or_create(token=ot)
+
+                reset_record.delete()
+
+                usuario = blocked_usuario
+
+            # Alerta al propietario: si esto no fue obra suya, saberlo cuanto
+            # antes le permite reclamar / recuperar la cuenta.
+            send_mail(
+                subject='Tu contraseña fue restablecida - FREE RICKY',
+                message=(
+                    f'Hola {usuario.username}, la contraseña de tu cuenta FREE RICKY '
+                    'acaba de ser restablecida.\n\n'
+                    'Si no fuiste tú, contacta con soporte inmediatamente.'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[usuario.email],
+                fail_silently=True,
+            )
 
             logger.info(
                 f"Contraseña restablecida para: {usuario.username}",
@@ -288,6 +376,84 @@ class PasswordResetConfirm(APIView):
             audit_logger.info(f"RESET_PASSWORD_COMPLETADO user_id={usuario.id} username={usuario.username}")
 
             return Response({'mensaje': 'Contraseña restablecida correctamente'})
+        except ConfirmacionReset.DoesNotExist:
+            return Response(
+                {'error': 'Token inválido o expirado'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class VerificarCodigo(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [CodigoResetThrottle]
+
+    @extend_schema(
+        tags=['Contraseña'],
+        summary='Verificar código de restablecimiento',
+        description='Valida el código de 6 dígitos recibido por email contra el token '
+        'de restablecimiento. Permite al frontend confirmar el código antes de enviar '
+        'la nueva contraseña.',
+        request=inline_serializer(
+            'VerificarCodigoRequest',
+            {
+                'token': serializers.CharField(),
+                'codigo': serializers.CharField(),
+            },
+        ),
+        responses={
+            200: inline_serializer(
+                'VerificarCodigoOK',
+                {'valido': serializers.BooleanField()},
+            ),
+            400: inline_serializer(
+                'VerificarCodigoError',
+                {'error': serializers.CharField()},
+            ),
+            429: inline_serializer(
+                'VerificarCodigoLimit',
+                {'detail': serializers.CharField()},
+            ),
+        },
+    )
+    def post(self, request):
+        codigo = request.data.get('codigo', '')
+        token = request.data.get('token', '')
+
+        if not codigo or not token:
+            return Response(
+                {'error': 'Token y código son obligatorios'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            reset_record = ConfirmacionReset.objects.get(token_hash=hashlib.sha256(token.encode()).hexdigest())
+
+            if reset_record.is_expired:
+                return Response(
+                    {'error': 'Token expirado. Solicita uno nuevo'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if not reset_record.usuario.is_active:
+                return Response(
+                    {'error': 'Token inválido o expirado'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if not _codigo_es_valido(reset_record, codigo):
+                _registrar_fallo_codigo(reset_record)
+                logger.info(
+                    f"[VerificarCodigo] Código incorrecto user={reset_record.usuario_id}",
+                )
+                return Response(
+                    {'error': 'Código incorrecto'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            logger.info(
+                f"[VerificarCodigo] Código válido user={reset_record.usuario_id}",
+            )
+            return Response({'valido': True})
         except ConfirmacionReset.DoesNotExist:
             return Response(
                 {'error': 'Token inválido o expirado'},
@@ -352,7 +518,7 @@ class ConfirmarIdentidad(APIView):
 
 class VerificarConfirmacion(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = []
+    throttle_classes = [AnonRateThrottle]
 
     @extend_schema(
         tags=['Contraseña'],

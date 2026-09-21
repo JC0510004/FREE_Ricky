@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
+import API from '../api/axios';
 
 export default function Navbar() {
   // ─── Estado de scroll ───
@@ -81,7 +82,27 @@ export default function Navbar() {
   // Se usa como avatar por defecto cuando no hay imagen de perfil.
   const userInitial = user?.username?.[0]?.toUpperCase() || '?';
 
+  // ─── Banner de correo sin verificar ───
+  // Estado para el reenvío del correo de confirmación desde el propio banner.
+  const [resending, setResending] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
+
+  // ─── Manejador de reenvío del correo de verificación ───
+  const handleResendVerification = useCallback(async () => {
+    setResending(true);
+    setResendSent(false);
+    try {
+      await API.post('/verificar-email/reenviar/');
+      setResendSent(true);
+    } catch {
+      setResendSent(false);
+    } finally {
+      setResending(false);
+    }
+  }, []);
+
   return (
+    <>
     <nav className={`navbar ${isScrolled ? 'scrolled' : ''}`} id="mainNav">
       <div className="navbar-container">
 
@@ -187,5 +208,25 @@ export default function Navbar() {
 
       </div>
     </nav>
+
+      {/* ─── Aviso de correo sin verificar ─── */}
+      {/* Se muestra bajo la barra mientras la cuenta no confirme el email. */}
+      {isAuthenticated && user && !user.is_verified && (
+        <div className="verify-banner" role="status">
+          <span className="material-symbols-outlined">mark_email_unread</span>
+          <span className="verify-banner-text">
+            Confirma tu correo electrónico para completar tu cuenta.
+          </span>
+          <button
+            type="button"
+            className="verify-banner-action"
+            onClick={handleResendVerification}
+            disabled={resending}
+          >
+            {resendSent ? 'Correo enviado' : resending ? 'Enviando...' : 'Reenviar correo'}
+          </button>
+        </div>
+      )}
+    </>
   );
 }

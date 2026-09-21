@@ -1,6 +1,9 @@
+import hashlib
 import logging
+from uuid import uuid4
 
 from django.conf import settings
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -17,7 +20,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
-from .models import Usuario
+from .models import Usuario, VerificacionEmail
 from .serializers import RegisterSerializer, LoginSerializer, UsuarioSerializer
 from .throttles import LoginThrottle, RegisterThrottle, RefreshThrottle
 
@@ -25,7 +28,42 @@ logger = logging.getLogger('seguridad')
 audit_logger = logging.getLogger('auditoria')
 
 
+def _enviar_verificacion_email(usuario):
+    """Genera y envía un token de un solo uso para confirmar el email.
+
+    Se usa en el alta normal (confirmación de correo) y en la reactivación de
+    cuentas desactivadas (donde además es la llave que vuelve a activar la
+    cuenta). Almacena solo el hash SHA-256 del token.
+    """
+    token = uuid4().hex
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with transaction.atomic():
+        VerificacionEmail.objects.filter(usuario=usuario).delete()
+        VerificacionEmail.objects.create(usuario=usuario, token_hash=token_hash)
+
+    url = f"{settings.FRONTEND_URL}/verificar-email?token={token}"
+    send_mail(
+        subject='Confirma tu correo - FREE RICKY',
+        message=(
+            f'Hola {usuario.username}, confirma tu correo para activar tu cuenta:\n\n'
+            f'{url}\n\n'
+            'El enlace expira en 60 minutos.'
+        ),
+        html_message=(
+            '<p>Hola <strong>%s</strong>, confirma tu correo para activar tu cuenta.</p>'
+            '<p><a href="%s">Confirmar mi correo</a></p>'
+            '<p style="font-size:12px;color:#6b7280;">El enlace expira en 60 minutos.</p>'
+        ) % (usuario.username, url),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[usuario.email],
+        fail_silently=True,
+    )
+
+
 def _set_refresh_cookie(response, response_obj):
+    # Secure: en producción siempre; en DEBUG solo si se fuerza HTTPS detrás
+    # del proxy (SECURE_SSL_REDIRECT=True), para no romper el desarrollo local.
+    _secure = not settings.DEBUG or getattr(settings, 'SECURE_SSL_REDIRECT', False)
     response.set_cookie(
         'refresh_token',
         response_obj,
@@ -33,7 +71,7 @@ def _set_refresh_cookie(response, response_obj):
         samesite='Lax',
         max_age=86400,
         path='/api/',
-        secure=not settings.DEBUG,
+        secure=_secure,
     )
 
 
@@ -92,10 +130,31 @@ class RegisterView(APIView):
                 f"REACTIVACION cuenta desactivada id={usuario.id} "
                 f"username={usuario.username} email={usuario.email}",
             )
-        else:
-            audit_logger.info(
-                f"REGISTRO nuevo usuario id={usuario.id} username={usuario.username} email={usuario.email}",
+            # La cuenta sigue inactiva: el email de verificación es la llave
+            # que la activa. NO se emiten tokens de sesión.
+            _enviar_verificacion_email(usuario)
+            logger.info(
+                f"Cuenta reactivada, pendiente de verificación: {usuario.username}",
+                extra={'user_id': usuario.id, 'username': usuario.username},
             )
+            return Response(
+                {
+                    'mensaje': 'Cuenta reactivada. Revisa tu correo para confirmar el email.',
+                    'usuario': {
+                        'id': usuario.id,
+                        'username': usuario.username,
+                        'email': usuario.email,
+                        'rol': usuario.rol,
+                    },
+                    'is_active': usuario.is_active,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        audit_logger.info(
+            f"REGISTRO nuevo usuario id={usuario.id} username={usuario.username} email={usuario.email}",
+        )
+        _enviar_verificacion_email(usuario)
 
         refresh = RefreshToken.for_user(usuario)
         refresh_token = str(refresh)
@@ -108,7 +167,7 @@ class RegisterView(APIView):
 
         response = Response(
             {
-                'mensaje': 'Registro exitoso',
+                'mensaje': 'Registro exitoso. Revisa tu correo para confirmar tu email.',
                 'usuario': {
                     'id': usuario.id,
                     'username': usuario.username,
@@ -186,6 +245,10 @@ class LoginView(APIView):
             )
 
         if not usuario.is_active:
+            # Ejecutamos el check de contraseña igualmente: el tiempo de
+            # respuesta debe ser el mismo que para un login válido, para que
+            # no se pueda diferenciar por timing (CWE-208) una cuenta inactiva.
+            usuario.check_password(password)
             logger.warning(
                 f"Login bloqueado - cuenta inactiva: {usuario.username}",
                 extra={'user_id': usuario.id}
@@ -196,6 +259,7 @@ class LoginView(APIView):
             )
 
         if usuario.is_locked():
+            usuario.check_password(password)
             remaining = max(0, int((usuario.locked_until - timezone.now()).total_seconds() / 60))
             logger.warning(
                 f"Login bloqueado - cuenta temporalmente bloqueada: {usuario.username}",

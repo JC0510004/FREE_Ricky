@@ -1,5 +1,8 @@
 import logging
 
+from django.conf import settings
+from django.core.mail import send_mail
+
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import serializers, status
@@ -265,6 +268,20 @@ class ChangePasswordView(APIView):
                 current_jti = None
         for ot in OutstandingToken.objects.filter(user=usuario).exclude(jti=current_jti):
             BlacklistedToken.objects.get_or_create(token=ot)
+
+        # Alerta por email: si no fue el propietario quien cambió la
+        # contraseña, puede reclamar y bloquear el acceso de inmediato.
+        send_mail(
+            subject='Tu contraseña fue cambiada - FREE RICKY',
+            message=(
+                f'Hola {usuario.username}, la contraseña de tu cuenta FREE RICKY '
+                'acaba de ser cambiada.\n\n'
+                'Si no fuiste tú, contacta con soporte inmediatamente.'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[usuario.email],
+            fail_silently=True,
+        )
 
         logger.info(f"Contraseña cambiada: {usuario.username}", extra={
             'user_id': usuario.id,

@@ -91,25 +91,6 @@ describe('authService', () => {
     expect(await authService.verifySession()).toBeNull()
   })
 
-  it('refreshToken guarda el nuevo access token', async () => {
-    API_MODULE.default.post.mockResolvedValue({ data: { access_token: 'new-token' } })
-    const token = await authService.refreshToken()
-    expect(token).toBe('new-token')
-    expect(tokenStoreModule.getAccessToken()).toBe('new-token')
-  })
-
-  it('refreshToken limpia la sesión si falla', async () => {
-    localStorage.setItem('usuario:v1', JSON.stringify({ id: 1 }))
-    tokenStoreModule.setAccessToken('old-token')
-    API_MODULE.default.post.mockRejectedValue(new Error('expired'))
-
-    const token = await authService.refreshToken()
-
-    expect(token).toBeNull()
-    expect(tokenStoreModule.getAccessToken()).toBeNull()
-    expect(localStorage.getItem('usuario:v1')).toBeNull()
-  })
-
   it('getStoredUser retorna null con localStorage corrupto', () => {
     localStorage.setItem('usuario:v1', '{invalido-json')
     expect(authService.getStoredUser()).toBeNull()

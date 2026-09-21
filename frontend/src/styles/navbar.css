@@ -302,3 +302,59 @@
         min-width: 200px;
     }
 }
+
+/* ─── Aviso de correo sin verificar ─── */
+.verify-banner {
+    position: fixed;
+    top: 84px;
+    left: 0;
+    width: 100%;
+    z-index: 49;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 32px;
+    background: linear-gradient(135deg, #eab308, #d97706);
+    color: #0a0e1a;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.verify-banner .material-symbols-outlined {
+    font-size: 18px;
+}
+
+.verify-banner-text {
+    text-align: center;
+}
+
+.verify-banner-action {
+    background: rgba(10, 14, 26, 0.85);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.verify-banner-action:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.verify-banner-action:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+@media (max-width: 768px) {
+    .verify-banner {
+        top: 84px;
+        padding: 8px 16px;
+    }
+}
