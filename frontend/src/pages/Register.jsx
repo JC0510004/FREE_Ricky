@@ -170,6 +170,12 @@ export default function Register() {
     <div className="auth-page">
       <div className="auth-container">
 
+        {/* Salir a la página principal (fuera de la tarjeta) */}
+        <Link to="/" className="auth-back" aria-label="Salir a la página principal">
+          <span className="material-symbols-outlined">logout</span>
+          Salir
+        </Link>
+
         {/* ─── Tarjeta del formulario de registro ─── */}
         <div className="auth-card">
           <Link to="/" className="auth-logo">SALT BORN</Link>

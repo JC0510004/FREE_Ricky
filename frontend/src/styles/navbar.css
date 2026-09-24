@@ -56,6 +56,88 @@
     }
 }
 
+/* ─── Botón hamburguesa (móvil/tablet) ─── */
+.navbar-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.navbar-toggle:hover {
+    background: rgba(255, 182, 140, 0.15);
+    border-color: var(--primary-color);
+}
+
+.navbar-toggle .material-symbols-outlined {
+    font-size: 26px;
+}
+
+/* ─── Panel deslizante del menú móvil ─── */
+@media (max-width: 1023px) {
+    .navbar-toggle {
+        display: inline-flex;
+    }
+
+    .navbar-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        display: none;
+        flex-direction: column;
+        gap: 0;
+        background: rgba(4, 20, 36, 0.97);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--border-color-light);
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+        padding: 8px 24px 16px;
+        z-index: 49;
+    }
+
+    .navbar-menu.open {
+        display: flex;
+    }
+
+    .navbar-menu .navbar-link {
+        padding: 16px 0;
+        font-size: 16px;
+        letter-spacing: 1.5px;
+        border-bottom: 1px solid var(--border-color-light);
+    }
+
+    .navbar-menu .navbar-link:last-child {
+        border-bottom: none;
+    }
+
+    .navbar-menu-divider {
+        height: 1px;
+        background: var(--border-color-light);
+        margin: 10px 0 4px 0;
+    }
+
+    .navbar-menu-auth {
+        padding: 16px 0;
+        font-size: 16px;
+    }
+
+    .navbar-menu-auth-cta {
+        color: var(--primary-color);
+        font-weight: 700;
+        border-bottom: none !important;
+    }
+}
+
 .navbar-link {
     font-family: 'JetBrains Mono', monospace;
     font-size: 14px;

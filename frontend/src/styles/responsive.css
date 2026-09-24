@@ -36,20 +36,73 @@
     .team-title {
         font-size: 36px;
     }
+
+    /* Logo más compacto en móvil para que todo quepa en la barra */
+    .navbar-logo-img {
+        height: 48px;
+    }
+
+    .navbar-logo {
+        font-size: 18px;
+        gap: 8px;
+    }
 }
-/* ===== Responsive Auth/Dashboard ===== */
-@media (max-width: 768px) {
+
+@media (max-width: 480px) {
+    .navbar-logo-img {
+        height: 40px;
+    }
+
+    .navbar-logo {
+        font-size: 16px;
+    }
+
+    /* Formularios auth: tarjeta más compacta en pantallas pequeñas */
+    .auth-page {
+        padding: 8px 12px 28px;
+    }
+
+    .auth-back {
+        top: 8px;
+        left: 12px;
+        padding: 6px 10px;
+    }
+
     .auth-card {
-        padding: 24px;
+        padding: 18px 18px 18px;
     }
 
     .auth-logo {
         font-size: 16px;
-        margin-bottom: 24px;
+        margin-bottom: 16px;
     }
 
     .auth-title {
         font-size: 24px;
+    }
+
+    .auth-subtitle {
+        margin-bottom: 16px;
+    }
+}
+/* ===== Responsive Auth/Dashboard ===== */
+@media (max-width: 768px) {
+    .auth-card {
+        padding: 20px 24px 20px;
+    }
+
+    .auth-logo {
+        font-size: 18px;
+        margin-bottom: 20px;
+    }
+
+    .auth-title {
+        font-size: 26px;
+    }
+
+    .auth-subtitle {
+        font-size: 13px;
+        margin-bottom: 20px;
     }
 
     .dashboard-nav-inner {

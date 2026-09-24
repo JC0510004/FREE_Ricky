@@ -2,16 +2,20 @@
 .auth-page {
     min-height: 100vh;
     background: linear-gradient(to bottom, #8fbed4 0%, #53788d 40%, #022a45 100%);
+    /* Centrado por `margin: auto` en el hijo: usando align-items/justify-content
+       con min-height en móvil se recorta el tope de la tarjeta cuando el
+       formulario es más alto que la pantalla. Con margin:auto el contenido
+       crece hacia arriba sin quedar inaccesible y el scroll llega al inicio. */
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 32px 16px;
+    padding: 16px 16px 40px;
     font-family: 'Work Sans', sans-serif;
 }
 
 .auth-container {
     width: 100%;
     max-width: 440px;
+    margin: auto;
+    min-width: 0;
 }
 
 .auth-card {
@@ -20,8 +24,38 @@
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 24px;
-    padding: 40px;
+    padding: 24px 44px 24px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.auth-back {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 50px;
+    background: rgba(4, 20, 36, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.auth-back:hover {
+    color: #ffb68c;
+    border-color: rgba(255, 182, 140, 0.4);
+}
+
+.auth-back .material-symbols-outlined {
+    font-size: 20px;
 }
 
 .auth-logo {
@@ -32,7 +66,7 @@
     font-weight: 700;
     color: #fff;
     text-decoration: none;
-    margin-bottom: 32px;
+    margin-bottom: 20px;
     letter-spacing: 2px;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
@@ -51,19 +85,20 @@
     text-align: center;
     color: #c0c0c0;
     font-size: 14px;
-    margin-bottom: 32px;
+    margin-bottom: 12px;
 }
 
 .auth-form {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
 }
 
 .auth-field {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
 }
 
 .auth-field label {
@@ -77,7 +112,7 @@
 .auth-field input,
 .admin-edit-input {
     width: 100%;
-    padding: 12px 16px;
+    padding: 10px 14px;
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
@@ -207,7 +242,7 @@
     text-align: center;
     color: #c0c0c0;
     font-size: 14px;
-    margin-top: 24px;
+    margin-top: 16px;
 }
 
 .auth-footer-text a {
@@ -262,14 +297,18 @@
     flex-direction: column;
     gap: 4px;
     margin-top: 8px;
+    min-width: 0;
 }
 
 .auth-requirement {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     font-size: 12px;
     color: #c0c0c0;
+    min-width: 0;
+    line-height: 1.5;
 }
 
 .auth-requirement .material-symbols-outlined {

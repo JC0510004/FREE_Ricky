@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
+import { useIsMobile } from '../hooks/useIsMobile';
 import API from '../api/axios';
 
 export default function Navbar() {
@@ -19,6 +20,13 @@ export default function Navbar() {
   // ─── Estado del menú desplegable ───
   // Controla si el menú del usuario está abierto o cerrado.
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // ─── Estado del menú hamburguesa (móvil/tablet) ───
+  // En pantallas < 1024px la barra de secciones se oculta y se navega
+  // desde este panel deslizante. isMobile viene de un matchMedia.
+  const [navOpen, setNavOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const closeNav = useCallback(() => setNavOpen(false), []);
 
   // ─── Referencia al contenedor del menú ───
   // Se usa para detectar clics fuera del menú y cerrarlo automáticamente.
@@ -119,12 +127,23 @@ export default function Navbar() {
         </Link>
 
         {/* ─── Menú de navegación principal ─── */}
-        {/* Enlaces ancla que apuntan a secciones dentro de la landing page */}
-        <div className="navbar-menu">
-          <a className="navbar-link" href="#manifesto">HISTORIA</a>
-          <a className="navbar-link" href="#news">ACTUALIZACIONES</a>
-          <a className="navbar-link" href="#team">TRIPULACIÓN</a>
-          <a className="navbar-link" href="#community">COMUNIDAD</a>
+        {/* En escritorio (>= 1024px) se muestra como enlaces en línea.
+            En móvil se convierte en un panel deslizante bajo la barra,
+            controlado por el botón hamburguesa. */}
+        <div className={`navbar-menu${navOpen ? ' open' : ''}`} id="navbar-menu">
+          <a className="navbar-link" href="#manifesto" onClick={closeNav}>HISTORIA</a>
+          <a className="navbar-link" href="#news" onClick={closeNav}>ACTUALIZACIONES</a>
+          <a className="navbar-link" href="#team" onClick={closeNav}>TRIPULACIÓN</a>
+          <a className="navbar-link" href="#community" onClick={closeNav}>COMUNIDAD</a>
+
+          {/* Accesos de invitado dentro del menú hamburguesa (solo móvil) */}
+          {!isAuthenticated && isMobile && (
+            <>
+              <div className="navbar-menu-divider" />
+              <Link to="/login" className="navbar-link navbar-menu-auth" onClick={closeNav}>INICIAR SESIÓN</Link>
+              <Link to="/register" className="navbar-link navbar-menu-auth navbar-menu-auth-cta" onClick={closeNav}>REGISTRARSE</Link>
+            </>
+          )}
         </div>
 
         {/* ─── Sección de autenticación ─── */}
@@ -198,12 +217,24 @@ export default function Navbar() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : !isMobile ? (
             <>
               <Link to="/login" className="navbar-link">INICIAR SESIÓN</Link>
               <Link to="/register" className="navbar-button">REGISTRARSE</Link>
             </>
-          )}
+          ) : null}
+
+          {/* ─── Botón del menú hamburguesa (solo móvil) ─── */}
+          <button
+            type="button"
+            className="navbar-toggle"
+            onClick={() => setNavOpen(!navOpen)}
+            aria-expanded={navOpen}
+            aria-controls="navbar-menu"
+            aria-label={navOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+          >
+            <span className="material-symbols-outlined">{navOpen ? 'close' : 'menu'}</span>
+          </button>
         </div>
 
       </div>
