@@ -136,7 +136,7 @@ erDiagram
 
     CONFIRMACIONES_RESET {
         CharField_64 token_hash PK "SHA-256 del UUID"
-        CharField_64 codigo_hash INDEX "SHA-256 del código 6-dígitos"
+        CharField_64 codigo_hash "SHA-256 del código 6-dígitos · db_index=True"
         BigIntegerField usuario_id FK "CASCADE → USUARIOS"
         DateTimeField created_at "auto_now_add · expira 15 min"
         BooleanField confirmado "default=False"
@@ -331,50 +331,8 @@ stateDiagram-v2
         <div class="error-msg"></div>
     </div>
 
-    <div id="flujo" class="diagram-card">
-        <h2>5. Diagrama de Flujo - Recuperación de Contraseña</h2>
-        <pre class="mermaid">
-flowchart TD
-    A[Usuario olvida contrasena] --> B[Ingresa email]
-    B --> C[POST /api/password-reset/]
-    C --> D{Email existe?}
-    D -->|No| E[Mensaje generico: Email enviado]
-    D -->|Si| F[Generar token UUID + codigo]
-    F --> G[Guardar SHA-256 en BD]
-    G --> H[Enviar email con codigo + enlace]
-    H --> I[Usuario recibe email]
-    I --> J[Clic en enlace]
-    J --> K[GET password-reset/confirmar/]
-    K --> L{Token valido?}
-    L -->|No| M[Error: Token invalido]
-    L -->|Si| N[Marcar confirmado=True]
-    N --> O[GET password-reset/verificar/]
-    O --> P{Confirmado?}
-    P -->|No| Q[Error: No confirmado]
-    P -->|Si| R[Formulario nueva contrasena]
-    R --> S[Ingresa codigo + nueva contrasena]
-    S --> T[POST password-reset/verificar-codigo/]
-    T --> U{Codigo valido?}
-    U -->|No| V[Error: Codigo incorrecto]
-    U -->|Si| W[POST password-reset/confirm/]
-    W --> X{Token expirado? 15 min}
-    X -->|Si| Y[Error: Token expirado]
-    X -->|No| Z[Actualizar contrasena Argon2]
-    Z --> AA[Eliminar token usado]
-    AA --> AB[Redirigir a /login]
-    AB --> AC[Ingresa nueva contrasena]
-
-    style A fill:#b3e5fc,color:#0f436f,stroke:#0f436f
-    style AC fill:#c8e6c9,color:#0f436f,stroke:#0f436f
-    style Y fill:#ffcdd2,color:#0f436f,stroke:#0f436f
-    style M fill:#ffcdd2,color:#0f436f,stroke:#0f436f
-    style V fill:#ffcdd2,color:#0f436f,stroke:#0f436f
-        </pre>
-        <div class="error-msg"></div>
-    </div>
-
     <div id="componentes" class="diagram-card">
-        <h2>6. Diagrama de Componentes - Arquitectura</h2>
+        <h2>5. Diagrama de Componentes - Arquitectura</h2>
         <pre class="mermaid">
 graph TB
     subgraph Frontend[Frontend React + Vite]
@@ -431,7 +389,7 @@ graph TB
     </div>
 
     <div id="despliegue" class="diagram-card">
-        <h2>7. Diagrama de Despliegue - Google Cloud Platform</h2>
+        <h2>6. Diagrama de Despliegue - Google Cloud Platform</h2>
         <pre class="mermaid">
 flowchart TB
     U[Usuarios] -->|HTTPS| DNS[DNS saltborn.com]
@@ -464,7 +422,7 @@ flowchart TB
     </div>
 
     <div id="cicd" class="diagram-card">
-        <h2>8. Diagrama CI/CD - GitHub Actions</h2>
+        <h2>7. Diagrama CI/CD - GitHub Actions</h2>
         <pre class="mermaid">
 flowchart TD
     T{"Triggers\npush main/develop · PR → main"} --> CK[actions/checkout@v4]
@@ -494,7 +452,7 @@ flowchart TD
     </div>
 
     <div id="red" class="diagram-card">
-        <h2>9. Diagrama de Red y Seguridad</h2>
+        <h2>8. Diagrama de Red y Seguridad</h2>
         <pre class="mermaid">
 flowchart TB
     U[Usuarios] -->|HTTPS 443| FB[IP externa]
@@ -531,6 +489,97 @@ flowchart TB
     style MY fill:#fff9c4,color:#0f436f,stroke:#0f436f
     style RD fill:#ffcdd2,color:#0f436f,stroke:#0f436f
     style FW fill:#ffe0b2,color:#0f436f,stroke:#0f436f
+        </pre>
+        <div class="error-msg"></div>
+    </div>
+
+    <div id="reset-produccion" class="diagram-card">
+        <h2>9. Diagrama de Secuencia - Recuperación de Contraseña (producción)</h2>
+        <pre class="mermaid">
+sequenceDiagram
+    actor U as Usuario
+    participant FE as Frontend SPA
+    participant NG as Nginx HTTPS
+    participant BE as Backend Django DRF
+    participant DB as MySQL 8.0
+    participant RD as Redis 7
+    participant SM as SMTP Gmail
+
+    rect rgb(15,67,111)
+    Note over U,SM: PASO 1 · SOLICITAR RESET
+    end
+
+    U->>FE: 1. Ingresa su email
+    FE->>NG: 2. POST /api/password-reset/ (HTTPS)
+    NG->>BE: 3. proxy_pass backend:8000
+    BE->>RD: 4. Throttle 3/hora por IP (PasswordResetThrottle)
+    alt Rate limit excedido
+        RD-->>BE: Limite alcanzado
+        BE-->>FE: 429 Too Many Requests
+    end
+
+    BE->>DB: 5. SELECT usuario WHERE email = ? (iexact + is_active)
+    alt Cuenta inexistente
+        DB-->>BE: Sin resultado
+        BE-->>FE: 6. 200 respuesta generica (anti enumeracion)
+    else Cuenta existe
+        BE->>BE: 7. UUID token + codigo 6 digitos (SystemRandom)
+        BE->>DB: 8. DELETE resets anteriores + INSERT hash SHA-256 de token y codigo (expira 15 min)
+        BE->>SM: 9. Email: enlace "Si, soy yo" (HTTPS) + codigo 6 digitos
+        alt SMTP falla
+            SM--xBE: Error de conexion o rechazo
+            BE->>BE: 10. logger.error + auditoria EMAIL_FALLO (enviar_email)
+        end
+        BE-->>FE: 11. 200 (identica a la cuenta inexistente)
+    end
+
+    rect rgb(15,67,111)
+    Note over U,SM: PASO 2 · CONFIRMAR IDENTIDAD
+    end
+
+    U->>FE: 12. Clic en "Si, soy yo" del correo
+    FE->>NG: 13. GET /forgot-password?token=... (SPA)
+    FE->>NG: 14. POST /api/password-reset/confirmar/
+    NG->>BE: 15. proxy_pass
+    BE->>DB: 16. Buscar por token_hash (SHA-256)
+    alt Token valido y no expirado
+        BE->>DB: 17. UPDATE confirmado = True
+        BE-->>FE: 18. HTML confirmado (redirect ?confirmed=1)
+        FE->>FE: 19. Cuenta regresiva 3s al formulario
+    else Token invalido o expirado
+        BE-->>FE: 20. 400 HTML enlace invalido
+        FE->>NG: 21. GET /api/password-reset/verificar/?token=...
+    end
+
+    rect rgb(15,67,111)
+    Note over U,SM: PASO 3 · CODIGO + NUEVA CONTRASENA
+    end
+
+    U->>FE: 22. Ingresa codigo 6 digitos + nueva contrasena
+    FE->>NG: 23. POST /api/password-reset/verificar-codigo/
+    NG->>BE: 24. proxy_pass
+    BE->>DB: 25. SELECT token_hash + contador de fallos
+    alt Codigo correcto (comparacion tiempo constante)
+        BE-->>FE: 26. 200 valido=True
+    else Codigo incorrecto
+        BE->>DB: 27. Incrementar fallos (10 fallos invalida el token)
+        BE-->>FE: 28. 400 Codigo incorrecto
+    end
+
+    FE->>NG: 29. POST /api/password-reset/confirm/
+    NG->>BE: 30. proxy_pass
+    BE->>DB: 31. Revalida token + codigo + confirmado
+    alt Sin confirmar o codigo invalido
+        BE-->>FE: 32. 400 (flow interrumpido)
+    else Valido
+        BE->>DB: 33. SELECT ... FOR UPDATE (fila bloqueada)
+        BE->>BE: 34. set_password Argon2 + reset failed_attempts y locked_until
+        BE->>DB: 35. Blacklist de TODOS los refresh tokens (invalidar sesiones)
+        BE->>DB: 36. DELETE token de reset usado
+        BE->>SM: 37. Alerta por email "Tu contrasena fue restablecida"
+        BE-->>FE: 38. 200 Exito
+        FE-->U: 39. Redirige a /login
+    end
         </pre>
         <div class="error-msg"></div>
     </div>

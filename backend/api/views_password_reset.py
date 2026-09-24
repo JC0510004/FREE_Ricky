@@ -8,7 +8,6 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
-from django.core.mail import send_mail
 
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -21,6 +20,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from .models import Usuario, ConfirmacionReset
 from .serializers import PasswordResetSerializer, PasswordResetConfirmSerializer
 from .throttles import PasswordResetThrottle, CodigoResetThrottle
+from .email_utils import enviar_email
 
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
@@ -234,7 +234,7 @@ class PasswordReset(APIView):
             </html>
             """
 
-            send_mail(
+            enviar_email(
                 subject='¿Eres tú? - FREE RICKY',
                 message=(
                     f'¿Eres tú? Se solicitó un restablecimiento de contraseña para {email}.\n\n'
@@ -247,7 +247,6 @@ class PasswordReset(APIView):
                 html_message=html_message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[email],
-                fail_silently=True,
             )
 
             logger.info(
@@ -357,7 +356,7 @@ class PasswordResetConfirm(APIView):
 
             # Alerta al propietario: si esto no fue obra suya, saberlo cuanto
             # antes le permite reclamar / recuperar la cuenta.
-            send_mail(
+            enviar_email(
                 subject='Tu contraseña fue restablecida - FREE RICKY',
                 message=(
                     f'Hola {usuario.username}, la contraseña de tu cuenta FREE RICKY '
@@ -366,7 +365,6 @@ class PasswordResetConfirm(APIView):
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[usuario.email],
-                fail_silently=True,
             )
 
             logger.info(

@@ -3,7 +3,6 @@ import logging
 from uuid import uuid4
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -23,6 +22,7 @@ from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, Bl
 from .models import Usuario, VerificacionEmail
 from .serializers import RegisterSerializer, LoginSerializer, UsuarioSerializer
 from .throttles import LoginThrottle, RegisterThrottle, RefreshThrottle
+from .email_utils import enviar_email
 
 logger = logging.getLogger('seguridad')
 audit_logger = logging.getLogger('auditoria')
@@ -42,7 +42,7 @@ def _enviar_verificacion_email(usuario):
         VerificacionEmail.objects.create(usuario=usuario, token_hash=token_hash)
 
     url = f"{settings.FRONTEND_URL}/verificar-email?token={token}"
-    send_mail(
+    enviar_email(
         subject='Confirma tu correo - FREE RICKY',
         message=(
             f'Hola {usuario.username}, confirma tu correo para activar tu cuenta:\n\n'
@@ -56,7 +56,6 @@ def _enviar_verificacion_email(usuario):
         ) % (usuario.username, url),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[usuario.email],
-        fail_silently=True,
     )
 
 

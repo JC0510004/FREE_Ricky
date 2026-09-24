@@ -1,7 +1,6 @@
 import logging
 
 from django.conf import settings
-from django.core.mail import send_mail
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -18,6 +17,7 @@ from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, Bl
 from .models import Usuario
 from .serializers import UsuarioSerializer
 from .permissions import IsAdminRole
+from .email_utils import enviar_email
 from .utils import check_password_strength
 from .throttles import ChangePasswordThrottle
 
@@ -271,7 +271,7 @@ class ChangePasswordView(APIView):
 
         # Alerta por email: si no fue el propietario quien cambió la
         # contraseña, puede reclamar y bloquear el acceso de inmediato.
-        send_mail(
+        enviar_email(
             subject='Tu contraseña fue cambiada - FREE RICKY',
             message=(
                 f'Hola {usuario.username}, la contraseña de tu cuenta FREE RICKY '
@@ -280,7 +280,6 @@ class ChangePasswordView(APIView):
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[usuario.email],
-            fail_silently=True,
         )
 
         logger.info(f"Contraseña cambiada: {usuario.username}", extra={
