@@ -191,8 +191,9 @@ jobs:
         run: docker build -t free-ricky-frontend:ci ./frontend
 
   # ─── JOB: SECURITY SCAN ──────────────────────────────────────────────────
-  # FIX #1: eliminados los continue-on-error — el job ahora puede fallar y
-  # bloquear el pipeline. También agregado a needs de docker-build.
+  # FIX #1: sin continue-on-error en ningún step — el job puede fallar y
+  # bloquear el pipeline. requirements.txt está en Django 6.0.8 / sqlparse 0.6.0
+  # para que safety no encuentre los 25 advisories del issue #1.
   # FIX #4: versiones pinadas igual a requirements-dev.txt.
   security-scan:
     name: Security Scan
@@ -214,7 +215,9 @@ jobs:
       - name: Check Python dependencies (safety)
         run: safety check -r requirements.txt
         working-directory: backend
-        continue-on-error: true   # temporal hasta resolver los CVEs
+        # Sin continue-on-error: un CVE nuevo bloquea el pipeline (FIX #1).
+        # Reactivado en 7a7c92c tras subir Django a 6.0.8 y sqlparse a 0.6.0,
+        # que cierran los 25 advisories registrados en el issue #1.
       - name: Run bandit security linter
         run: bandit -r api/ -ll
         working-directory: backend

@@ -5,9 +5,13 @@
 # (de ~800MB a ~25MB). Las dependencias de node_modules no se incluyen
 # en la imagen final porque Vite genera archivos estáticos optimizados.
 
-# Usamos node:20-alpine como base: Alpine Linux es una distribución
-# mínima (~5MB) que reduce el tamaño de la imagen. Node 20 es LTS.
-FROM node:20-alpine AS builder
+# Usamos node:22-alpine como base: Alpine Linux es una distribución
+# mínima (~5MB) que reduce el tamaño de la imagen. Node 22 es LTS.
+# Debe coincidir con los jobs de Node de .github/workflows/ci.yml y con
+# "engines" de package.json. Con node:20, vitest 5 declara engines
+# ^22.12.0 || ^24.0.0 || >=26.0.0 y npm ci solo avisa por EBADENGINE:
+# la imagen se construía en un runtime que la suite de tests no soporta.
+FROM node:22-alpine AS builder
 
 # Establecemos el directorio de trabajo dentro del contenedor
 WORKDIR /app

@@ -1,6 +1,11 @@
 # ─── FRAMEWORK WEB ──────────────────────────────────────────────────────
 # Django: Framework web Python completo con ORM, admin, autenticación, etc.
-Django==6.0.2
+# ==6.0.8 cierra 21 advisories de safety (el affected spec más alto es <6.0.8).
+# NO subir a >=6.0.8: resolvería a 6.1.x, que eliminó cc_delim_re de
+# django.utils.cache y rompe djangorestframework==3.16.1 (ImportError al importar
+# rest_framework.views). Subir a 6.1 exige DRF >= compatible primero.
+# Ver issue #1 para el desglose CVE por CVE.
+Django==6.0.8
 
 # asgiref: Referencia de ASGI (Asynchronous Server Gateway Interface).
 # Permite que Django maneje peticiones asíncronas y WebSockets.
@@ -26,7 +31,10 @@ mysqlclient==2.2.8
 
 # sqlparse: Analizador sintáctico SQL. Django lo usa internamente para
 # formatear y validar queries SQL en el ORM.
-sqlparse==0.5.5
+# ==0.6.0 cierra CVE-2026-59894 (code injection vía output_format='python'/'php'),
+# CVE-2026-54284, CVE-2026-71491 y CVE-2026-59893. El path de inyección solo se
+# alcanza con output_format, que Django nunca pasa (ver issue #1).
+sqlparse==0.6.0
 
 # ─── SEGURIDAD ──────────────────────────────────────────────────────────
 # python-decouple: Lee configuración desde variables de entorno o archivos .env.
