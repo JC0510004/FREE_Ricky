@@ -53,6 +53,18 @@ export default defineConfig({
   test: {
     // Entorno DOM para tests de componentes React
     environment: 'jsdom',
+    // Ejecuta los tests en hilos de Node con vm en lugar de procesos.
+    // jsdom se crea una vez y se comparte entre archivos, en lugar de
+    // instanciarse una vez por archivo. El aislamiento por archivo se
+    // mantiene, pero la suite deja de gastar el 70%+ del tiempo en
+    // construir entornos que se descartan.
+    pool: 'vmThreads',
+    // Cada worker construye su propio jsdom, así que el coste de arranque es
+    // por worker, no por archivo. Medido en esta suite (7 archivos, 40 tests):
+    //   1 worker -> 12.55s   2 workers -> 11.62s   4 -> 17.69s   7 -> 18.72s
+    // Más hilos no ayudan porque los tests reales solo son el ~12% del tiempo;
+    // solo se paga el coste de construir más jsdom. 2 es el óptimo medido.
+    maxWorkers: 2,
     // Archivo de setup que se ejecuta antes de cada archivo de test
     setupFiles: './src/test/setup.js',
     // Buscar archivos de test .test.jsx/.test.js en toda la carpeta src
