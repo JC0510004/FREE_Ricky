@@ -14,7 +14,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
-from .models import Usuario
+from .models import Usuario, VerificacionEmail
 from .serializers import UsuarioSerializer
 from .permissions import IsAdminRole
 from .email_utils import enviar_email
@@ -181,8 +181,22 @@ class UsuarioDetailView(APIView):
             )
         usuario.is_active = False
         usuario.save(update_fields=['is_active'])
+        # Revoca los tokens de verificacion de email pendientes. VerificarEmailView
+        # reactiva la cuenta (is_active=True) cuando el token es valido, de modo
+        # que sin esto un admin que desactiva una cuenta no lo impide de verdad:
+        # basta con que quedara una verificacion en curso, o con pedirla de nuevo
+        # si la API de reenvio lo permite, para revertir la desactivacion. Aqui
+        # el admin es quien corta el circuito.
+        #
+        # NOTA (deuda conocida): esto cierra la via del email, pero la
+        # reactivacion por REGISTRO (RegisterSerializer) sigue pudiendo volver a
+        # activar una cuenta desactivada por un admin, porque no hay ningun campo
+        # que distinga "desactivada por el admin" de "desactivada por el dueno".
+        # Para cerrarlo de raiz haria falta un campo desactivado_por_admin y su
+        # migracion. Queda anotado en AUDITORIA.md en lugar de darlo por cerrado.
+        revocados = VerificacionEmail.objects.filter(usuario=usuario).delete()[0]
         logger.info(
-            f"Usuario desactivado: {usuario.id}",
+            f"Usuario desactivado: {usuario.id} ({revocados} tokens de verificación revocados)",
             extra={'user_id': request.user.id}
         )
         audit_logger.info(f"USUARIO DESACTIVADO user_id={usuario.id} por admin={request.user.id}")

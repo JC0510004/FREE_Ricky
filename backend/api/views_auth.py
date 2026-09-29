@@ -242,6 +242,22 @@ class LoginView(APIView):
         username = serializer.validated_data['username']
         password = serializer.validated_data['password']
 
+        # ─── Sin enumeracion de cuentas (CWE-204) ───────────────────────────
+        # Usuario inexistente, cuenta inactiva y contrasena incorrecta
+        # devuelven EXACTAMENTE el mismo cuerpo y el mismo codigo. Antes cada
+        # caso tenia el suyo (401 generico, 403 "Cuenta desactivada" y 429 con
+        # los minutos restantes), lo que confirmaba al atacante que la cuenta
+        # existe e incluso si esta activa o bloqueada. El detalle real se
+        # queda en el log, que es donde le sirve al operador.
+        #
+        # El 429 de la throttle por IP se mantiene: ese lo decide el throttle
+        # antes de entrar en la vista, y responde a "demasiadas peticiones",
+        # no a "esta cuenta esta bloqueada", que es informacion de la cuenta.
+        credenciales_invalidas = Response(
+            {'error': 'Credenciales incorrectas'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
         try:
             usuario = Usuario.objects.get(
                 Q(username__iexact=username) | Q(email__iexact=username)
@@ -252,36 +268,31 @@ class LoginView(APIView):
                 f"Login fallido - usuario no encontrado: {username}",
                 extra={'ip': request.META.get('REMOTE_ADDR')}
             )
-            return Response(
-                {'error': 'Credenciales incorrectas'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return credenciales_invalidas
 
         if not usuario.is_active:
-            # Ejecutamos el check de contraseña igualmente: el tiempo de
-            # respuesta debe ser el mismo que para un login válido, para que
+            # Se ejecuta el check de contrasena igualmente: el tiempo de
+            # respuesta debe ser el mismo que para un login valido, para que
             # no se pueda diferenciar por timing (CWE-208) una cuenta inactiva.
             usuario.check_password(password)
             logger.warning(
                 f"Login bloqueado - cuenta inactiva: {usuario.username}",
                 extra={'user_id': usuario.id}
             )
-            return Response(
-                {'error': 'Cuenta desactivada'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return credenciales_invalidas
 
         if usuario.is_locked():
+            # check_password tambien aqui, por el mismo motivo de timing. NO se
+            # comunican los minutos restantes: confirmarian que la cuenta
+            # existe y esta bloqueada.
             usuario.check_password(password)
             remaining = max(0, int((usuario.locked_until - timezone.now()).total_seconds() / 60))
             logger.warning(
-                f"Login bloqueado - cuenta temporalmente bloqueada: {usuario.username}",
+                f"Login bloqueado - cuenta temporalmente bloqueada: {usuario.username} "
+                f"({remaining} min restantes)",
                 extra={'user_id': usuario.id}
             )
-            return Response(
-                {'error': f'Cuenta bloqueada. Intente de nuevo en {remaining} minutos'},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
+            return credenciales_invalidas
 
         usuario.clear_lockout()
 
@@ -432,25 +443,65 @@ class LogoutView(APIView):
         responses={200: inline_serializer('LogoutResponse', {'mensaje': serializers.CharField()})},
     )
     def post(self, request):
-        try:
-            refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
+        refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
 
-            logger.info(
-                f"Logout: {request.user.username}",
+        if not refresh_token:
+            # El access token sirvio para pasar IsAuthenticated, pero sin el
+            # refresh no hay nada que invalidar. Decir "sesion cerrada" aqui
+            # seria mentir: el cliente se cree fuera y sigue teniendo la cookie.
+            logger.warning(
+                f"Logout sin refresh token: {request.user.username}",
                 extra={'user_id': request.user.id}
             )
-            audit_logger.info(f"LOGOUT user_id={request.user.id} username={request.user.username}")
-            response = Response({'mensaje': 'Sesión cerrada correctamente'})
+            response = Response(
+                {'mensaje': 'Se cerró la sesión local, pero no había refresh token que invalidar'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
             _clear_refresh_cookie(response)
             return response
+
+        try:
+            # Construir el token valida firma y caducidad. Si falla, el token ya
+            # no sirve para refrescar: la sesion esta muerta de todas formas y
+            # responder 200 mantiene el logout idempotente (el cliente puede
+            # llamar al cerrar sesion y al expirar el token sin distinction).
+            RefreshToken(refresh_token)
+        except TokenError as e:
+            logger.info(
+                f"Logout con refresh token ya invalido: {request.user.username} ({e})",
+                extra={'user_id': request.user.id}
+            )
+            response = Response({'mensaje': 'Sesión cerrada'})
+            _clear_refresh_cookie(response)
+            return response
+
+        try:
+            RefreshToken(refresh_token).blacklist()
         except Exception as e:
-            logger.error(f"Error en logout: {str(e)}")
-            response = Response({'mensaje': 'Sesión cerrada'}, status=status.HTTP_200_OK)
+            # Aqui el token SI era valido, asi que si la revocacion falla el
+            # refresh sigue sirviendo para obtener un access nuevo. Un 200
+            # equivocado hacia que el usuario creyera haber cerrado sesion
+            # cuando la sesion sigue viva: es un fallo de servidor y se dice
+            # como tal, sin tragarselo con un "sesion cerrada".
+            logger.error(
+                f"No se pudo revocar el refresh token en el logout: {e}",
+                extra={'user_id': request.user.id}
+            )
+            response = Response(
+                {'mensaje': 'No se pudo cerrar la sesión en el servidor. Inténtalo de nuevo.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
             _clear_refresh_cookie(response)
             return response
+
+        logger.info(
+            f"Logout: {request.user.username}",
+            extra={'user_id': request.user.id}
+        )
+        audit_logger.info(f"LOGOUT user_id={request.user.id} username={request.user.username}")
+        response = Response({'mensaje': 'Sesión cerrada correctamente'})
+        _clear_refresh_cookie(response)
+        return response
 
 
 class VerifySessionView(APIView):

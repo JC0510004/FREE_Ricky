@@ -328,6 +328,51 @@ class LoginTests(TestCase):
             resp_no_user.data.get('error', ''),
             resp_wrong_pass.data.get('error', ''),
         )
+        self.assertEqual(
+            resp_no_user.status_code,
+            resp_wrong_pass.status_code,
+        )
+
+    def _login(self, username, password):
+        return self.client.post(
+            self.login_url, {'username': username, 'password': password}, format='json'
+        )
+
+    def test_no_enumera_cuenta_inactiva(self):
+        # Regresion: una cuenta desactivaba devolvia 403 "Cuenta desactivada",
+        # lo que confirmaba que el usuario existe. Ahora es indistinguible de
+        # un login normal fallido.
+        inactivo = Usuario.objects.create_user(
+            username='inactivo', email='inactivo@gmail.com', password='TestPass123!'
+        )
+        inactivo.is_active = False
+        inactivo.save(update_fields=['is_active'])
+
+        r_inactivo = self._login('inactivo', 'TestPass123!')
+        r_inexistente = self._login('no_existe_zzz', 'TestPass123!')
+        r_mal_password = self._login('testuser', 'WrongPassXXXXXXX')
+
+        self.assertEqual(r_inactivo.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(r_inactivo.data.get('error'), r_inexistente.data.get('error'))
+        self.assertEqual(r_inactivo.data.get('error'), r_mal_password.data.get('error'))
+
+    def test_no_enumera_cuenta_bloqueada_ni_minutos_restantes(self):
+        # Regresion: una cuenta bloqueada devolvia 429 con "Intente de nuevo en
+        # N minutos". No solo confirmaba que la cuenta existe, sino que estaba
+        # bloqueada y cuando se liberaba.
+        bloqueado = Usuario.objects.get(username='testuser')
+        for _ in range(10):
+            if bloqueado.is_locked():
+                break
+            bloqueado.increment_failed_attempts()
+        self.assertTrue(bloqueado.is_locked(), 'precondicion: la cuenta debe estar bloqueada')
+
+        r_bloqueada = self._login('testuser', 'TestPass123!')
+        r_inexistente = self._login('no_existe_zzz', 'TestPass123!')
+
+        self.assertEqual(r_bloqueada.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(r_bloqueada.data.get('error'), r_inexistente.data.get('error'))
+        self.assertNotIn('minuto', str(r_bloqueada.data.get('error', '')).lower())
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -485,10 +530,21 @@ class BruteForceTests(TestCase):
             'username': 'testuser',
             'password': 'TestPass123!',
         }, format='json')
-        # 429 Too Many Requests: la cuenta está bloqueada temporalmente
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
-        # El mensaje de error debe contener "bloqueada" para informar al usuario
-        self.assertIn('bloqueada', response.data.get('error', '').lower())
+        # Lo que este test protege es que el bloqueo impida el acceso, y eso NO
+        # ha cambiado: ni siquiera la contraseña correcta entra.
+        #
+        # Lo que SI ha cambiado es la respuesta. Antes devolvia 429 con
+        # "Cuenta bloqueada. Intente de nuevo en N minutos", que confirmaba al
+        # atacante que la cuenta existe y estaba bloqueada, y le regalaba el
+        # tiempo restante. Ahora es el mismo 401 generico que devuelve un login
+        # con usuario inexistente o contraseña incorrecta, de modo que el
+        # bloqueo sigue protegiendo la cuenta sin revelar su estado.
+        # Ver test_no_enumera_cuenta_bloqueada_ni_minutos_restantes.
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(
+            response.data.get('error', '').lower(),
+            'credenciales incorrectas',
+        )
 
     # Verifica que un login exitoso RESETEA el contador de intentos fallidos
     # y desbloquea la cuenta. Sin esto, un usuario legítimo quedaría

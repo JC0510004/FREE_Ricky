@@ -158,13 +158,23 @@ class PasswordReset(APIView):
             token, token_hash = _generate_reset_token()
             codigo, codigo_hash = _generate_reset_code()
 
-            ConfirmacionReset.objects.filter(usuario=usuario).delete()
+            # Borra los tokens previos y crea el nuevo de forma atomica, con la
+            # fila del usuario bloqueada. Sin transaccion, dos peticiones
+            # simultaneas podian dejar la tabla sin ninguna ConfirmacionReset
+            # (el DELETE de una ganaba la carrera despues del CREATE de la otra)
+            # o con dos, y el usuario se quedaba sin poder restablecer su
+            # contrasena. El bloqueo de fila serializa a los solicitantes.
+            with transaction.atomic():
+                Usuario.objects.select_for_update().get(pk=usuario.pk)
+                ConfirmacionReset.objects.filter(usuario=usuario).delete()
 
-            ConfirmacionReset.objects.filter(
-                created_at__lt=timezone.now() - timezone.timedelta(minutes=ConfirmacionReset.TOKEN_EXPIRY_MINUTES)
-            ).delete()
+                ConfirmacionReset.objects.filter(
+                    created_at__lt=timezone.now() - timezone.timedelta(minutes=ConfirmacionReset.TOKEN_EXPIRY_MINUTES)
+                ).delete()
 
-            ConfirmacionReset.objects.create(usuario=usuario, token_hash=token_hash, codigo_hash=codigo_hash)
+                ConfirmacionReset.objects.create(
+                    usuario=usuario, token_hash=token_hash, codigo_hash=codigo_hash
+                )
 
             si_url = f"{settings.FRONTEND_URL}/forgot-password?token={token}"
             no_url = f"{settings.FRONTEND_URL}/login"
