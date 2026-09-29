@@ -56,6 +56,14 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # de /api al backend Django.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Copiamos las cabeceras de seguridad a un snippet aparte. nginx.conf lo
+# incluye con `include`, y no puede vivir dentro de default.conf porque ese
+# fichero es un `server`, no la configuracion principal: un include a nivel de
+# http solo es valido desde nginx.conf de verdad. Sin copiarlo aqui, nginx
+# arrancaria con "unknown directive" o, peor, se quedaria sin cabeceras.
+RUN mkdir -p /etc/nginx/snippets
+COPY nginx-security-headers.conf /etc/nginx/snippets/security-headers.conf
+
 # Exponemos el puerto 80 (HTTP estándar) para que el contenedor
 # pueda recibir tráfico web. En docker-compose o al ejecutar,
 # se mapea un puerto del host a este puerto.
