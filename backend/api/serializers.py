@@ -1,5 +1,9 @@
 # ─── IMPORTACIONES ───────────────────────────────────────────────────────────
 # Serializadores de Django REST Framework para convertir datos entre JSON y modelos
+import logging
+
+from django.db import IntegrityError, transaction
+
 from rest_framework import serializers
 
 # Modelos de dominio: usuarios, niveles del juego y partidas
@@ -12,6 +16,27 @@ from .utils import (
     normalize_email, check_password_strength
 )
 
+# Bitácora de seguridad: los rechazos por colisión de unicidad son un aviso
+# de intento (o de condición de carrera) y tienen que quedar registrados.
+# Va DESPUÉS de todos los imports: una sentencia de nivel módulo entre ellos
+# dispara E402 en los imports que la siguen.
+logger = logging.getLogger('seguridad')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NORMALIZACIÓN DE CONTRASEÑAS
+# ═══════════════════════════════════════════════════════════════════════════════
+# Regla única para toda la API: la contraseña se compara SIN espacios al
+# principio ni al final. Los serializers de DRF ya lo hacen implícitamente
+# (CharField.trim_whitespace=True por defecto) y aquí se hace explícito, porque
+# de ello depende la coherencia del sistema: el login, el registro y el reset
+# normalizan igual, así que nunca se puede fijar una contraseña que después no
+# sirva para entrar.
+# El recorte solo afecta a usuarios que hoy escriben espacios pegados a su
+# contraseña: a partir de este cambio, "MiPass1! " y "MiPass1!" son la misma
+# contraseña y su hash es idéntico.
+TRIM_PASSWORD = True
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SERIALIZER DE REGISTRO
@@ -21,11 +46,22 @@ from .utils import (
 # exponen en las respuestas, protegiendo así datos sensibles.
 class RegisterSerializer(serializers.ModelSerializer):
     # Campo de contraseña: solo escritura (nunca se devuelve en respuestas),
-    # con restricciones de longitud mínima y máxima por seguridad
-    password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    # con restricciones de longitud mínima y máxima por seguridad.
+    # `trim_whitespace` es el valor por defecto de DRF y se deja explícito
+    # porque define la NORMA de la contraseña en toda la API: la contraseña se
+    # normaliza quitando espacios al principio y al final (ver el bloque de
+    # constante TRIM_PASSWORD más abajo y su uso en ChangePasswordView).
+    # Consecuencia buscada: una contraseña de solo espacios se reduce a "" y
+    # se rechaza por longitud, en vez de contar como una contraseña válida de
+    # N caracteres.
+    password = serializers.CharField(
+        write_only=True, min_length=8, max_length=128, trim_whitespace=TRIM_PASSWORD
+    )
     # Campo de confirmación de contraseña: obliga al usuario a escribir la
     # contraseña dos veces para evitar errores de tipeo
-    confirm_password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    confirm_password = serializers.CharField(
+        write_only=True, min_length=8, max_length=128, trim_whitespace=TRIM_PASSWORD
+    )
 
     # ─── METADATA DEL SERIALIZER ───────────────────────────────────────────
     # Define el modelo subyacente, los campos expuestos y campos de solo lectura
@@ -116,54 +152,87 @@ class RegisterSerializer(serializers.ModelSerializer):
         username = validated_data['username']
         email = validated_data['email']
 
-        # Cuenta desactivada que reclamará estos datos (prioriza el username).
-        candidata = (
-            Usuario.objects.filter(username__iexact=username, is_active=False).first()
-            or Usuario.objects.filter(email__iexact=email, is_active=False).first()
-        )
+        # Toda la escritura de BD va dentro de la transacción: la cuenta
+        # (alta o reactivación) y sus contadores se guardan o no se guardan
+        # nunca a medias. El envío del email de verificación NO ocurre aquí:
+        # lo hace la vista DESPUÉS de que create() devuelva el control, de
+        # forma que jamás se manda un correo de una transacción revertida.
+        try:
+            with transaction.atomic():
+                # Cuenta desactivada que reclamará estos datos (prioriza el username).
+                candidata = (
+                    Usuario.objects.filter(username__iexact=username, is_active=False).first()
+                    or Usuario.objects.filter(email__iexact=email, is_active=False).first()
+                )
 
-        if candidata is None:
-            # Alta normal: no existe ninguna cuenta desactivada con estos datos.
-            usuario = Usuario(**validated_data)
-            usuario.set_password(password)
-            usuario.save()
-            return usuario
+                if candidata is None:
+                    # Alta normal: no existe ninguna cuenta desactivada con estos datos.
+                    usuario = Usuario(**validated_data)
+                    usuario.set_password(password)
+                    usuario.save()
+                    return usuario
 
-        # Al reactivar la candidata adoptará el username y email del formulario.
-        # Si algún OTRO usuario (activo o inactivo) ya los ocupa, no podemos
-        # reactivar sin violar las restricciones únicas de la BD.
-        username_taken = (
-            Usuario.objects.filter(username__iexact=username)
-            .exclude(pk=candidata.pk)
-            .exists()
-        )
-        email_taken = (
-            Usuario.objects.filter(email__iexact=email)
-            .exclude(pk=candidata.pk)
-            .exists()
-        )
-        if username_taken or email_taken:
+                # Una cuenta con rol 'admin' desactivada NO se reactiva por esta
+                # ruta pública. Reactivarla exige demostrar el control del
+                # correo, algo que puede conseguir cualquiera que conozca la
+                # dirección del admin: devolvería al atacante justo los
+                # privilegios que el administrador quiso quitar al desactivar
+                # la cuenta. Que un administrador vuelva a estar activo es una
+                # decisión del administrador, no del titular del correo.
+                if candidata.rol == 'admin':
+                    raise serializers.ValidationError({
+                        'email': ['Esta cuenta está desactivada. Contacta con el administrador '
+                                  'para reactivarla'],
+                    })
+
+                # Al reactivar la candidata adoptará el username y email del formulario.
+                # Si algún OTRO usuario (activo o inactivo) ya los ocupa, no podemos
+                # reactivar sin violar las restricciones únicas de la BD.
+                username_taken = (
+                    Usuario.objects.filter(username__iexact=username)
+                    .exclude(pk=candidata.pk)
+                    .exists()
+                )
+                email_taken = (
+                    Usuario.objects.filter(email__iexact=email)
+                    .exclude(pk=candidata.pk)
+                    .exists()
+                )
+                if username_taken or email_taken:
+                    raise serializers.ValidationError({
+                        'username': ['Este nombre de usuario no está disponible'],
+                        'email': ['Este correo electrónico no está disponible'],
+                    })
+
+                candidata.username = username
+                candidata.email = email
+                # La cuenta PERMANECE desactivada hasta que el propietario confirme el
+                # email desde el enlace que se acaba de enviar: nadie puede reclamar y
+                # operar una cuenta desactivada sin control del correo. La activación
+                # la hace VerificarEmailView (que además marca is_verified=True).
+                candidata.is_active = False
+                candidata.is_verified = False
+                candidata.failed_attempts = 0
+                candidata.locked_until = None
+                candidata.lockout_count = 0
+                candidata.set_password(password)
+                candidata.save()
+                # Bandera para que la vista pueda auditar la reactivación.
+                candidata._reactivado = True
+                return candidata
+        except IntegrityError:
+            # La unicidad de username/email solo se comprueba antes de guardar,
+            # así que dos registros simultáneos con el mismo dato pueden pasar
+            # ambos la validación y chocar aquí. La restricción de la BD es la
+            # autoridad final: se traduce a un 400 de validación (el cliente se
+            # equivoca al elegir sus datos) en lugar de propagating un 500 que
+            # filtra un detalle interno de la base de datos.
+            logger.warning(
+                f"Registro rechazado por colisión de unicidad: username={username}"
+            )
             raise serializers.ValidationError({
-                'username': ['Este nombre de usuario no está disponible'],
-                'email': ['Este correo electrónico no está disponible'],
+                'non_field_errors': ['Ese nombre de usuario o correo electrónico ya está en uso'],
             })
-
-        candidata.username = username
-        candidata.email = email
-        # La cuenta PERMANECE desactivada hasta que el propietario confirme el
-        # email desde el enlace que se acaba de enviar: nadie puede reclamar y
-        # operar una cuenta desactivada sin control del correo. La activación
-        # la hace VerificarEmailView (que además marca is_verified=True).
-        candidata.is_active = False
-        candidata.is_verified = False
-        candidata.failed_attempts = 0
-        candidata.locked_until = None
-        candidata.lockout_count = 0
-        candidata.set_password(password)
-        candidata.save()
-        # Bandera para que la vista pueda auditar la reactivación.
-        candidata._reactivado = True
-        return candidata
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -215,9 +284,13 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     # Se exige además del clic en el enlace para fijar la nueva contraseña.
     codigo = serializers.RegexField(r'^\d{6}$', error_messages={'invalid': 'El código debe ser de 6 dígitos'})
     # Nueva contraseña con restricciones de longitud
-    password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    password = serializers.CharField(
+        write_only=True, min_length=8, max_length=128, trim_whitespace=TRIM_PASSWORD
+    )
     # Confirmación de la nueva contraseña para evitar errores de tipeo
-    confirm_password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    confirm_password = serializers.CharField(
+        write_only=True, min_length=8, max_length=128, trim_whitespace=TRIM_PASSWORD
+    )
 
     # Aplica las mismas reglas de fortaleza que en el registro
     def validate_password(self, value):

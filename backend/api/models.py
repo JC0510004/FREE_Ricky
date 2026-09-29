@@ -9,7 +9,6 @@ from django.db.models import F
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.utils import timezone
-import hashlib
 
 
 # ─── GESTOR DE USUARIOS PERSONALIZADO ───────────────────────────────────
@@ -274,25 +273,21 @@ class ConfirmacionReset(models.Model):
     def is_expired(self):
         return timezone.now() > self.created_at + timezone.timedelta(minutes=self.TOKEN_EXPIRY_MINUTES)
 
-    # Verifica si el código de 6 dígitos en texto plano coincide con el hash
-    # almacenado para el email dado (y que el usuario esté activo y no haya expirado).
-    @classmethod
-    def verificar_codigo(cls, email: str, codigo: str) -> bool:
-        # Hashea el código para compararlo con el hash guardado en la BD.
-        h = hashlib.sha256(codigo.encode()).hexdigest()
-        return cls.objects.filter(
-            codigo_hash=h,
-            usuario__email__iexact=email,
-            usuario__is_active=True,
-            created_at__gte=timezone.now() - timezone.timedelta(minutes=cls.TOKEN_EXPIRY_MINUTES),
-        ).exists()
-
     # Incrementa el contador de fallos de código de forma atómica (bloquea la
     # fila) y devuelve el total. Evita que peticiones concurrentes pierdan fallos.
     def incrementar_intentos_fallidos(self):
         type(self).objects.filter(pk=self.pk).update(failed_attempts=F('failed_attempts') + 1)
         self.refresh_from_db()
         return self.failed_attempts
+
+    # NOTA: este modelo NO expone ningún método para validar un código a partir
+    # del email. Existió uno (verificar_codigo) y se eliminó porque era código
+    # muerto con dos defectos de seguridad: comparaba el hash del código dentro
+    # de la consulta SQL (en vez de con hmac.compare_digest en tiempo constante)
+    # y NO contaba los intentos fallidos, esquivando por completo el bloqueo
+    # anti fuerza bruta de MAX_INTENTOS_CODIGO. La única ruta de validación
+    # válida es api.views_password_reset (comparación en tiempo constante +
+    # _registrar_fallo_codigo sobre este mismo contador).
 
 
 # ─── MODELO DE VERIFICACIÓN DE EMAIL ──────────────────────────────────────

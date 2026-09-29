@@ -122,7 +122,21 @@ class RegisterView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        usuario = serializer.save()
+        try:
+            usuario = serializer.save()
+        except serializers.ValidationError as exc:
+            # create() puede rechazar la escritura (username/email duplicados
+            # por carrera, o reactivación no permitida). Se devuelve el mismo
+            # formato de error que la validación para que el cliente no tenga
+            # que distinguir dos tipos de 400.
+            logger.warning(
+                f"Registro fallido - escritura: {exc.detail}",
+                extra={'ip': request.META.get('REMOTE_ADDR')}
+            )
+            return Response(
+                {'errores': exc.detail},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if getattr(usuario, '_reactivado', False):
             audit_logger.info(

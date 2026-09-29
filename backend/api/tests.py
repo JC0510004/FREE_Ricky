@@ -1806,3 +1806,203 @@ class AdminSeguridadTests(TestCase):
     def test_ip_distinta_no_esta_bloqueada(self):
         # Sanity: los fallos se cuentan por IP y prefijo de path concretos.
         self.assertFalse(BruteForceIPMiddleware.ip_bloqueada('8.8.8.8'))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# REGRESION: LOS THROTTLES PUBLICOS NO SE ESQUIVAN AUTENTICANDOSE
+# ═══════════════════════════════════════════════════════════════════════════════
+# Con AnonRateThrottle, get_cache_key() devuelve None en cuanto la peticion
+# llega autenticada y allow_request() deja pasar todo lo que no tenga clave.
+# Como DRF autentica antes de aplicar throttles, bastaba con mandar un JWT
+# propio para obtener cuota ilimitada en login, registro y reset de contrasena.
+class ThrottleBypassTests(TestCase):
+    def setUp(self):
+        django_cache.clear()
+        self.usuario = Usuario.objects.create_user(
+            username='atacante',
+            email='atacante@example.com',
+            password='AtacantePass123!',
+        )
+        # Copia de las cuotas vigentes para restaurarlas al terminar.
+        self._rates = dict(django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'])
+        self.client = APIClient()
+
+    def tearDown(self):
+        django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'].update(self._rates)
+        django_cache.clear()
+
+    def _cuota(self, scope, rate):
+        django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'][scope] = rate
+
+    def _access_token(self):
+        """Token legitimo del propio atacante: no hay ningun bypass de credenciales."""
+        response = self.client.post(
+            reverse('login'),
+            {'username': 'atacante', 'password': 'AtacantePass123!'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Este login es real y consume cuota de 'login'. Se limpia el contador
+        # para que cada test mida exactamente las peticiones que hace despues.
+        django_cache.clear()
+        return response.data['access_token']
+
+    def test_login_throttle_no_se_esquiva_con_jwt_valido(self):
+        token = self._access_token()
+        self._cuota('login', '2/minute')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        for intento in range(2):
+            response = self.client.post(
+                reverse('login'),
+                {'username': 'atacante', 'password': 'incorrecta'},
+                format='json',
+            )
+            self.assertNotEqual(
+                response.status_code,
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f'Intento {intento + 1} deberia pasar todavia dentro de la cuota',
+            )
+
+        response = self.client.post(
+            reverse('login'),
+            {'username': 'atacante', 'password': 'incorrecta'},
+            format='json',
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'Un JWT valido no debeVidar la cuota de login por IP',
+        )
+
+    def test_anonimo_y_autenticado_comparten_cuota(self):
+        """La cuota es por IP, no por sesion: no se puede 'reiniciar' iniciando sesion."""
+        token = self._access_token()
+        self._cuota('register', '2/minute')
+
+        # Dos peticiones anonimas agotan la cuota.
+        for _ in range(2):
+            self.client.post(
+                reverse('register'),
+                {
+                    'username': 'nuevo1',
+                    'email': 'nuevo1@example.com',
+                    'password': 'NuevoPass123!',
+                    'password_confirm': 'NuevoPass123!',
+                },
+                format='json',
+            )
+        self.client.credentials()
+
+        # Autenticarse despues no debe devolver la cuota.
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        response = self.client.post(
+            reverse('register'),
+            {
+                'username': 'nuevo2',
+                'email': 'nuevo2@example.com',
+                'password': 'NuevoPass123!',
+                'password_confirm': 'NuevoPass123!',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_password_reset_throttle_no_se_esquiva_con_jwt_valido(self):
+        token = self._access_token()
+        self._cuota('password_reset', '2/minute')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        for _ in range(2):
+            self.client.post(
+                reverse('password_reset'),
+                {'email': 'atacante@example.com'},
+                format='json',
+            )
+
+        response = self.client.post(
+            reverse('password_reset'),
+            {'email': 'atacante@example.com'},
+            format='json',
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'El reset de contrasena no puede usarse para bombardear correo con sesion activa',
+        )
+
+    def test_throttle_publico_ignora_xff_manipulado(self):
+        """Un X-Forwarded-For falsificado no debe crear cubetas nuevas.
+
+        El escenario es cliente NO confiable: REMOTE_ADDR fuera de
+        TRUSTED_PROXIES, o sea alguien que llega directo a Django sin nginx
+        delante. Ahi cualquier header de reenvio lo elige el cliente, asi que
+        ignorarlo es lo unico seguro. (Detras de nginx, que si es de confianza,
+        manda X-Real-IP y el limite si debe granularse por cliente real.)
+        """
+        self._cuota('login', '2/minute')
+        no_confiable = '203.0.113.5'
+
+        for _ in range(2):
+            self.client.post(
+                reverse('login'),
+                {'username': 'atacante', 'password': 'incorrecta'},
+                format='json',
+                REMOTE_ADDR=no_confiable,
+                HTTP_X_FORWARDED_FOR='1.2.3.4',
+            )
+
+        response = self.client.post(
+            reverse('login'),
+            {'username': 'atacante', 'password': 'incorrecta'},
+            format='json',
+            REMOTE_ADDR=no_confiable,
+            HTTP_X_FORWARDED_FOR='5.6.7.8',
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'Cambiar X-Forwarded-For no debe evadir el limite',
+        )
+
+    def test_detras_de_proxy_confiable_se_usa_x_real_ip(self):
+        """Con proxy de confianza, la identidad viene de X-Real-IP (nginx lo fija)."""
+        self._cuota('login', '2/minute')
+        nginx = '172.20.0.3'  # dentro de TRUSTED_PROXIES por defecto
+
+        for _ in range(2):
+            self.client.post(
+                reverse('login'),
+                {'username': 'atacante', 'password': 'incorrecta'},
+                format='json',
+                REMOTE_ADDR=nginx,
+                HTTP_X_REAL_IP='198.51.100.7',
+            )
+
+        response = self.client.post(
+            reverse('login'),
+            {'username': 'atacante', 'password': 'incorrecta'},
+            format='json',
+            REMOTE_ADDR=nginx,
+            HTTP_X_REAL_IP='198.51.100.7',
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'La IP real del cliente debe acotar el limite cuando hay proxy de confianza',
+        )
+
+        # Y un cliente distinto con el mismo proxy NO debe verse afectado: si
+        # todo colapsara en la IP de nginx el limite seria inservible.
+        otro = self.client.post(
+            reverse('login'),
+            {'username': 'atacante', 'password': 'incorrecta'},
+            format='json',
+            REMOTE_ADDR=nginx,
+            HTTP_X_REAL_IP='203.0.113.99',
+        )
+        self.assertNotEqual(
+            otro.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'Cada cliente real debe tener su propia cuota, no una global',
+        )
