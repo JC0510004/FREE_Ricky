@@ -192,9 +192,18 @@ jobs:
 
   # ─── JOB: SECURITY SCAN ──────────────────────────────────────────────────
   # FIX #1: sin continue-on-error en ningún step — el job puede fallar y
-  # bloquear el pipeline. requirements.txt está en Django 6.0.8 / sqlparse 0.6.0
-  # para que safety no encuentre los 25 advisories del issue #1.
-  # FIX #4: versiones pinadas igual a requirements-dev.txt.
+  # bloquear el pipeline.
+  # FIX #4: versiones pinadas.
+  #
+  # pip-audit sustituye a `safety check` por dos motivos:
+  #  1. `safety check` está deprecado ("unsupported beyond 01 June 2024") y
+  #     cuando se elimine el job se rompe por una causa que no es un CVE.
+  #  2. `safety scan` (su sustituto oficial) exige login interactivo, inviable
+  #     en CI sin un secret SAFETY_API_KEY.
+  #  3. Motivo de fondo: la base de advisories de safety es incompleta. Con
+  #     Django 6.0.8 y sqlparse 0.6.0, safety reportaba "0 vulnerabilidades"
+  #     mientras pip-audit encontraba 14 reales — 2 en djangorestframework y
+  #     12 en pyjwt, que era dependencia transitiva sin pinear.
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -210,14 +219,12 @@ jobs:
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          pip install safety==3.8.1 bandit==1.9.4          # FIX #4: versiones pinadas
+          pip install pip-audit==2.10.1 bandit==1.9.4         # FIX #4: versiones pinadas
         working-directory: backend
-      - name: Check Python dependencies (safety)
-        run: safety check -r requirements.txt
+      - name: Audit Python dependencies (pip-audit)
+        run: pip-audit -r requirements.txt
         working-directory: backend
         # Sin continue-on-error: un CVE nuevo bloquea el pipeline (FIX #1).
-        # Reactivado en 7a7c92c tras subir Django a 6.0.8 y sqlparse a 0.6.0,
-        # que cierran los 25 advisories registrados en el issue #1.
       - name: Run bandit security linter
         run: bandit -r api/ -ll
         working-directory: backend

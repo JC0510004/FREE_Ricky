@@ -2,8 +2,8 @@
 # Django: Framework web Python completo con ORM, admin, autenticación, etc.
 # ==6.0.8 cierra 21 advisories de safety (el affected spec más alto es <6.0.8).
 # NO subir a >=6.0.8: resolvería a 6.1.x, que eliminó cc_delim_re de
-# django.utils.cache y rompe djangorestframework==3.16.1 (ImportError al importar
-# rest_framework.views). Subir a 6.1 exige DRF >= compatible primero.
+# django.utils.cache y rompe djangorestframework <3.17 (ImportError al importar
+# rest_framework.views). Ver nota de djangorestframework más abajo.
 # Ver issue #1 para el desglose CVE por CVE.
 Django==6.0.8
 
@@ -14,7 +14,15 @@ asgiref==3.11.1
 # ─── API REST ───────────────────────────────────────────────────────────
 # Django REST Framework: Toolkit para construir APIs RESTful con Django.
 # Proporciona serializers, viewsets, autenticación, paginación y más.
-djangorestframework==3.16.1
+# ==3.17.2 cierra PYSEC-2026-3827 y PYSEC-2026-3828, que safety NO reporta
+# (solo los ve pip-audit, que consulta la base de advisories de PyPI/OSV).
+djangorestframework==3.17.2
+
+# PyJWT: lo usa djangorestframework-simplejwt para firmar y verificar tokens.
+# Se pinea explícitamente porque es dependencia TRANSITIVA: sin este pin,
+# pip resuelve 2.9.0, que arrastra 12 advisories (PYSEC-2026-120, -175, -176,
+# -177, -178, -179 y PYSEC-2025-183). Ninguna la reporta safety.
+pyjwt==2.13.0
 
 # djangorestframework-simplejwt: Implementación de JWT (JSON Web Tokens)
 # para autenticación stateless. Permite login/logout sin sesiones de servidor.
@@ -65,7 +73,12 @@ gunicorn==25.1.0
 
 # redis: Cliente Python para Redis. Usado como backend de caché
 # para rate limiting y brute force protection entre workers.
-redis==5.3.0
+# ==6.0.0 necesario: en 5.3.0 la dependencia PyJWT~=2.9.0 es incondicional y
+# bloqueaba el pin de pyjwt, arrastrando 12 advisories. Desde 6.0.0 PyJWT es un
+# extra opcional (extra == "jwt") que este proyecto no usa. El proyecto solo
+# lo consume a través de django.core.cache.backends.redis.RedisCache
+# (api/cache_backend.py), así que la superficie de cambio es mínima.
+redis==6.0.0
 
 # ─── ZONA HORARIA ──────────────────────────────────────────────────────
 # tzdata: Base de datos de zonas horarias del sistema operativo.

@@ -13,8 +13,14 @@
 flake8==7.3.0
 
 # ─── SEGURIDAD EN DESARROLLO ───────────────────────────────────────────
-# safety: Escanea las dependencias instaladas contra la base de datos de
-# vulnerabilidades conocidas (CVE) del proyecto Safety.
+# pip-audit: Escanea las dependencias contra la base de advisories de
+# PyPI/OSV. Es el escáner que usa el CI en lugar de safety.
+pip-audit==2.10.1
+
+# safety: Se mantiene por si se quiere contrastar con una segunda fuente
+# (su base es distinta, aunque incompleta: no detectó 14 advisories en
+# djangorestframework y pyjwt que sí vio pip-audit). Su comando `check`
+# está deprecado y `scan` exige login, así que NO lo usa el CI.
 safety==3.8.1
 
 # bandit: Escáner de vulnerabilidades para código Python. Detecta patrones
