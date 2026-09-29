@@ -1,11 +1,15 @@
 # ─── FRAMEWORK WEB ──────────────────────────────────────────────────────
 # Django: Framework web Python completo con ORM, admin, autenticación, etc.
-# ==6.0.8 cierra 21 advisories de safety (el affected spec más alto es <6.0.8).
-# NO subir a >=6.0.8: resolvería a 6.1.x, que eliminó cc_delim_re de
-# django.utils.cache y rompe djangorestframework <3.17 (ImportError al importar
-# rest_framework.views). Ver nota de djangorestframework más abajo.
+# ==6.1.1 era el bloqueo desde 2025: 6.1 eliminó cc_delim_re de
+# django.utils.cache y rompía djangorestframework <3.18 con
+# "ImportError: cannot import name 'cc_delim_re'". Ese bloqueo ya no aplica
+# porque DRF está en 3.18.1 (ver nota más abajo).
+# AVISO: 6.1 depreca los settings EMAIL_* a favor de MAILERS, que todavía NO
+# existe (llega en 7.0). Es un warning esperado, no un error: los tests usan
+# mail.outbox y siguen pasando. La migración a MAILERS hay que hacerla al
+# subir a 7.0, no antes. Ver config/settings.py.
 # Ver issue #1 para el desglose CVE por CVE.
-Django==6.0.8
+Django==6.1.1
 
 # asgiref: Referencia de ASGI (Asynchronous Server Gateway Interface).
 # Permite que Django maneje peticiones asíncronas y WebSockets.
@@ -14,9 +18,13 @@ asgiref==3.11.1
 # ─── API REST ───────────────────────────────────────────────────────────
 # Django REST Framework: Toolkit para construir APIs RESTful con Django.
 # Proporciona serializers, viewsets, autenticación, paginación y más.
-# ==3.17.2 cierra PYSEC-2026-3827 y PYSEC-2026-3828, que safety NO reporta
+# ==3.18.1 cierra PYSEC-2026-3827 y PYSEC-2026-3828, que safety NO reporta
 # (solo los ve pip-audit, que consulta la base de advisories de PyPI/OSV).
-djangorestframework==3.17.2
+# Sube a 3.18 (no 3.17.x) por una razón concreta: 3.17.x sigue importando
+# django.utils.cache.cc_delim_re, que Django 6.1 eliminó. Es decir, 3.17.2
+# arreglaba los CVEs pero era incompatible con Django 6.1. 3.18.1 arregla
+# ambos a la vez, verificado con los 118 tests del backend.
+djangorestframework==3.18.1
 
 # PyJWT: lo usa djangorestframework-simplejwt para firmar y verificar tokens.
 # Se pinea explícitamente porque es dependencia TRANSITIVA: sin este pin,
