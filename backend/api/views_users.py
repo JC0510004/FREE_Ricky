@@ -1,6 +1,7 @@
 import logging
 
 from django.conf import settings
+from django.db import transaction
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -265,23 +266,38 @@ class ChangePasswordView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        usuario.set_password(new_password)
-        usuario.failed_attempts = 0
-        usuario.locked_until = None
-        usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
+        # Cambio de contraseña y revocación de las sesiones ajenas van en la
+        # MISMA transacción, y esta es la parte que hay que hacer atómica:
+        # antes el save() iba suelto y el bucle de blacklist después. Si algo
+        # fallaba a mitad del bucle, la contraseña ya estaba cambiada pero los
+        # refresh tokens de los demás dispositivos seguían vivos. El usuario
+        # recibe un 500, cree que le ha cerrado las sesiones al resto y en
+        # realidad no: quien tuviera un refresh token robado conservaba el
+        # acceso. Ahora es todo o nada.
+        #
+        # El envío del email de aviso va FUERA a propósito, y no por descuido:
+        # es una notificación, no parte de la garantía de seguridad, y meterlo
+        # aquí dejaría una transacción abierta durante todo el SMTP (que es
+        # lento y puede colgarse). Si el email falla, la contraseña sigue
+        # cambiada, que es la dirección segura del fallo.
+        with transaction.atomic():
+            usuario.set_password(new_password)
+            usuario.failed_attempts = 0
+            usuario.locked_until = None
+            usuario.save(update_fields=['password', 'failed_attempts', 'locked_until'])
 
-        # Invalida las sesiones de TODOS los dispositivos excepto la actual
-        # (cuyo refresh token viene en la cookie), para no desloguear al
-        # usuario que acaba de cambiar su contraseña desde este navegador.
-        current_jti = None
-        raw = request.COOKIES.get('refresh_token')
-        if raw:
-            try:
-                current_jti = RefreshToken(raw).payload.get('jti')
-            except Exception:
-                current_jti = None
-        for ot in OutstandingToken.objects.filter(user=usuario).exclude(jti=current_jti):
-            BlacklistedToken.objects.get_or_create(token=ot)
+            # Invalida las sesiones de TODOS los dispositivos excepto la actual
+            # (cuyo refresh token viene en la cookie), para no desloguear al
+            # usuario que acaba de cambiar su contraseña desde este navegador.
+            current_jti = None
+            raw = request.COOKIES.get('refresh_token')
+            if raw:
+                try:
+                    current_jti = RefreshToken(raw).payload.get('jti')
+                except Exception:
+                    current_jti = None
+            for ot in OutstandingToken.objects.filter(user=usuario).exclude(jti=current_jti):
+                BlacklistedToken.objects.get_or_create(token=ot)
 
         # Alerta por email: si no fue el propietario quien cambió la
         # contraseña, puede reclamar y bloquear el acceso de inmediato.

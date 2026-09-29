@@ -1176,6 +1176,47 @@ class ChangePasswordTests(TestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    # El cambio de contraseña y la revocación de las sesiones ajenas tienen que
+    # ser todo o nada. Antes el save() iba suelto y el bucle de blacklist
+    # después: si algo reventaba en medio, la contraseña ya estaba cambiada
+    # pero los refresh tokens de los demás dispositivos seguían vivos, y el
+    # usuario recibía un 500 convencido de que había cerrado las sesiones.
+    def test_cambio_password_es_atomico_si_falla_el_blacklist(self):
+        from unittest.mock import patch
+        from rest_framework_simplejwt.tokens import RefreshToken
+        usuario = Usuario.objects.get(username='testuser')
+        hash_original = usuario.password
+
+        # Hace falta una sesion previa que revocar: el bucle de blacklist solo
+        # itera sobre los OutstandingToken del usuario, y sin ninguno el
+        # parche de abajo no se dispararia nunca y el test pasaria sin
+        # comprobar nada.
+        RefreshToken.for_user(usuario)
+
+        with patch(
+            'api.views_users.BlacklistedToken.objects.get_or_create',
+            side_effect=RuntimeError('fallo al revocar sesiones'),
+        ):
+            try:
+                self.client.post(self.change_url, {
+                    'old_password': 'TestPass123!',
+                    'new_password': 'NewSecure123!',
+                    'confirm_password': 'NewSecure123!',
+                }, format='json')
+            except RuntimeError:
+                # Segun como DRF gestione el fallo, esto llega como excepcion
+                # o como respuesta 500. Da igual: lo que se comprueba es que
+                # la base de datos no quedara a medias.
+                pass
+
+        # Lo importante: la contraseña NO debe haber cambiado. Si hubiera
+        # cambiado, el usuario tendria una contraseña nueva creyendo que el
+        # cambio se deshizo, y las sesiones viejas seguirian vivas.
+        usuario.refresh_from_db()
+        self.assertEqual(usuario.password, hash_original)
+        self.assertTrue(usuario.check_password('TestPass123!'))
+        self.assertFalse(usuario.check_password('NewSecure123!'))
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TESTS DE ESTADÍSTICAS DE USUARIO
