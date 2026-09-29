@@ -4,6 +4,47 @@
 # Define servicios, redes, volúmenes y políticas de seguridad para desarrollo.
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ─── CÓMO LEVANTAR EL STACK ─────────────────────────────────────────────────
+#
+# Este es el ÚNICO fichero de orquestación. NO existe docker-compose.override.yml
+# (se eliminó, ver más abajo) y no debe volver a crearse en el repo.
+#
+#   Desarrollo (lo normal):
+#     cp .env.example .env      # y rellena SECRET_KEY, JWT_SECRET_KEY y las 3 contraseñas
+#     docker compose up --build
+#     → App en http://127.0.0.1:5173  (nginx sirve el build y hace proxy de /api)
+#     → MySQL en 127.0.0.1:3307, Redis en 127.0.0.1:6379  (solo loopback)
+#
+#   Desarrollo con Django fuera de Docker (venv local):
+#     docker compose up -d mysql redis
+#     cd backend && .\.venv\Scripts\activate   # y .\.venv\Scripts\python manage.py runserver
+#     → .env.example ya apunta a DB_HOST=localhost y DB_PORT=3307
+#
+#   Necesitas la app desde el móvil o desde otro equipo de la LAN (p. ej. un
+#   Load Balancer o nginx del host):
+#     FRONTEND_BIND=0.0.0.0 docker compose up --build
+#     SOLO el frontend se puede exponer. MySQL y Redis no tienen variable de
+#     propósito: están atados a loopback a propósito y no se parametrizan,
+#     para que un `FRONTEND_BIND=0.0.0.0` no arrastre al MySQL con él.
+#
+# ─── POR QUÉ SE ELIMINÓ docker-compose.override.yml ─────────────────────────
+# Compose carga `docker-compose.override.yml` AUTOMÁTICAMENTE en `docker compose up`.
+# El fichero que había en el repo publicaba backend (8000), frontend (5173) y
+# MySQL (3307) en 0.0.0.0 con `ports: !override`. Es decir: lo commiteado era
+# exactamente lo que se aplicaba, y lo que se aplicaba era:
+#   1. MySQL 8.0 alcanzable desde toda la red con la contraseña de la .env local.
+#   2. Django alcanzable FUERA de nginx → se saltaban el `limit_req` por IP, el
+#      `deny all` de /admin/ y los headers de seguridad; y como DRF lee con
+#      NUM_PROXIES=1 el ÚLTIMO elemento de X-Forwarded-For, un cliente podía
+#      inventarse esa cabecera y evadir TODOS los throttles uno a uno.
+# El fail-safe era el contrario del deseado. Este fichero es ahora la única
+# fuente de verdad y todo lo que se publica está atado a loopback salvo el
+# frontend, y solo si se pide explícitamente con FRONTEND_BIND.
+#
+# Para tweaks locales que no quieras versionar, crea un fichero tuyo
+# (docker-compose.local.yml) y lánzalo con `-f docker-compose.yml
+# -f docker-compose.local.yml`: así no se cuela en el repo.
+
 # ─── SERVICIOS ───────────────────────────────────────────────────────────────
 # Cada servicio representa un contenedor independiente con su propia configuración.
 services:
@@ -30,9 +71,20 @@ services:
 
     # Configuración avanzada de Redis:
     # - maxmemory 64mb: Limita el uso de RAM a 64 megabytes para evitar consumo excesivo.
-    # - maxmemory-policy allkeys-lru: Elimina las claves menos recientemente usadas (LRU)
-    #   cuando se alcanza el límite de memoria, liberando espacio automáticamente.
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD no configurada en .env} --protected-mode yes
+    # - maxmemory-policy noeviction: NUNCA se expulsan claves. Es la decisión clave
+    #   de este servicio y no es la habitual (lo habitual sería allkeys-lru):
+    #   esta Redis NO guarda caché de páginas ni de sesión, solo los contadores de
+    #   rate limiting y de bloqueo por fuerza bruta (api/middleware.py:103-107) y
+    #   los de DRF. Con allkeys-lru, quien llene la memoria (y eso lo puede hacer
+    #   un atacante a propósito) se lleva por delante los contadores de throttle y
+    #   se queda con cuota fresca. Aquí no hay cache-hit-rate que proteger a cambio:
+    #   un error de escritura es preferible a un rate limit que se reinicia solo.
+    #   volatile-lru NO serviría: Django pone timeout en TODAS las claves
+    #   (300 s por defecto), así que todas son "volatile" y seguirían siendo
+    #   expulsables. Por eso noeviction y no una política "solo-volatile".
+    #   Con noeviction, si algún día se llenara, las escrituras fallarían con OOM:
+    #   visible y ruidoso, que es justo lo contrario de un limit que se evapora.
+    command: redis-server --maxmemory 64mb --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD no configurada en .env} --protected-mode yes
 
     # Verificación de salud: ejecuta un ping a Redis para confirmar que está operativo.
     # Si Redis no responde, Docker lo marca como "unhealthy" y puede reiniciarlo.
@@ -102,6 +154,23 @@ services:
 
     # Puerto 3307 en el host para evitar conflicto con una posible instalación local de MySQL.
     # El contenedor usa el puerto estándar 3306 internamente.
+    #
+    # ATADO A LOOPBACK Y SIN VARIABLE DE ENTORNO A PROPÓSITO: la base de datos
+    # nunca debe ser alcanzable desde la red. El override que se eliminó la
+    # publicaba en 0.0.0.0 (MySQL 8.0 con la contraseña de la .env local).
+    # En producción se accede desde el host con un túnel SSH, no abriendo el puerto:
+    #   ssh -L 3307:127.0.0.1:3307 usuario@vm
+    # Si algún día hiciera falta una IP concreta, se pone aquí de forma explícita
+    # en lugar de Heredarla de una variable compartida con el frontend.
+    #
+    # NOTA DE COMPATIBILIDAD (verificada en las release notes de Django 6.1):
+    # Django 6.1 deja de dar soporte oficial a MySQL < 8.4 ("Dropped support for
+    # MySQL < 8.4"); esta imagen es 8.0. Hoy no falla al arrancar porque el
+    # backend no impone la versión mínima en tiempo de ejecución, pero es una
+    # combinación sin soporte: al subir Django o MySQL puede romper. La
+    # actualización NO se puede hacer cambiando la etiqueta, porque el volumen
+    # `mysql_data` es de 8.0 y MySQL no actualiza volúmenes in situ: exige
+    # mysqldump + restauración (ver DEPLOY_PRODUCCION.md).
     ports:
       - "127.0.0.1:3307:3306"
 
@@ -157,9 +226,24 @@ services:
     # Reinicio automático en caso de fallo o reinicio del sistema.
     restart: unless-stopped
 
-    # Puerto 8000 expuesto solo en localhost para desarrollo local.
-    ports:
-      - "127.0.0.1:8000:8000"
+    # El puerto 8000 NO se publica en el host. El motivo no es capricho:
+    #
+    # 1. Es la única forma de que toda petición a la API pase por nginx, que es
+    #    donde están el `limit_req` por IP (10 r/s), el `deny all` de /admin/ y
+    #    los headers de seguridad. Publicarlo en el host los esquivaba.
+    # 2. Con Django accesible directamente, DRF lee (NUM_PROXIES=1) el último
+    #    elemento de X-Forwarded-For. Sin nginx detrás, ese valor lo pone el
+    #    cliente, así que TODOS los throttles se evadían cambiando una cabecera.
+    # 3. `expose` documenta el puerto para la red interna; no abre nada al host.
+    #    Dentro de la red de Docker se sigue llegando con el nombre `backend`.
+    #
+    # Si necesitas el 8000 en el host (p. ej. `npm run dev`, cuyo proxy apunta a
+    # 127.0.0.1:8000 según frontend/vite.config.js:43), NO lo publiques aquí:
+    # ejecuta Django en el host con el venv contra MySQL/Redis de loopback, o
+    # levanta tu propio `docker compose -f docker-compose.yml -f local.yml up`
+    # con el mapeo, sin tocar este fichero.
+    expose:
+      - "8000"
 
     # Dependencias con condiciones de salud:
     # El backend NO arranca hasta que MySQL y Redis estén completamente operativos.
@@ -219,6 +303,29 @@ services:
       # Redirección SSL en producción: fuerza HTTPS para todas las peticiones.
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
 
+      # Migraciones al arrancar el contenedor.
+      #
+      # entrypoint.sh ejecutaba `manage.py migrate` SIEMPRE, en cada arranque y en
+      # cada réplica. Con dos réplicas arrancando a la vez, dos procesos compiten
+      # por el bloqueo de la migración y el que pierde se queda en bucle de
+      # reinicio (ImagePullBackOff en despliegues multi-réplica), que es un fallo
+      # de despliegue disfrazado de bug de aplicación.
+      # Ahora las migraciones son un paso explícito:
+      #   - Desarrollo (valor por defecto): true, porque una base de datos nueva
+      #     tiene que crear sus tablas y nadie quiere acordarse de un comando.
+      #   - Producción: pon RUN_MIGRATIONS=false en la .env y lanza las
+      #     migraciones como un job de un solo uso antes de escalar réplicas:
+    #       docker compose run --rm backend python manage.py migrate --noinput
+      #     Está en DEPLOY_PRODUCCION.md §5.
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+
+      # Redes de confianza para resolver la IP real del cliente.
+      # Tiene que incluir la red del proxy (nginx, o el balanceador que haya
+      # delante) pero NO la red entera: quien esté en TRUSTED_PROXIES decide su
+      # propia IP con X-Real-IP. Ver la nota larga de config/settings.py.
+      # Con Docker, el valor por defecto de settings.py ya cubre el bridge.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+
     # Red interna del proyecto.
     networks:
       - app_network
@@ -255,10 +362,13 @@ services:
     # Usa urllib (stdlib de Python) para evitar dependencias externas en el healthcheck.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/ranking/')"]
-      interval: 30s       # Verifica cada 30 segundos (el backend tarda más en iniciar)
+      interval: 30s       # Verifica cada 30 segundos
       timeout: 10s        # 10 segundos de tolerancia para respuesta
       retries: 3          # 3 fallos antes de marcar unhealthy
-      start_period: 40s   # 40 segundos para que Django complete migraciones y arranque
+      # 40 s de gracia: con RUN_MIGRATIONS=true el arranque incluye las migraciones.
+      # Con RUN_MIGRATIONS=false (producción) este margen es de sobra.
+      start_period: 40s
+
 
   # ─── FRONTEND (Nginx + App) ───────────────────────────────────────────────
   # Servidor web estático que sirve la aplicación React/Vue compilada.
@@ -275,8 +385,15 @@ services:
     restart: unless-stopped
 
     # Puerto 5173 en el host (puerto estándar de Vite) mapeado a Nginx internamente (80).
+    #
+    # FRONTEND_BIND permite exponerlo fuera de loopback, que es lo que hace falta
+    # para probar desde el móvil o para poner un balanceador/nginx del host delante.
+    # El valor por defecto (127.0.0.1) es el fail-safe: `docker compose up` a pelo
+    # NO publica nada en la red.
+    # En producción, lo normal es poner el 80/443 delante (LB, nginx del host o el
+    # bloque TLS de frontend/nginx.conf) y dejar FRONTEND_BIND en 127.0.0.1.
     ports:
-      - "127.0.0.1:5173:80"
+      - "${FRONTEND_BIND:-127.0.0.1}:5173:80"
 
     # Espera a que el backend esté sano antes de iniciar, ya que el frontend le hace peticiones.
     depends_on:

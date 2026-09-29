@@ -9,12 +9,18 @@ WORKDIR /app
 
 # Instala las dependencias del sistema necesarias para compilar paquetes Python.
 # build-essential: gcc y herramientas de compilación C.
-# libpq-dev: archivos de desarrollo de PostgreSQL (para psycopg2).
 # pkg-config: herramienta para localizar bibliotecas compartidas.
 # default-libmysqlclient-dev: archivos de desarrollo de MySQL (para mysqlclient).
+#
+# NO se instala libpq-dev (ni libpq en la etapa de runtime): el proyecto usa
+# MySQL (settings.py → django.db.backends.mysql, requirements.txt → mysqlclient,
+# compose → mysql:8.0) y NO hay psycopg/psycopg2 ni django.contrib.postgres en
+# ningún sitio. El comentario que justificaba libpq-dev "para psycopg2" era
+# un resto de una plantilla de PostgreSQL y se llevaba por delante ~50 MB de
+# imagen en las dos etapas.
 # Se limpia la caché de apt para reducir el tamaño de la imagen.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev pkg-config default-libmysqlclient-dev && \
+    build-essential pkg-config default-libmysqlclient-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Copia el archivo de dependencias al contenedor builder.
@@ -32,16 +38,16 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM python:3.12-slim AS runtime
 
 # Instala las bibliotecas compartidas de runtime (sin -dev, sin compiladores).
-# libpq: cliente PostgreSQL para connections.
-# libmariadb3: cliente MariaDB/MySQL para conexiones.
+# libmariadb3: cliente MariaDB/MySQL que es contra el que se enlazó mysqlclient.
+# Es el único driver de base de datos que necesita la imagen; libpq se eliminó
+# por el mismo motivo que en la etapa de builder (el proyecto es MySQL).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev libmariadb3 && \
+    libmariadb3 && \
     rm -rf /var/lib/apt/lists/*
 
 # Crea un usuario del sistema 'appuser' sin privilegios root.
 # groupadd -r: Crea un grupo del sistema (-r = rango 0-999).
 # useradd: Crea el usuario con grupo appuser, home /app y sin shell de login.
-# Ejecutar como usuario no-root es una práctica de seguridad fundamental.
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
 
 WORKDIR /app
@@ -59,6 +65,17 @@ RUN chown -R appuser:appuser /app
 
 # Marca el script de entrada como ejecutable.
 RUN chmod +x /app/entrypoint.sh
+
+# ─── EJECUTA COMO USUARIO SIN PRIVILEGIOS ───────────────────────────────────
+# Esta línea es la que hace todo el trabajo del usuario appuser. Sin ella el
+# `chown` de arriba no aporta nada y el proceso sigue corriendo como root,
+# que es justo lo que se quería evitar: un atacante queloggedue un RCE en
+# Django heredaría root en lugar de un usuario sin permisos.
+#
+# Va DESPUÉS del COPY/chown/chmod porque esas órdenes necesitan root para
+# escribir ficheros, y DESPUÉS del HEALTHCHECK porque las directivas de
+# metadatos no dependen del usuario.
+USER appuser
 
 # Expone el puerto 8000 (puerto del servidor Gunicorn).
 EXPOSE 8000
