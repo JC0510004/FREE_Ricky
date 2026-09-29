@@ -170,6 +170,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
         working-directory: frontend
+      - name: Guard: ningún archivo de test quedó fuera de la suite
+        run: npm run test:guard
+        working-directory: frontend
+        # Sin continue-on-error. Motivo: dos tests estaban en disco sin
+        # extensión (.test, no .test.js) y el include de vite.config.js no los
+        # veía. Vitest reportaba 7 archivos / 40 tests en verde mientras 25
+        # tests no se ejecutaban. El fallo era invisible; esto lo hace visible.
       - name: Run tests
         run: npm test
         working-directory: frontend
