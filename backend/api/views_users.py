@@ -245,9 +245,18 @@ class ChangePasswordView(APIView):
     )
     def post(self, request):
         usuario = request.user
-        old_password = request.data.get('old_password', '')
-        new_password = request.data.get('new_password', '')
-        confirm_password = request.data.get('confirm_password', '')
+        # Recorta igual que LoginSerializer/RegisterSerializer (que usan el
+        # trim_whitespace de DRF) ANTES de validar la fortaleza y de guardar.
+        # Sin esto, una contraseña con un espacio al final ("MiPass1! ") pasa
+        # la comprobación de fortaleza y se guarda CON el espacio; el login sí
+        # recorta, así que el usuario teclea la contraseña correcta y el
+        # sistema le dice que es incorrecta. Para siempre, porque la contraseña
+        # que hay en la base de datos no es la que él cree haber puesto.
+        # Era un bloqueo permanente sin salida: ni login ni reset lo arreglan
+        # sin que el usuario se dé cuenta del espacio.
+        old_password = str(request.data.get('old_password', '')).strip()
+        new_password = str(request.data.get('new_password', '')).strip()
+        confirm_password = str(request.data.get('confirm_password', '')).strip()
 
         if usuario.is_locked():
             return Response(

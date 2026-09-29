@@ -68,6 +68,30 @@ class VerificarEmailView(APIView):
             )
 
         usuario = registro.usuario
+
+        # Una cuenta cerrada por un administrador no se reabre validando un
+        # email, aunque el token sea auténtico. Este endpoint es público, así
+        # que si llegara aquí un VerificacionEmail de una cuenta desactivada
+        # (por un fallo previo del borrado, por un registro en curso, o por
+        # cualquier otra vía) bastaría con comprobar que el token es válido
+        # para devolverle el acceso a alguien que el admin decidió expulsar.
+        # La única forma de revertir el cierre es que lo haga un admin.
+        if usuario.desactivado_por_admin:
+            registro.delete()
+            logger.warning(
+                f"Intento de verificar una cuenta desactivada por admin: {usuario.username}",
+                extra={'user_id': usuario.id, 'username': usuario.username},
+            )
+            audit_logger.warning(
+                f"VERIFICACION RECHAZADA (cuenta desactivada por admin) "
+                f"user_id={usuario.id} username={usuario.username}"
+            )
+            return Response(
+                {'error': 'Esta cuenta está desactivada. Contacta con el administrador '
+                          'para reactivarla'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         usuario.is_verified = True
         usuario.is_active = True
         usuario.save(update_fields=['is_verified', 'is_active'])

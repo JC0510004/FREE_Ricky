@@ -145,14 +145,17 @@ services:
     restart: unless-stopped
 
     # Configuración avanzada del servidor MySQL al iniciar:
-    # - default-authentication-plugin=caching_sha2_password: Autenticación segura y moderna
-    #   (recomendada por Oracle para MySQL 8.0+).
     # - character-set-server=utf8mb4: Soporte completo para caracteres Unicode (emojis, etc).
     # - collation-server=utf8mb4_unicode_ci: Ordenamiento case-insensitive para búsquedas.
     # - max-connections=200: Limita conexiones simultáneas para evitar agotamiento de recursos.
     # - innodb-buffer-pool-size=256M: Memoria cache del motor InnoDB para consultas frecuentes.
+    #
+    # DELIBERADAMENTE SIN --default-authentication-plugin: la variable se
+    # eliminó en MySQL 8.4 (sustituida por authentication_policy) y el servidor
+    # ABORTA al arrancar con "unknown variable". Comprobado contra 8.4.11.
+    # Da igual quitarlo: caching_sha2_password ya es el plugin por defecto en
+    # 8.4, así que la seguridad no baja. En 8.0 el flag sí existía.
     command: >
-      --default-authentication-plugin=caching_sha2_password
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
       --max-connections=200
@@ -177,14 +180,16 @@ services:
     # Si algún día hiciera falta una IP concreta, se pone aquí de forma explícita
     # en lugar de Heredarla de una variable compartida con el frontend.
     #
-    # NOTA DE COMPATIBILIDAD (verificada en las release notes de Django 6.1):
+    # NOTA DE COMPATIBILIDAD:
     # Django 6.1 deja de dar soporte oficial a MySQL < 8.4 ("Dropped support for
-    # MySQL < 8.4"); esta imagen es 8.0. Hoy no falla al arrancar porque el
-    # backend no impone la versión mínima en tiempo de ejecución, pero es una
-    # combinación sin soporte: al subir Django o MySQL puede romper. La
-    # actualización NO se puede hacer cambiando la etiqueta, porque el volumen
-    # `mysql_data` es de 8.0 y MySQL no actualiza volúmenes in situ: exige
-    # mysqldump + restauración (ver DEPLOY_PRODUCCION.md).
+    # MySQL < 8.4"), y esta imagen es 8.4, que es justo el mínimo que el backend
+    # necesita: con 8.0 la aplicación no arranca. La combinación actual sí está
+    # soportada.
+    #
+    # Si el volumen `mysql_data` se creó con 8.0 (ver el aviso de la línea ~129),
+    # el salto a 8.4 se hace con volcado + restauración sobre un volumen NUEVO.
+    # MySQL no admite downgrade de datos, así que la vuelta atrás no es posible
+    # en el mismo volumen. Ver DEPLOY_PRODUCCION.md.
     ports:
       - "127.0.0.1:3307:3306"
 

@@ -251,6 +251,41 @@ class RegistroTests(TestCase):
         self.assertTrue(victima.check_password('TestPass123!'))
         self.assertEqual(len(mail.outbox), 0)
 
+    # El otro camino que reactiva cuentas es validar el email, y además es
+    # público. Una cuenta cerrada por el admin no puede reentrar por ahí
+    # tampoco: si quedara un VerificacionEmail vivo, con solo poseer el token
+    # bastaba para devolverle el acceso a quien el admin expulsó.
+    def test_verificar_email_no_reabre_cuenta_desactivada_por_admin(self):
+        import hashlib
+        from api.models import VerificacionEmail
+        victima = Usuario.objects.create_user(
+            username='jugador_cerrado',
+            email='cerrado@gmail.com',
+            password='TestPass123!',
+        )
+        victima.is_active = False
+        victima.desactivado_por_admin = True
+        victima.save(update_fields=['is_active', 'desactivado_por_admin'])
+
+        # Token de un solo uso AUTÉNTICO (su hash sí coincide), como si se
+        # hubiera emitido antes de que el admin cerrara la cuenta.
+        token = 'a' * 64
+        VerificacionEmail.objects.create(
+            usuario=victima,
+            token_hash=hashlib.sha256(token.encode()).hexdigest(),
+        )
+
+        response = self.client.post(
+            reverse('verificar_email'), {'token': token}, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+        victima.refresh_from_db()
+        self.assertFalse(victima.is_active)
+        self.assertFalse(victima.is_verified)
+        # El token se consume: no sirve para reintentar.
+        self.assertFalse(VerificacionEmail.objects.filter(usuario=victima).exists())
+
     # Verifica que la contraseña NUNCA se exponga en la respuesta HTTP
     # Incluso con write_only=True, es importante validar que no aparezca
     # en la respuesta del usuario creado (fallo de configuración)
@@ -1277,6 +1312,30 @@ class ChangePasswordTests(TestCase):
         self.assertEqual(usuario.password, hash_original)
         self.assertTrue(usuario.check_password('TestPass123!'))
         self.assertFalse(usuario.check_password('NewSecure123!'))
+
+    # El recorte tiene que ser el MISMO en el cambio de contraseña y en el
+    # login. Si no, un espacio al final se guarda pero el login lo quita y el
+    # usuario se queda fuera de su cuenta para siempre, sin error que le
+    # explique por qué.
+    def test_cambio_password_no_deja_espacios_que_impidan_entrar(self):
+        response = self.client.post(self.change_url, {
+            'old_password': 'TestPass123!',
+            'new_password': 'NewSecure123! ',
+            'confirm_password': 'NewSecure123! ',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        # Se guarda SIN el espacio final...
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertTrue(usuario.check_password('NewSecure123!'))
+
+        # ...y por eso el login funciona con la contraseña normal.
+        self.client.credentials()
+        resp_login = self.client.post(reverse('login'), {
+            'username': 'testuser',
+            'password': 'NewSecure123!',
+        }, format='json')
+        self.assertEqual(resp_login.status_code, status.HTTP_200_OK, resp_login.data)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
