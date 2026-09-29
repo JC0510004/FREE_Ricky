@@ -312,4 +312,110 @@ describe('AuthProvider', () => {
       expect(screen.getByTestId('tokenReady')).toHaveTextContent('false')
     })
   })
+
+  // ─── Resiliencia ante rechazos de authService ─────────────────────
+  // authService traga hoy sus propios errores, asi que estos mocks no son
+  // alcanzables con la implementacion actual. Fijan el contrato de que el
+  // contexto no se rompe si esa garantia cambia: sin esto, un verify()
+  // que rechazara dejaria isLoading en true para siempre y ProtectedRoute
+  // dejaria todas las rutas en blanco sin forma de recuperacion.
+  describe('si authService rechaza la promesa', () => {
+    const u = { id: 1, username: 'juan', rol: 'jugador' }
+
+    it('verify() termina el loading en vez de dejar la app colgada', async () => {
+      authService.getStoredUser.mockReturnValue(u)
+      authService.verifySession.mockRejectedValue(new Error('red caída'))
+
+      await renderAndWait()
+
+      // Si isLoading se quedara en true, ProtectedRoute renderiza null en
+      // todas las rutas y no habria forma de llegar a la pantalla de login.
+      expect(screen.getByTestId('isLoading')).toHaveTextContent('false')
+    })
+
+    it('verify() no tira la sesión del usuario ante un fallo de red', async () => {
+      authService.getStoredUser.mockReturnValue(u)
+      authService.verifySession.mockRejectedValue(new Error('red caída'))
+
+      await renderAndWait()
+
+      // Un fallo puntual de red no equivale a sesión caída: si el token
+      // estuviera muerto, las siguientes peticiones darían 401 y el
+      // interceptor ya se encargaría. El waitFor cubre el act inicial.
+      await waitFor(() =>
+        expect(screen.getByTestId('isLoading')).toHaveTextContent('false')
+      )
+      expect(screen.getByTestId('user')).toHaveTextContent(JSON.stringify(u))
+    })
+
+    it('logout() limpia el estado local aunque el backend falle', async () => {
+      authService.getStoredUser.mockReturnValue(u)
+      authService.verifySession.mockResolvedValue({ usuario: u })
+      authService.logout.mockRejectedValue(new Error('red caída'))
+
+      function WithLogout() {
+        const { user, tokenReady, logout } = useAuth()
+        return (
+          <div>
+            <span data-testid="user">{user ? user.username : 'null'}</span>
+            <span data-testid="tokenReady">{String(tokenReady)}</span>
+            <button onClick={logout}>Logout</button>
+          </div>
+        )
+      }
+
+      await act(async () => {
+        render(<AuthProvider><WithLogout /></AuthProvider>)
+      })
+
+      await waitFor(() =>
+        expect(screen.getByTestId('user')).toHaveTextContent('juan')
+      )
+
+      await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
+
+      // El finally garantiza esto: sin el, el rechazo se comería el
+      // setUser(null) y el usuario se quedaría "conectado" en la UI.
+      expect(screen.getByTestId('user')).toHaveTextContent('null')
+      expect(screen.getByTestId('tokenReady')).toHaveTextContent('false')
+    })
+  })
+
+  // ─── checkSession() ────────────────────────────────────────────────
+  describe('checkSession()', () => {
+    it('devuelve false y limpia el estado si verifySession rechaza', async () => {
+      const u = { id: 1, username: 'juan', rol: 'jugador' }
+      authService.getStoredUser.mockReturnValue(u)
+      authService.verifySession.mockResolvedValue({ usuario: u })
+
+      let result
+      function WithCheck() {
+        const { user, checkSession } = useAuth()
+        return (
+          <div>
+            <span data-testid="user">{user ? user.username : 'null'}</span>
+            <button
+              onClick={async () => { result = await checkSession() }}
+            >
+              Check
+            </button>
+          </div>
+        )
+      }
+
+      await act(async () => {
+        render(<AuthProvider><WithCheck /></AuthProvider>)
+      })
+
+      await waitFor(() =>
+        expect(screen.getByTestId('user')).toHaveTextContent('juan')
+      )
+
+      authService.verifySession.mockRejectedValue(new Error('red caída'))
+      await userEvent.click(screen.getByRole('button', { name: 'Check' }))
+
+      expect(result).toBe(false)
+      expect(screen.getByTestId('user')).toHaveTextContent('null')
+    })
+  })
 })

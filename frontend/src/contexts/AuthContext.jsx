@@ -48,35 +48,53 @@ export function AuthProvider({ children }) {
     let isMounted = true
 
     const verify = async () => {
-      // Primero verificamos si hay datos de usuario en localStorage
-      const stored = authService.getStoredUser()
-      if (!stored) {
-        // Si no hay usuario guardado, simplemente terminamos la carga
-        // y el usuario verá la página de login
-        if (isMounted) setIsLoading(false)
-        return
-      }
-
-      // Si hay usuario guardado, verificamos con el backend si la
-      // sesión sigue siendo válida (el refresh token no expiró).
-      const data = await authService.verifySession()
-
-      if (isMounted) {
-        // Si la sesión no es válida, limpiamos el estado del usuario
-        // para que el usuario tenga que iniciar sesión de nuevo
-        if (!data) {
-          setUser(null)
-        } else if (data.usuario) {
-          // El backend devuelve el usuario fresco (con rol/estado actual).
-          // Lo aplicamos para mantener la app sincronizada (por ejemplo,
-          // si otro admin cambió el rol o desactivó la cuenta).
-          setUser(data.usuario)
-          localStorage.setItem('usuario:v1', JSON.stringify(data.usuario))
+      // authService.verifySession() hoy atrapa sus propios errores y
+      // devuelve null, así que este catch no es alcanzable con la
+      // implementación actual. Es defensa en profundidad: si esa promesa
+      // llegara a rechazar, el fallo se comería el final del efecto,
+      // isLoading se quedaría en true para siempre y ProtectedRoute
+      // (que hace `if (isLoading) return null`) dejaría TODAS las rutas
+      // protegidas en blanco, sin salida: ni navegar ni recargar con F5
+      // ayuda, porque el fallo se repite. Un fallo de red puntual no
+      // debe dejar la app inutilizable, así que solo cortamos el loading
+      // sin tirar la sesión: si el token estaba muerto de verdad, las
+      // siguientes peticiones recibirán 401 y el interceptor de axios
+      // disparará 'auth:session-expired', que ya limpia el estado.
+      try {
+        // Primero verificamos si hay datos de usuario en localStorage
+        const stored = authService.getStoredUser()
+        if (!stored) {
+          // Si no hay usuario guardado, simplemente terminamos la carga
+          // y el usuario verá la página de login. tokenReady se queda en
+          // false a propósito: no hay sesión, luego no hay access token
+          // que renovar, y ningún componente lo espera en ese estado.
+          if (isMounted) setIsLoading(false)
+          return
         }
-        // El refresh (si fue válido) ya dejó el access token en memoria
-        setTokenReady(true)
-        // Terminamos la carga en cualquier caso
-        setIsLoading(false)
+
+        // Si hay usuario guardado, verificamos con el backend si la
+        // sesión sigue siendo válida (el refresh token no expiró).
+        const data = await authService.verifySession()
+
+        if (isMounted) {
+          // Si la sesión no es válida, limpiamos el estado del usuario
+          // para que el usuario tenga que iniciar sesión de nuevo
+          if (!data) {
+            setUser(null)
+          } else if (data.usuario) {
+            // El backend devuelve el usuario fresco (con rol/estado actual).
+            // Lo aplicamos para mantener la app sincronizada (por ejemplo,
+            // si otro admin cambió el rol o desactivó la cuenta).
+            setUser(data.usuario)
+            localStorage.setItem('usuario:v1', JSON.stringify(data.usuario))
+          }
+          // El refresh (si fue válido) ya dejó el access token en memoria
+          setTokenReady(true)
+          // Terminamos la carga en cualquier caso
+          setIsLoading(false)
+        }
+      } catch {
+        if (isMounted) setIsLoading(false)
       }
     }
 
@@ -117,10 +135,26 @@ export function AuthProvider({ children }) {
   // Llama al servicio de auth para cerrar la sesión (notifica al backend
   // y limpia tokens) y luego pone el usuario en null para que la UI
   // muestre las páginas públicas.
+  // El estado local se limpia en el finally, no después del await. Si la
+  // promesa llegara a rechazar, el setUser(null) de después nunca se
+  // ejecutaría y el usuario se quedaría con la sesión aparentemente viva
+  // en la UI después de haber pulsado "salir", sin forma de recuperarse
+  // salvo recargando a mano. Es defensa en profundidad: hoy authService
+  // .logout() ya traga sus errores y limpia localStorage y token siempre,
+  // pero el contexto no debería depender de esa garantía.
+  // El catch es necesario además del finally: un finally por sí solo no
+  // absorbe la excepción, la deja propagarse, y el llamante recibiría una
+  // promesa rechazada por un cierre de sesión que en realidad sí funcionó.
   const logout = useCallback(async () => {
-    await authService.logout()
-    setUser(null)
-    setTokenReady(false)
+    try {
+      await authService.logout()
+    } catch {
+      // Notificar al backend es best-effort. Si falla, da igual: el
+      // usuario ha pedido salir y la sesión local se cierra igual.
+    } finally {
+      setUser(null)
+      setTokenReady(false)
+    }
   }, [])
 
   // ─── FUNCIÓN: ACTUALIZAR DATOS DEL USUARIO ───────────────────────
@@ -156,20 +190,30 @@ export function AuthProvider({ children }) {
   // Permite verificar manualmente si la sesión sigue siendo válida.
   // Se usa por ejemplo en ProtectedRoute o al hacer acciones sensibles.
   const checkSession = useCallback(async () => {
-    const data = await authService.verifySession()
-    if (!data) {
-      // Si la sesión ya no es válida, limpiamos el usuario del estado
+    // Mismadeo que en verify(): si verifySession() rechazara, un fallo
+    // puntual dejaría al llamante con una promesa rechazada en vez de
+    // con un "no" limpio. Devolvemos false y dejamos el estado coherente
+    // para que el llamante pueda decidir.
+    try {
+      const data = await authService.verifySession()
+      if (!data) {
+        // Si la sesión ya no es válida, limpiamos el usuario del estado
+        setUser(null)
+        setTokenReady(false)
+        return false
+      }
+      // Aprovechamos la verificación para refrescar los datos del usuario
+      if (data.usuario) {
+        setUser(data.usuario)
+        localStorage.setItem('usuario:v1', JSON.stringify(data.usuario))
+      }
+      setTokenReady(true)
+      return true
+    } catch {
       setUser(null)
       setTokenReady(false)
       return false
     }
-    // Aprovechamos la verificación para refrescar los datos del usuario
-    if (data.usuario) {
-      setUser(data.usuario)
-      localStorage.setItem('usuario:v1', JSON.stringify(data.usuario))
-    }
-    setTokenReady(true)
-    return true
   }, [])
 
   // ─── VALOR DERIVADO: isAuthenticated ──────────────────────────────
