@@ -42,6 +42,47 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15               # FIX #14: evita runners colgados por SMTP u otros
 
+    # Los tests corren contra MySQL, no contra SQLite. Antes usaban
+    # DATABASE_URL='sqlite://:memory:' y eso era un agujero serio: produccion
+    # y el entorno local usan MySQL, asi que la mitad del codigo nunca se
+    # ejecutaba en el mismo motor sobre el que corre. En concreto
+    # select_for_update() es un no-op en SQLite, de modo que cualquier
+    # exclusion mutua entre peticiones concurrentes (por ejemplo el bloqueo
+    # por intentos fallidos de Usuario.increment_failed_attempts) no hacia
+    # NADA en CI y ningun test de ahi podia detectarla si se rompia.
+    # SQLite tambien se omite en cosas como los strict modes de MySQL.
+    #
+    # La contrasena es literal y falsa a proposito: es un contenedor efimero
+    # de CI, muere con el runner y no protege nada. No es un secreto.
+    #
+    # version 8.4 y no 8.0 porque Django 6.1.1 (el pin de requirements.txt)
+    # exige MySQL >= 8.4 y falla al conectar con un
+    # "NotSupportedError: MySQL 8.4 or later is required". Con 8.0 el job
+    # no arrancaba.
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci_password_not_a_secret
+          MYSQL_DATABASE: free_ricky_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_password_not_a_secret"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    env:
+      # Sin DATABASE_URL a proposito: settings.py usa SQLite solo si
+      # DATABASE_URL empieza por 'sqlite'. Sin esa variable cae en la rama
+      # de MySQL y lee estos DB_*.
+      DB_NAME: free_ricky_ci
+      DB_USER: root
+      DB_PASSWORD: ci_password_not_a_secret
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +96,13 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq default-libmysqlclient-dev pkg-config
+          # default-mysql-client aporta mysqldump, que el runner de tests en
+          # paralelo de Django necesita para clonar la base de test cuando el
+          # backend es MySQL. Sin el, el job muere con
+          # "FileNotFoundError: [Errno 2] No such file or directory: 'mysqldump'".
+          # default-libmysqlclient-dev solo trae las cabeceras de compilacion
+          # de mysqlclient, no el binario.
+          sudo apt-get install -y -qq default-mysql-client default-libmysqlclient-dev pkg-config
 
       - name: Install Python dependencies
         run: |
@@ -72,14 +119,10 @@ jobs:
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run
         working-directory: backend
-        env:
-          DATABASE_URL: 'sqlite://:memory:'   # BD real en memoria, no archivo
 
       - name: Run tests
         run: python manage.py test api --verbosity=2 --traceback --parallel
         working-directory: backend
-        env:
-          DATABASE_URL: 'sqlite://:memory:'
 
   # ─── JOB: LINTING DEL BACKEND ────────────────────────────────────────────
   backend-lint:

@@ -516,6 +516,40 @@ class BruteForceTests(TestCase):
         # La fecha de bloqueo debe estar establecida (cuenta bloqueada)
         self.assertIsNotNone(usuario.locked_until)
 
+    # La escalera de bloqueo (15min -> 60min -> 6h -> 24h) solo debe avanzar
+    # UNA vez por bloqueo. Antes, cada intento fallido que encontraba el
+    # contador ya en el umbral bumpeaba lockout_count y sobrescribia
+    # locked_until, asi que cinco peticiones concurrentes con el contador
+    # cerca del umbral la dejaban en 24h en vez de 15min.
+    #
+    # Este test llama al modelo directamente a proposito. Pasar por la vista
+    # no serviria: LoginView corta en is_locked() y nunca llama a
+    # increment_failed_attempts(), asi que un test de vista pasaria igual con
+    # el codigo viejo y no fijaria nada. Lo que se comprueba aqui es el guard
+    # "not row.is_locked()" del modelo.
+    def test_bloqueo_no_escala_si_ya_esta_bloqueado(self):
+        # setUp ya registro 'testuser'; lo recuperamos en vez de crearlo
+        usuario = Usuario.objects.get(username='testuser')
+        # 5 fallos: cruzan el umbral y bloquean (primer peldano, 15 min)
+        for _ in range(5):
+            usuario.increment_failed_attempts()
+
+        usuario.refresh_from_db()
+        self.assertEqual(usuario.failed_attempts, 5)
+        self.assertEqual(usuario.lockout_count, 1)
+        self.assertIsNotNone(usuario.locked_until)
+        desbloqueo_original = usuario.locked_until
+
+        # Mas fallos con la cuenta YA bloqueada: el bloqueo no debe escalar
+        # ni un peldano mas, ni reescribirse. Esto es exactamente lo que
+        # hacia el codigo viejo.
+        for _ in range(5):
+            usuario.increment_failed_attempts()
+
+        usuario.refresh_from_db()
+        self.assertEqual(usuario.lockout_count, 1)
+        self.assertEqual(usuario.locked_until, desbloqueo_original)
+
     # Verifica que después del bloqueo, incluso con la contraseña CORRECTA,
     # el login sea rechazado con 429 Too Many Requests
     def test_bloqueo_por_intentos(self):

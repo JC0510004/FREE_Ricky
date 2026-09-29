@@ -4,7 +4,7 @@
 
 # Importamos los módulos necesarios de Django para crear modelos,
 # hashear contraseñas y manejar el tiempo.
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
@@ -144,20 +144,48 @@ class Usuario(AbstractBaseUser):
         return durations[index]
 
     # Incrementa el contador de intentos fallidos. Si llega a 5, bloquea la cuenta.
+    # Maximo de intentos antes de bloquear la cuenta.
+    MAX_INTENTOS_FALLIDOS = 5
+
     def increment_failed_attempts(self):
-        # Atomic increment to avoid race conditions between concurrent requests
-        Usuario.objects.filter(pk=self.pk).update(failed_attempts=F('failed_attempts') + 1)
-        self.refresh_from_db()
-        # Si ya falló 5 veces seguidas...
-        if self.failed_attempts >= 5:
-            # Calcula cuánto tiempo debe estar bloqueada.
-            minutes = self._get_lockout_duration()
-            # Establece la fecha/hora de desbloqueo de forma atómica.
-            Usuario.objects.filter(pk=self.pk).update(
-                lockout_count=F('lockout_count') + 1,
-                locked_until=timezone.now() + timezone.timedelta(minutes=minutes),
-            )
-            self.refresh_from_db()
+        # El incremento del contador SI era atomico (F('failed_attempts') + 1),
+        # pero la decision de bloquear no lo era, y ahi estaba el problema:
+        # el "if self.failed_attempts >= 5" se evaluaba sobre el valor releido
+        # y N peticiones concurrentes que llegaban con el contador ya cerca del
+        # umbral incrementaban todas, todas pasaban el ">= 5", y cada una
+        # bumpeaba lockout_count y sobrescribia locked_until. Una sola oleada
+        # de 5 intentos en paralelo hacia saltar cinco peldanos de la escalera
+        # (15min -> 60min -> 6h -> 24h) y dejaba la cuenta bloqueada 24h en vez
+        # de 15min. O sea, el atacante (o un usuario con varias pestanas
+        # fallando a la vez) podia escalar el bloqueo hasta el maximo de un
+        # plumazo, y ademas el write de locked_until se pisaba a si mismo
+        # dejando un valor incoherente respecto a lockout_count.
+        #
+        # Aqui la comprobacion del umbral y la escritura del bloqueo se hacen
+        # bajo bloqueo de fila (select_for_update) y dentro de la misma
+        # transaccion, de modo que son indivisibles. El "not row.is_locked()"
+        # evita ademas re-escalar si ya habia un bloqueo en curso.
+        with transaction.atomic():
+            row = Usuario.objects.select_for_update().get(pk=self.pk)
+
+            row.failed_attempts = F('failed_attempts') + 1
+            row.save(update_fields=['failed_attempts'])
+            row.refresh_from_db()
+
+            if (row.failed_attempts >= self.MAX_INTENTOS_FALLIDOS
+                    and not row.is_locked()):
+                minutes = row._get_lockout_duration()
+                row.lockout_count = F('lockout_count') + 1
+                row.locked_until = timezone.now() + timezone.timedelta(minutes=minutes)
+                row.save(update_fields=['lockout_count', 'locked_until'])
+                row.refresh_from_db()
+
+        # Propagamos el estado real a la instancia en memoria para que el
+        # llamante (la vista de login, que lo registra en el log) vea los
+        # valores definitivos y no los previos a la operacion.
+        self.failed_attempts = row.failed_attempts
+        self.lockout_count = row.lockout_count
+        self.locked_until = row.locked_until
 
     # Resetea los contadores de intentos fallidos tras un login exitoso.
     def reset_failed_attempts(self):

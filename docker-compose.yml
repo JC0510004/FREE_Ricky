@@ -121,8 +121,22 @@ services:
   # Sin valores por defecto para credenciales: ${VAR:?error} hace que Compose FALLE
   # si MYSQL_ROOT_PASSWORD/DB_PASSWORD no están definidas en .env (fail-closed).
   mysql:
-    # Imagen oficial de MySQL 8.0 con soporte completo para UTF-8 y autenticación moderna.
-    image: mysql:8.0
+    # MySQL 8.4, no 8.0. requirements.txt fija Django 6.1.1, y su backend de
+    # MySQL exige 8.4 o superior: con 8.0 el backend falla al conectar con
+    # "NotSupportedError: MySQL 8.4 or later is required (found 8.0.45)".
+    # Es decir, con 8.0 la aplicacion no arranca, no es solo una recomendacion.
+    #
+    # OJO SI YA TIENES DATOS: el volumen `mysql_data` se creo con 8.0. MySQL 8.4
+    # admite actualizacion in situ desde 8.0 y la hace sola al arrancar, pero si
+    # el arranque falla el volumen queda a medio actualizar. Antes de dar el
+    # salto, saca un volcado y tenlo a mano:
+    #
+    #   docker exec free_ricky_db mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
+    #     --single-transaction --routines --triggers free_ricky > respaldo.sql
+    #
+    # Y si hubiera que volver atras, restaura sobre un volumen NUEVO (MySQL no
+    # admite downgrade de datos).
+    image: mysql:8.4
 
     # Nombre fijo del contenedor para referencias desde el backend y herramientas externas.
     container_name: free_ricky_db
