@@ -2,6 +2,13 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
+// React 19 exige que el entorno de test declare soporte de act().
+// Sin este flag, act() no garantiza el flush de updates y los tests pueden
+// pasar por casualidad en vez de por determinismo. Además emite el warning
+// "The current testing environment is not configured to support act(...)"
+// a stderr, que ensucia el log de CI.
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
+
 afterEach(() => {
   cleanup()
 })
