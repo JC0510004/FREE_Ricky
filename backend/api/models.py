@@ -68,6 +68,14 @@ class Usuario(AbstractBaseUser):
     fecha_registro = models.DateTimeField(auto_now_add=True)
     # Indica si la cuenta está activa (False = desactivada por admin).
     is_active = models.BooleanField(default=True)
+    # Marca que la desactivación la decidió un administrador, y no el propio
+    # usuario. Sin este campo, is_active=False no distinguishía "el admin me
+    # cerró la cuenta" de "cerré mi cuenta y quiero volver", y el registro
+    # público (RegisterSerializer.create) reactivaba la fila en ambos casos:
+    # bastaba con volver a registrarse con el mismo username/email para
+    # deshacer una decisión del admin. Con la marca, esa reactivación se
+    # rechaza y solo un administrador puede revertirla.
+    desactivado_por_admin = models.BooleanField(default=False)
     # Indica si el email ha sido verificado.
     is_verified = models.BooleanField(default=False)
     # Contador de intentos fallidos de login consecutivos.

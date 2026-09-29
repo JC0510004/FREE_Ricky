@@ -172,13 +172,24 @@ class RegisterSerializer(serializers.ModelSerializer):
                     usuario.save()
                     return usuario
 
+                # Una cuenta que el ADMINISTRADOR desactivó no se reactiva por
+                # esta ruta pública, aunque su rol sea 'jugador'. Reactivarla
+                # exige demostrar el control del correo, algo que puede
+                # conseguir cualquiera que conozca la dirección, y devuelve al
+                # atacante una cuenta que el administrador decidió cerrar. Que
+                # una cuenta vuelva a estar activa es decisión de quien la
+                # cerró, no de cualquiera que conozca el email.
+                if candidata.desactivado_por_admin:
+                    raise serializers.ValidationError({
+                        'email': ['Esta cuenta está desactivada. Contacta con el administrador '
+                                  'para reactivarla'],
+                    })
+
                 # Una cuenta con rol 'admin' desactivada NO se reactiva por esta
-                # ruta pública. Reactivarla exige demostrar el control del
-                # correo, algo que puede conseguir cualquiera que conozca la
-                # dirección del admin: devolvería al atacante justo los
-                # privilegios que el administrador quiso quitar al desactivar
-                # la cuenta. Que un administrador vuelva a estar activo es una
-                # decisión del administrador, no del titular del correo.
+                # ruta pública, aunque el cierre viniera del propio usuario:
+                # reactivarla devolvería justo los privilegios que el cierre
+                # quería quitar. Que un administrador vuelva a estar activo es
+                # una decisión del administrador, no del titular del correo.
                 if candidata.rol == 'admin':
                     raise serializers.ValidationError({
                         'email': ['Esta cuenta está desactivada. Contacta con el administrador '

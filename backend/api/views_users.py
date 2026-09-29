@@ -180,8 +180,19 @@ class UsuarioDetailView(APIView):
                 {'error': 'No puedes eliminar tu propia cuenta'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        usuario.is_active = False
-        usuario.save(update_fields=['is_active'])
+        # Desactivar, marcar el cierre como decisión de admin y revocar las
+        # sesiones van en la misma transacción: si el usuario quedara con la
+        # cuenta cerrada pero con tokens vivos, reactivarlo después (a mano
+        # desde el admin) le devolvería el acceso sin volver a autenticarse.
+        # is_active=False ya impedía login y refresh mientras tanto, pero los
+        # OutstandingToken seguian en la base de datos intactos y resucitaban
+        # en cuanto la cuenta volvia a estar activa.
+        with transaction.atomic():
+            usuario.is_active = False
+            usuario.desactivado_por_admin = True
+            usuario.save(update_fields=['is_active', 'desactivado_por_admin'])
+            for ot in OutstandingToken.objects.filter(user=usuario):
+                BlacklistedToken.objects.get_or_create(token=ot)
         # Revoca los tokens de verificacion de email pendientes. VerificarEmailView
         # reactiva la cuenta (is_active=True) cuando el token es valido, de modo
         # que sin esto un admin que desactiva una cuenta no lo impide de verdad:
@@ -189,12 +200,9 @@ class UsuarioDetailView(APIView):
         # si la API de reenvio lo permite, para revertir la desactivacion. Aqui
         # el admin es quien corta el circuito.
         #
-        # NOTA (deuda conocida): esto cierra la via del email, pero la
-        # reactivacion por REGISTRO (RegisterSerializer) sigue pudiendo volver a
-        # activar una cuenta desactivada por un admin, porque no hay ningun campo
-        # que distinga "desactivada por el admin" de "desactivada por el dueno".
-        # Para cerrarlo de raiz haria falta un campo desactivado_por_admin y su
-        # migracion. Queda anotado en AUDITORIA.md en lugar de darlo por cerrado.
+        # Y la reactivacion por REGISTRO ya no puede deshacer el cierre: el
+        # serializer rechaza expresamente las cuentas marcadas como
+        # desactivado_por_admin, en lugar de depender de que el campo exista.
         revocados = VerificacionEmail.objects.filter(usuario=usuario).delete()[0]
         logger.info(
             f"Usuario desactivado: {usuario.id} ({revocados} tokens de verificación revocados)",

@@ -221,6 +221,36 @@ class RegistroTests(TestCase):
         response = self.client.post(self.url, {}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    # Un admin puede desactivar a un jugador. Volverse a registrar con el
+    # mismo username/email no puede ser la manera de saltarse ese cierre:
+    # antes reactivaba la fila entera (misma cuenta, mismo historial de
+    # partidas) y bastaba con conocer el email de la víctima, sin demostrar
+    # nada, para deshacer una decisión del administrador.
+    def test_registro_no_reactiva_cuenta_desactivada_por_admin(self):
+        victima = Usuario.objects.create_user(
+            username='jugador_baneado',
+            email='baneado@gmail.com',
+            password='TestPass123!',
+        )
+        victima.is_active = False
+        victima.desactivado_por_admin = True
+        victima.save(update_fields=['is_active', 'desactivado_por_admin'])
+
+        response = self.client.post(self.url, {
+            'username': 'jugador_baneado',
+            'email': 'baneado@gmail.com',
+            'password': 'NewSecure123!',
+            'confirm_password': 'NewSecure123!',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        # Ni se toca la cuenta ni se emite correo de verificación: el cierre
+        # del admin sigue en pie.
+        victima.refresh_from_db()
+        self.assertFalse(victima.is_active)
+        self.assertTrue(victima.check_password('TestPass123!'))
+        self.assertEqual(len(mail.outbox), 0)
+
     # Verifica que la contraseña NUNCA se exponga en la respuesta HTTP
     # Incluso con write_only=True, es importante validar que no aparezca
     # en la respuesta del usuario creado (fallo de configuración)
@@ -891,6 +921,37 @@ class RefreshTokenTests(TestCase):
         self.client.cookies.clear()
         response = self.client.post(self.refresh_url, {}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # Desactivar una cuenta tiene que cortar el acceso, no solo cerrar la
+    # puerta por el momento. Mientras is_active=False, login y refresh ya
+    # fallan solos, pero los OutstandingToken seguian en la base de datos
+    # sin revocar: en cuanto la cuenta volviera a estar activa (a mano desde
+    # el admin, por ejemplo) los tokens antiguos volvian a servir. Se
+    # comprueba el estado final de verdad: cuenta activa y token muerto.
+    def test_desactivar_cuenta_revoca_sus_refresh_tokens(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        usuario = Usuario.objects.get(username='testuser')
+        refresh_token = str(RefreshToken.for_user(usuario))
+
+        self.client.force_authenticate(user=Usuario.objects.create_user(
+            username='root',
+            email='root@gmail.com',
+            password='AdminPass123!',
+            rol='admin',
+        ))
+        response = self.client.delete(reverse('usuario_detail', args=[usuario.id]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        # El admin reactiva la cuenta a mano: con la sesión vieja en la mano,
+        # reactivarla no debe devolver el acceso.
+        usuario.is_active = True
+        usuario.save(update_fields=['is_active'])
+
+        self.client.credentials()
+        resp_refresh = self.client.post(self.refresh_url, {
+            'refresh_token': refresh_token,
+        }, format='json')
+        self.assertEqual(resp_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_refresh_conserva_claims_usuario_rol(self):
         from rest_framework_simplejwt.tokens import RefreshToken as RT
