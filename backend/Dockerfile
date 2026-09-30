@@ -59,8 +59,28 @@ COPY --from=builder /install /usr/local
 # Copia todo el código fuente de la aplicación al contenedor.
 COPY . .
 
+# Crea el directorio de logs ANTES de cambiar propietario. Esto NO es cosmético:
+# es lo que hace que el volumen nombrado `backend_logs` (docker-compose.yml lo
+# monta en /app/logs) nazca escribible por appuser.
+#
+# El razonamiento, que es contra-intuitivo:
+#
+#   - Si /app/logs NO existe en la imagen, Docker tiene que crear el punto de
+#     montaje del volumen, y lo crea como root:root 0755. El volumen nace de
+#     root, el proceso corre como appuser (USER appuser mas abajo) y no puede
+#     escribir. El único arreglo posible sería un chown en tiempo de arranque,
+#     que exige root... y el proceso ya no es root.
+#   - Si /app/logs SI existe en la imagen, Docker inicializa el volumen vacío
+#     copiando ese directorio y CONSERVANDO su propietario. O sea: el volumen
+#     nace con el mismo uid/gid que tenga aquí.
+#
+# Por eso el chown de abajo tiene que cubrir este directorio, y por eso el
+# directorio tiene que existir antes. Ver backend/entrypoint.sh.
+RUN mkdir -p /app/logs
+
 # Cambia la propiedad de todos los archivos al usuario appuser.
 # Esto permite que la app pueda leer/escribir archivos sin ser root.
+# El -R es lo que deja /app/logs en manos de appuser (creado justo arriba).
 RUN chown -R appuser:appuser /app
 
 # Marca el script de entrada como ejecutable.
