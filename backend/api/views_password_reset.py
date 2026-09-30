@@ -13,13 +13,17 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import serializers, status
 from rest_framework.views import APIView
-from rest_framework.throttling import AnonRateThrottle
 
 from drf_spectacular.utils import extend_schema, inline_serializer
 
 from .models import Usuario, ConfirmacionReset
 from .serializers import PasswordResetSerializer, PasswordResetConfirmSerializer
-from .throttles import PasswordResetThrottle, CodigoResetThrottle
+from .throttles import (
+    PasswordResetThrottle,
+    CodigoResetThrottle,
+    ConfirmarIdentidadThrottle,
+    VerificarConfirmacionThrottle,
+)
 from .email_utils import enviar_email
 
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
@@ -471,7 +475,8 @@ class VerificarCodigo(APIView):
 
 class ConfirmarIdentidad(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [AnonRateThrottle]
+    # Antes: AnonRateThrottle, evadible autenticandose (ver throttles.py).
+    throttle_classes = [ConfirmarIdentidadThrottle]
 
     @extend_schema(
         tags=['Contraseña'],
@@ -526,7 +531,8 @@ class ConfirmarIdentidad(APIView):
 
 class VerificarConfirmacion(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [AnonRateThrottle]
+    # Antes: AnonRateThrottle, evadible autenticandose (ver throttles.py).
+    throttle_classes = [VerificarConfirmacionThrottle]
 
     @extend_schema(
         tags=['Contraseña'],

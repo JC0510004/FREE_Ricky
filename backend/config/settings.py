@@ -221,13 +221,27 @@ REST_FRAMEWORK = {
 
     # Rate limiting: limita la cantidad de peticiones por tiempo para prevenir abusos.
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',  # Limita usuarios anónimos
+        # PublicIPThrottle y NO AnonRateThrottle de DRF. La diferencia no es
+        # cosmetic: `AnonRateThrottle.get_cache_key()` devuelve `None` en cuanto
+        # la peticion llega autenticada, y `allow_request()` deja pasar todo lo
+        # que no tenga clave. Como DRF autentica antes de throttlear, con esta
+        # clase por defecto cualquier vista sin `throttle_classes` propio era
+        # ilimitada para quien se registrara una vez y mandara su JWT.
+        # PublicIPThrottle clava siempre por IP (ver api/throttles.py).
+        'api.throttles.PublicIPThrottle',   # Limita por IP, con o sin sesion
         'rest_framework.throttling.UserRateThrottle',   # Limita usuarios autenticados
     ],
     # Número de proxies inversos de confianza entre el cliente y Django.
-    # Con NUM_PROXIES=1, AnonRateThrottle usa el ÚLTIMO valor de
-    # X-Forwarded-For (el que añadió nginx = IP real). Sin esto usaría el
-    # PRIMERO, que el cliente puede inventar (spoofing del rate limit).
+    #
+    # YA NO AFECTA AL RATE LIMITING: lo consumen las clases de DRF que derivan
+    # la IP de X-Forwarded-For, y las dos que quedan (UserRateThrottle y
+    # SimpleRateThrottle) no la usan para nada: PublicIPThrottle resuelve la IP con
+    # `middleware.get_client_ip`, que solo honra la cabecera si quien llama
+    # (REMOTE_ADDR) es un proxy de confianza y prefiere X-Real-IP, que es la que
+    # fija nginx desde $remote_addr y el cliente no puede escribir.
+    # Se deja la variable por si algún código vuelve a usar una clase que la lea,
+    # pero el comentario antigo ("sin esto el cliente puede inventar la IP y
+    # evadir el rate limit") ya no describe nada: el aislamiento no depende de aquí.
     'NUM_PROXIES': 1,
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',           # Anónimos: 60 peticiones por minuto
@@ -240,6 +254,8 @@ REST_FRAMEWORK = {
         'change_password': '10/minute', # Cambio de contraseña: 10 por minuto
         'refresh': '30/minute',        # Refresh token: 30 por minuto por IP
         'verificar_email': '5/hour',   # Verificación de email: evita fuerza bruta por token
+        'password_reset_confirmar': '10/hour',   # Confirmar token del enlace: sin esto era ilimitado
+        'password_reset_verificar': '30/hour',   # Consultar si un token está confirmado: sin esto era ilimitado
     },
 
     # Solo renderiza JSON (sinBrowsable API por seguridad).
@@ -289,11 +305,17 @@ if 'test' in sys.argv:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['change_password'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['refresh'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['verificar_email'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_confirmar'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_verificar'] = '100/minute'
     REST_FRAMEWORK['PAGE_SIZE'] = 100  # Más elementos por página en tests
 
 # En modo DEBUG se relajan los límites para facilitar el desarrollo.
 if DEBUG:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset'] = '60/minute'
+    # También los dos endpoints del enlace de reset. A 10/hora un desarrollador
+    # reprobando el flujo en local se topa con el 429 y piensa que está roto.
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_confirmar'] = '60/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_verificar'] = '60/minute'
 
 # ─── JWT ────────────────────────────────────────────────────────────────
 # JWT_SECRET_KEY: Clave separada para firmar tokens JWT.

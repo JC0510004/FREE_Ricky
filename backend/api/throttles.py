@@ -29,6 +29,18 @@ class PublicIPThrottle(SimpleRateThrottle):
     atacante podría evadir el uno saltándose el otro.
     """
 
+    # `anon` es el scope que se usa cuando esta clase va en
+    # DEFAULT_THROTTLE_CLASSES, cubriendo las vistas que no declaran
+    # `throttle_classes` proprios. Sin esto, `SimpleRateThrottle.__init__` aborta
+    # con "You must set either `.scope` or `.rate`".
+    #
+    # Antes ese hueco lo cubria `AnonRateThrottle` de DRF, que es justamente la
+    # clase evadible: para una peticion autenticada devuelve `None` como clave y
+    # `allow_request` la deja pasar. Aqui el nombre engaña menos de lo que parecia:
+    # el bucket "anon" ahora cubre tambien a quien va con sesion, porque la clave
+    # se deriva siempre de la IP.
+    scope = 'anon'
+
     # El bucket se clave por IP, no por usuario. Si la IP no se puede
     # determinar de forma fiable se usa una identidad fija compartida.
     def get_cache_key(self, request, view):
@@ -80,3 +92,24 @@ class VerificacionThrottle(PublicIPThrottle):
     # Verificar un token: 5 por hora por IP. Adivinar un token de verificacion
     # (hash de 128 bits) ya es inviable; el limite protege ademas el envio de emails.
     scope = 'verificar_email'
+
+
+class ConfirmarIdentidadThrottle(PublicIPThrottle):
+    # POST /api/password-reset/confirmar/ - el endpoint del enlace del email que
+    # marca `ConfirmacionReset.confirmado = True`. Estuvo con `AnonRateThrottle`
+    # de DRF, que es evadible: autenticarse con un JWT propio devolvia `None` como
+    # clave y anulaba el limite, dejando confirmaciones de token SIN TOPE. Aqui lo
+    # que protege es la garantia de que el token viene del buzon: si confirmar es
+    # ilimitado, "tener el token" deja de ser un requisito dificil.
+    # 10 por hora: el flujo real lo usa una vez.
+    scope = 'password_reset_confirmar'
+
+
+class VerificarConfirmacionThrottle(PublicIPThrottle):
+    # GET /api/password-reset/verificar/ - consulta si un token quedo confirmado.
+    # Tambien estuvo con `AnonRateThrottle`, mismo bypass. Es un oraculo de
+    # validez de tokens: aunque los tokens sean de 128 bits (invasibles a fuerza
+    # bruta), un endpoint de consulta sin limite es un recurso publico y un
+    # generador de logs sin control. 30 por hora da margen a un flujo real
+    # (el frontend lo consulta al cargar la vista) sin abrir la puerta.
+    scope = 'password_reset_verificar'
