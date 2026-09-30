@@ -11,9 +11,20 @@
 #
 #   Desarrollo (lo normal):
 #     cp .env.example .env      # y rellena SECRET_KEY, JWT_SECRET_KEY y las 3 contraseñas
+#     # Redis además lee la contraseña de ./secrets/redis.acl (NO está en .env):
+#     printf 'user default on >%s ~* &* +@all\n' "$REDIS_PASSWORD" > secrets/redis.acl
 #     docker compose up --build
 #     → App en http://127.0.0.1:5173  (nginx sirve el build y hace proxy de /api)
 #     → MySQL en 127.0.0.1:3307, Redis en 127.0.0.1:6379  (solo loopback)
+#
+#   LO QUE QUEDA FUERA (limitación consciente, no descuido):
+#   MYSQL_ROOT_PASSWORD y MYSQL_PASSWORD siguen estando en el entorno del
+#   contenedor mysql, porque la imagen oficial de MySQL las necesita para
+#   inicializar el datadir y su entrypoint NO admite el convenio _FILE que sí
+#   usan otras imágenes. Para sacarlas del todo habría que Swarm/Docker secrets o
+#   una imagenderivada, lo que no compensa en desarrollo. Lo que sí se ha
+#   eliminado es la exposición en argv (ps y /proc/cmdline) tanto en MySQL como
+#   en Redis, y en Redis también del entorno y del fichero versionado.
 #
 #   Desarrollo con Django fuera de Docker (venv local):
 #     docker compose up -d mysql redis
@@ -84,12 +95,45 @@ services:
     #   expulsables. Por eso noeviction y no una política "solo-volatile".
     #   Con noeviction, si algún día se llenara, las escrituras fallarían con OOM:
     #   visible y ruidoso, que es justo lo contrario de un limit que se evapora.
-    command: redis-server --maxmemory 64mb --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD no configurada en .env} --protected-mode yes
+    # LA CONTRASEÑA NO VIAJA EN LA LÍNEA DE COMANDOS.
+    #
+    # Antes iba aquí como `--requirepass ${REDIS_PASSWORD}`, lo que la dejaba en tres
+    # sitios expuestos a la vez:
+    #   1. En `docker inspect` (Config.Cmd).
+    #   2. En /proc/<pid>/cmdline y en `ps` DENTRO del contenedor, para cualquier
+    #      proceso que comparta ese espacio de nombres.
+    #   3. En este mismo fichero, que es un fichero versionado.
+    # Redis 7 acepta la ACL en un FICHERO, así que la contraseña se lee de
+    # /run/secrets/redis.acl y no aparece por ningún lado de los anteriores.
+    # `--aclfile` sustituye por completo a `--requirepass`: si se usaran los dos,
+    # Redis aborta al arrancar.
+    #
+    # El `test -f` no es decorativo: si alguien clona el repo y arranca sin crear
+    # el fichero, Redis muere con un mensaje que dice exactamente qué falta, en vez
+    # de un "Can't open the ACL file" o de un arranque sin autenticación.
+    # El `exec` es importante: deja redis-server como PID 1 para que le lleguen las
+    # señales de parada de Docker.
+    command: >
+      sh -c 'test -f /run/secrets/redis.acl || (echo "FALTA ./secrets/redis.acl: crealo antes de arrancar (ver .env.example)" && exit 1);
+      exec redis-server --maxmemory 64mb --maxmemory-policy noeviction --aclfile /run/secrets/redis.acl --protected-mode yes'
+
+    # Monta el directorio de secretos en solo lectura para que Redis lea la ACL.
+    # Se monta el DIRECTORIO y no el fichero suelto porque un bind mount de un
+    # fichero individual es frágil: si el fichero falta en el host, Docker crea un
+    # directorio en su lugar y Redis recibe un error de permisos en vez de "no existe".
+    volumes:
+      - ./secrets:/run/secrets:ro
 
     # Verificación de salud: ejecuta un ping a Redis para confirmar que está operativo.
     # Si Redis no responde, Docker lo marca como "unhealthy" y puede reiniciarlo.
+    #
+    # El healthcheck tampoco lleva la contraseña en argv. Se extrae del fichero ACL
+    # y se pasa por la variable de entorno REDISCLI_AUTH, que no aparece en `ps` ni
+    # en /proc/cmdline. El `cut -d' ' -f4` toma el 4º campo de
+    # `user default on >CONTRASEÑA ...` y el segundo `cut -d'>' -f2` quita el ">".
+    # La interpolación es `$$(...)` porque en Compose `$$` produce un `$` literal.
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD no configurada en .env}", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cut -d' ' -f4 /run/secrets/redis.acl | cut -d'>' -f2) redis-cli ping | grep -q PONG"]
       interval: 10s       # Cada 10 segundos verifica la salud
       timeout: 3s         # Si no responde en 3 segundos, se considera fallido
       retries: 5          # Tras 5 fallos consecutivos, marca el servicio como unhealthy
@@ -203,8 +247,15 @@ services:
     shm_size: 256mb
 
     # Verificación de salud usando mysqladmin ping para confirmar que MySQL acepta conexiones.
+    #
+    # La contraseña va en MYSQL_PWD, no en `-p$...`. No es que MYSQL_PWD sea más
+    # seguro que -p (la documentación de MySQL lo considera inseguro en general);
+    # es que lo que se evita es que la contraseña quede en los ARGUMENTOS del
+    # proceso, visibles con `ps` y en /proc/<pid>/cmdline desde dentro del
+    # contenedor. MYSQL_PWD se lee del propio entorno del contenedor, que ya la
+    # tenía. El `$$` es para que Compose emita un `$` literal.
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD no configurada en .env}"]
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h localhost -u root --silent"]
       interval: 10s       # Verifica cada 10 segundos
       timeout: 5s         # Timeout de 5 segundos por intento
       retries: 10         # 10 intentos antes de marcar unhealthy (MySQL tarda en iniciar)

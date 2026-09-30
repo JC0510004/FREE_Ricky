@@ -63,6 +63,13 @@ frontend/dist/
 # Es específico de cada máquina y NO debe versionarse.
 mysql_data/
 
+# ─── SECRETOS ──────────────────────────────────────────────────────────────
+# Ficheros de credenciales que se montan en los contenedores (p. ej. el ACL de
+# Redis, que contiene la contraseña de Redis en claro).
+# NUNCA se versionan: están en el mismo nivel de sensibilidad que el .env, y un
+# `git add -A` los subiría igual que si fueran código.
+secrets/
+
 # ─── SISTEMA OPERATIVO ────────────────────────────────────────────────────
 # Archivo generado por macOS en carpetas: almacena icono y posición en Finder.
 # Es específico de macOS y causa conflictos en repositorios multiplataforma.
