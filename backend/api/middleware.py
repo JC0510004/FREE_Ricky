@@ -100,8 +100,27 @@ def registrar_fallo_ip(ip, path_prefix):
     200 y no lo detectaría el middleware solo.
     """
     key = _get_attempts_key(ip, path_prefix)
-    attempts = cache.get(key, 0) + 1
-    cache.set(key, attempts, BruteForceIPMiddleware.WINDOW_SECONDS)
+
+    # Contador ATÓMICO. Antes era cache.get(key, 0) + 1 seguido de
+    # cache.set(), que es un read-modify-write: con varias peticiones
+    # simultáneas (el caso normal de un ataque, que es justamente cuando este
+    # contador importa) todas leen el mismo n y todas escriben n+1, así que se
+    # pierden los incrementos. Cuantos más workers de gunicorn, más intentos
+    # necesita el atacante, que es justo lo contrario de lo que se quiere.
+    #
+    # cache.add() es atómico: solo el primer llamante crea la clave. Si ya
+    # existía, es que otro proceso/account la puso antes y toca incrementarla,
+    # que también es atómico en Redis y en LocMemCache.
+    if not cache.add(key, 1, BruteForceIPMiddleware.WINDOW_SECONDS):
+        try:
+            attempts = cache.incr(key)
+        except ValueError:
+            # La clave expiró entre el add() que falló y el incr(). Se vuelve
+            # a intentar crearla; si esta vez la crea otro, ese cuenta.
+            cache.add(key, 1, BruteForceIPMiddleware.WINDOW_SECONDS)
+            attempts = 1
+    else:
+        attempts = 1
 
     if attempts >= BruteForceIPMiddleware.MAX_ATTEMPTS:
         cache.set(_get_block_key(ip), True, BruteForceIPMiddleware.BLOCK_SECONDS)

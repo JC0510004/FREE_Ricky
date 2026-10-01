@@ -37,8 +37,16 @@ function App() {
   const [showLoading, setShowLoading] = useState(true);
 
   // ─── Datos del contexto de autenticación ───
-  // Se usa para verificar si el usuario está autenticado y mostrar el botón de descarga.
-  const { isAuthenticated } = useAuth();
+  // Se usa para verificar si el usuario está autenticado y mostrar el botón de
+  // descarga. También `user`, porque el botón de jugar exige correo verificado.
+  const { isAuthenticated, user } = useAuth();
+
+  // Para poder registrar una partida (jugar) el backend exige que el correo
+  // esté verificado (permiso IsEmailVerified en backend/api/permissions.py).
+  // Aquí solo se refleja ese estado para que el usuario entienda por qué el
+  // botón está apagado: la regla que manda es la del backend, y esta condición
+  // evita que se pulse un botón que va a fallar con un 403 sin explicación.
+  const correoVerificado = Boolean(user?.is_verified);
 
   // ─── EFECTO DE ANIMACIONES DE SCROLL ──────────────────────────────
   // Se ejecuta cada vez que cambia showLoading para reconfigurar el observer
@@ -139,21 +147,46 @@ function App() {
         {/* Sección de comunidad: enlaces a redes sociales y recursos */}
         <Community />
 
-        {/* ─── SECCIÓN DE DESCARGA (solo usuarios autenticados) ─── */}
-        {/* Se muestra una llamada a la acción para descargar el juego
-            solo cuando el usuario tiene sesión activa */}
+        {/* ─── SECCIÓN DE JUGAR (solo usuarios autenticados) ─── */}
+        {/* Se muestra la llamada a la acción solo cuando el usuario tiene
+            sesión activa */}
         {isAuthenticated && (
           <section className="download-section">
             <div className="download-card">
               <div className="download-content">
-                <h2 className="download-title">Descarga el Juego</h2>
+                <h2 className="download-title">Juega Salt Born</h2>
                 <p className="download-text">
-                  Ya eres parte de la tripulación. Descarga la última versión de Salt Born y compite en los niveles.
+                  Ya eres parte de la tripulación. Supera los niveles y compite en el ranking.
                 </p>
-                <button type="button" className="download-btn" disabled title="Próximamente disponible">
-                  <span className="material-symbols-outlined">download</span>
-                  DESCARGAR AHORA
+                {/* El botón sigue deshabilitado, pero por un motivo distinto al
+                    de antes. Ahora dice "Jugar" y no "Descargar" porque la regla
+                    de negocio es jugar con el correo verificado: lo que se
+                    comprueba al registrar una partida, no una descarga.
+                    Sigue apagado porque el juego todavía no está publicado; en
+                    cuanto haya ruta de juego, este es el sitio donde conectarla. */}
+                <button
+                  type="button"
+                  className="download-btn"
+                  disabled
+                  title={correoVerificado
+                    ? 'Próximamente disponible'
+                    : 'Verifica tu correo electrónico para poder jugar'}
+                >
+                  <span className="material-symbols-outlined">play_arrow</span>
+                  JUGAR
                 </button>
+
+                {/* Aviso explícito del correo sin verificar. Aparece solo en ese
+                    caso, porque un `disabled` sin explicación (que era el
+                    estado anterior) deja al usuario sin saber qué hacer ni
+                    por qué. */}
+                {!correoVerificado && (
+                  <p className="download-text" style={{ marginTop: '16px' }}>
+                    <strong>Verifica tu correo para poder jugar.</strong>{' '}
+                    Te enviamos un correo al registrarte. Si no lo ves, revisa
+                    la carpeta de spam o pídelo de nuevo desde tu perfil.
+                  </p>
+                )}
               </div>
             </div>
           </section>

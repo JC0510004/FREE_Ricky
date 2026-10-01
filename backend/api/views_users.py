@@ -180,30 +180,34 @@ class UsuarioDetailView(APIView):
                 {'error': 'No puedes eliminar tu propia cuenta'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        # Desactivar, marcar el cierre como decisión de admin y revocar las
-        # sesiones van en la misma transacción: si el usuario quedara con la
-        # cuenta cerrada pero con tokens vivos, reactivarlo después (a mano
-        # desde el admin) le devolvería el acceso sin volver a autenticarse.
-        # is_active=False ya impedía login y refresh mientras tanto, pero los
-        # OutstandingToken seguian en la base de datos intactos y resucitaban
-        # en cuanto la cuenta volvia a estar activa.
-        with transaction.atomic():
-            usuario.is_active = False
-            usuario.desactivado_por_admin = True
-            usuario.save(update_fields=['is_active', 'desactivado_por_admin'])
-            for ot in OutstandingToken.objects.filter(user=usuario):
-                BlacklistedToken.objects.get_or_create(token=ot)
-        # Revoca los tokens de verificacion de email pendientes. VerificarEmailView
-        # reactiva la cuenta (is_active=True) cuando el token es valido, de modo
-        # que sin esto un admin que desactiva una cuenta no lo impide de verdad:
-        # basta con que quedara una verificacion en curso, o con pedirla de nuevo
-        # si la API de reenvio lo permite, para revertir la desactivacion. Aqui
-        # el admin es quien corta el circuito.
+        # Desactivar, marcar el cierre como decisión de admin, revocar las
+        # sesiones y revocar las verificaciones de email pendientes van en la
+        # MISMA transacción. Antes el delete() de VerificacionEmail quedaba
+        # fuera, y entre el commit y ese delete la cuenta estaba cerrada pero
+        # todavía verificable: bastaba un token vivo para devolverle el acceso
+        # a quien el admin acababa de expulsar.
         #
-        # Y la reactivacion por REGISTRO ya no puede deshacer el cierre: el
-        # serializer rechaza expresamente las cuentas marcadas como
-        # desactivado_por_admin, en lugar de depender de que el campo exista.
-        revocados = VerificacionEmail.objects.filter(usuario=usuario).delete()[0]
+        # select_for_update serializa contra un login o un cambio de contraseña
+        # concurrente sobre la misma fila, que si no podrían sobrescribir
+        # is_active con un valor viejo y dejar la cuenta medio cerrada.
+        with transaction.atomic():
+            usuario_bloqueado = Usuario.objects.select_for_update().get(pk=usuario.pk)
+            usuario_bloqueado.is_active = False
+            usuario_bloqueado.desactivado_por_admin = True
+            usuario_bloqueado.save(update_fields=['is_active', 'desactivado_por_admin'])
+            for ot in OutstandingToken.objects.filter(user=usuario_bloqueado):
+                BlacklistedToken.objects.get_or_create(token=ot)
+            # VerificarEmailView reactiva la cuenta (is_active=True) cuando el
+            # token es valido, de modo que sin esto un admin que desactiva una
+            # cuenta no lo impide de verdad: basta con que quedara una
+            # verificacion en curso, o con pedirla de nuevo si la API de
+            # reenvio lo permite, para revertir la desactivacion. Aqui el
+            # admin es quien corta el circuito.
+            #
+            # Y la reactivacion por REGISTRO ya no puede deshacer el cierre: el
+            # serializer rechaza expresamente las cuentas marcadas como
+            # desactivado_por_admin, en lugar de depender de que el campo exista.
+            revocados = VerificacionEmail.objects.filter(usuario=usuario_bloqueado).delete()[0]
         logger.info(
             f"Usuario desactivado: {usuario.id} ({revocados} tokens de verificación revocados)",
             extra={'user_id': request.user.id}
@@ -298,6 +302,14 @@ class ChangePasswordView(APIView):
         # lento y puede colgarse). Si el email falla, la contraseña sigue
         # cambiada, que es la dirección segura del fallo.
         with transaction.atomic():
+            # Se relee con FOR UPDATE en lugar de usar el request.user: sin el
+            # bloqueo de fila, un login fallido concurrente podía escribir
+            # failed_attempts y/o locked_until DESPUÉS de que esta vista
+            # los pusiera a cero, y el cambio de contraseña perdía esa
+            # escritura. El bloqueo es el mismo que ya usa
+            # Usuario.increment_failed_attempts, así que las dos rutas se
+            # serializan de verdad.
+            usuario = Usuario.objects.select_for_update().get(pk=request.user.pk)
             usuario.set_password(new_password)
             usuario.failed_attempts = 0
             usuario.locked_until = None

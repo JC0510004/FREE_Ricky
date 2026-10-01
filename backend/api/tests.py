@@ -209,6 +209,29 @@ class RegistroTests(TestCase):
         resp = self.client.post(reverse('verificar_email'), {'token': token}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    # Un token que no es texto debe ser un 400, no un 500.
+    # El endpoint es publico y sin autenticar: sin la comprobacion de tipo,
+    # {"token": {...}} reventaba con AttributeError al llamar a .encode().
+    def test_verificacion_email_token_de_tipo_invalido_no_es_500(self):
+        for token_valido in ({'token': {'a': 1}}, {'token': ['x']}, {'token': 12345}, {'token': None}):
+            with self.subTest(token=token_valido):
+                resp = self.client.post(reverse('verificar_email'), token_valido, format='json')
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
+    # Lo mismo en los otros dos endpoints publicos que hashean el token.
+    def test_password_reset_tipo_invalido_no_es_500(self):
+        # 'confirmar/' devuelve HTML plano, no JSON, asi que no lleva .data.
+        for url, con_data in (
+            (reverse('password_reset_confirmar'), False),
+            (reverse('password_reset_verificar_codigo'), True),
+        ):
+            for cuerpo in ({'token': {'a': 1}}, {'token': ['x']}):
+                with self.subTest(url=url, cuerpo=cuerpo):
+                    resp = self.client.post(url, cuerpo, format='json')
+                    self.assertNotEqual(resp.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    if con_data:
+                        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
     # El registro acepta guiones en el username (igual que la edición de perfil).
     def test_registro_username_con_guion(self):
         data = {**self.valid_data, 'username': 'test-user'}
@@ -1108,6 +1131,12 @@ class PartidaTests(TestCase):
         }, format='json')
         self.token = reg.data.get('access_token', '')
 
+        # El registro público deja is_verified=False y registrar una partida
+        # ahora exige correo verificado (permiso IsEmailVerified). Estos tests
+        # cubren el registro de partidas con un usuario verificado; el caso
+        # "sin verificar" tiene su propia clase, EmailVerificadoParaJugarTests.
+        Usuario.objects.filter(username='testuser').update(is_verified=True)
+
         self.nivel = Nivel.objects.create(
             nombre='Nivel Test',
             dificultad='facil',
@@ -1408,6 +1437,13 @@ class FlujoIntegracionTests(TestCase):
         self.assertEqual(reg.status_code, status.HTTP_201_CREATED)
         token = reg.data['access_token']
 
+        # 1-bis. Verificar el correo. El registro deja la cuenta sin verificar
+        # y registrar una partida (paso 5) lo exige. Se marca el campo
+        # directamente en vez de recorrer el endpoint de verificar-correo,
+        # porque este test mide el recorrido del usuario y ese endpoint ya
+        # tiene su propia clase de tests.
+        Usuario.objects.filter(username='integration_user').update(is_verified=True)
+
         # 2. Verificar sesión
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         verify = self.client.get(self.verify_url)
@@ -1605,6 +1641,11 @@ class PartidaEdgeCaseTests(TestCase):
             'confirm_password': 'TestPass123!',
         }, format='json')
         self.token = reg.data.get('access_token', '')
+        # El registro público deja is_verified=False. Estos tests validan la
+        # validación del CUERPO de la partida (nivel inexistente, negativos),
+        # así que el usuario se marca verificado para no chocar con el permiso
+        # IsEmailVerified, que es otra regla y tiene su propia clase de tests.
+        Usuario.objects.filter(username='user1').update(is_verified=True)
         self.nivel = Nivel.objects.create(nombre='Nivel', dificultad='facil')
 
     def test_crear_partida_nivel_no_existe(self):
@@ -1901,6 +1942,10 @@ class StatsAislamientoTests(TestCase):
             'confirm_password': 'TestPass123!',
         }, format='json')
         token1 = reg1.data.get('access_token', '')
+        # Registrar una partida exige correo verificado. Este test mide el
+        # AISLAMIENTO de datos entre usuarios, no esa regla, asi que se marca
+        # verificado para que la partida exista y el aislamiento se compruebe.
+        Usuario.objects.filter(username='iso_user1').update(is_verified=True)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token1}')
         client.post(reverse('partida_list'), {
             'nivel': nivel.pk, 'muertes': 5, 'tiempo': 120, 'puntuacion': 300,
@@ -1931,6 +1976,10 @@ class StatsAislamientoTests(TestCase):
             'confirm_password': 'TestPass123!',
         }, format='json')
         token1 = reg1.data.get('access_token', '')
+        # Ver la nota equivalente en test_stats_no_muestra_otro_usuario: el
+        # registro de partida exige correo verificado y este test mide el
+        # ranking, no la regla de verificacion.
+        Usuario.objects.filter(username='rank_iso1').update(is_verified=True)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token1}')
         client.post(reverse('partida_list'), {
             'nivel': nivel.pk, 'muertes': 2, 'tiempo': 90, 'puntuacion': 500,
@@ -1944,6 +1993,7 @@ class StatsAislamientoTests(TestCase):
             'confirm_password': 'TestPass123!',
         }, format='json')
         token2 = reg2.data.get('access_token', '')
+        Usuario.objects.filter(username='rank_iso2').update(is_verified=True)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token2}')
         client.post(reverse('partida_list'), {
             'nivel': nivel.pk, 'muertes': 1, 'tiempo': 60, 'puntuacion': 800,
@@ -2055,8 +2105,69 @@ class AdminSeguridadTests(TestCase):
         self.assertContains(response, 'bloqueada')
 
     def test_ip_distinta_no_esta_bloqueada(self):
-        # Sanity: los fallos se cuentan por IP y prefijo de path concretos.
+        # El bloqueo es por IP: una IP que se quemó no puede arrastrar a las
+        # demás. Antes este test no registraba ningún fallo y solo comprobaba
+        # que '8.8.8.8' no estaba bloqueada, así que pasaba igual que si el
+        # contador ignorase por completo la IP.
+        for _ in range(BruteForceIPMiddleware.MAX_ATTEMPTS):
+            BruteForceIPMiddleware.registrar_fallo_ip('127.0.0.1', '/admin/login/')
+        self.assertTrue(BruteForceIPMiddleware.ip_bloqueada('127.0.0.1'))
         self.assertFalse(BruteForceIPMiddleware.ip_bloqueada('8.8.8.8'))
+
+    def test_contador_ip_usa_incremento_atomico(self):
+        # El contador de intentos NO puede ser un read-modify-write
+        # (cache.get -> +1 -> cache.set): con peticiones simultáneas todas
+        # leen el mismo valor y todas escriben el siguiente, así que se
+        # pierden intentos y el atacante necesita muchos más de los que
+        # debería. Se fija el contrato comprobando que se usan las
+        # primitivas atómicas add()/incr() y que NO se escribe el contador
+        # con set().
+        from unittest import mock
+        from api import middleware as mw
+
+        usados = []
+        real_get = mw.cache.get
+        real_set = mw.cache.set
+        real_add = mw.cache.add
+        real_incr = mw.cache.incr
+
+        def espia_get(key, *a, **k):
+            usados.append(('get', key))
+            return real_get(key, *a, **k)
+
+        def espia_set(key, *a, **k):
+            usados.append(('set', key))
+            return real_set(key, *a, **k)
+
+        def espia_add(key, *a, **k):
+            usados.append(('add', key))
+            return real_add(key, *a, **k)
+
+        def espia_incr(key, *a, **k):
+            usados.append(('incr', key))
+            return real_incr(key, *a, **k)
+
+        with mock.patch.object(mw.cache, 'get', espia_get), \
+             mock.patch.object(mw.cache, 'set', espia_set), \
+             mock.patch.object(mw.cache, 'add', espia_add), \
+             mock.patch.object(mw.cache, 'incr', espia_incr):
+            BruteForceIPMiddleware.registrar_fallo_ip('1.1.1.1', '/api/login/')
+            BruteForceIPMiddleware.registrar_fallo_ip('1.1.1.1', '/api/login/')
+
+        con_intentos = [k for _, k in usados if ':' in k]
+        self.assertTrue(
+            any(m == 'add' for m, k in usados if k in con_intentos),
+            'el contador de intentos debe crearse con add(), no con get()+set()',
+        )
+        self.assertTrue(
+            any(m == 'incr' for m, k in usados if k in con_intentos),
+            'el contador de intentos debe subirse con incr(), no con get()+set()',
+        )
+        # set() solo se permite para la clave de bloqueo, nunca para el contador.
+        self.assertFalse(
+            any(m == 'set' for m, k in usados if k in con_intentos),
+            'el contador de intentos no debe escribirse con set() (pierde incrementos)',
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2257,3 +2368,77 @@ class ThrottleBypassTests(TestCase):
             status.HTTP_429_TOO_MANY_REQUESTS,
             'Cada cliente real debe tener su propia cuota, no una global',
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS DE CORREO VERIFICADO PARA JUGAR
+# ═══════════════════════════════════════════════════════════════════════════════
+class EmailVerificadoParaJugarTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.partida_url = reverse('partida_list')
+        self.nivel = Nivel.objects.create(nombre='Nivel Verificado', dificultad='facil')
+
+        reg = self.client.post(reverse('register'), {
+            'username': 'jugador',
+            'email': 'jugador@gmail.com',
+            'password': 'TestPass123!',
+            'confirm_password': 'TestPass123!',
+        }, format='json')
+        self.assertEqual(reg.status_code, status.HTTP_201_CREATED)
+        self.token = reg.data.get('access_token', '')
+        self.usuario = Usuario.objects.get(username='jugador')
+
+    def _registrar_partida(self):
+        return self.client.post(self.partida_url, {
+            'nivel': self.nivel.pk,
+            'muertes': 1,
+            'tiempo': 90,
+            'puntuacion': 300,
+        }, format='json')
+
+    def test_registro_deja_la_cuenta_sin_verificar(self):
+        self.assertFalse(self.usuario.is_verified)
+
+    def test_sin_verificar_no_puede_registrar_partida(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self._registrar_partida()
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Partida.objects.count(), 0)
+
+    def test_el_403_explica_como_resolverlo(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self._registrar_partida()
+
+        self.assertIn('verificar', str(resp.data.get('detail', '')).lower())
+
+    def test_verificado_si_puede_registrar_partida(self):
+        Usuario.objects.filter(pk=self.usuario.pk).update(is_verified=True)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self._registrar_partida()
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Partida.objects.count(), 1)
+
+    def test_sin_autenticacion_sigue_siendo_401_no_403(self):
+        resp = self._registrar_partida()
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_sin_verificar_puede_ver_su_historial(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        resp = self.client.get(self.partida_url)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        # La respuesta va paginada: count + results, no una lista suelta.
+        self.assertEqual(resp.data['count'], 0)
+        self.assertEqual(resp.data['results'], [])
+
+    def test_sin_verificar_puede_entrar_en_su_cuenta(self):
+        resp = self.client.post(reverse('login'), {
+            'username': 'jugador',
+            'password': 'TestPass123!',
+        }, format='json')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertFalse(resp.data['usuario']['is_verified'])

@@ -45,7 +45,13 @@ class VerificarEmailView(APIView):
     )
     def post(self, request):
         token = request.data.get('token', '')
-        if not token:
+
+        # El tipo se comprueba antes de usarlo. Sin esto, un cuerpo como
+        # {"token": {"a": 1}} o {"token": ["x"]} llega aquí como dict o list y
+        # revienta con AttributeError al llamar a .encode(), es decir un 500 en
+        # un endpoint público y sin autenticar, por una entrada mal formada que
+        # solo debería ser un 400.
+        if not isinstance(token, str) or not token:
             return Response(
                 {'error': 'Token requerido'},
                 status=status.HTTP_400_BAD_REQUEST

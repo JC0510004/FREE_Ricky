@@ -17,7 +17,7 @@ from .serializers import (
     NivelSerializer, PartidaSerializer, PartidaCreateSerializer,
     UserStatsSerializer,
 )
-from .permissions import IsAdminRole
+from .permissions import IsAdminRole, IsEmailVerified
 
 logger = logging.getLogger('seguridad')
 audit_logger = logging.getLogger('auditoria')
@@ -150,6 +150,23 @@ class PartidaListView(APIView):
     pagination_class = PageNumberPagination
     page_size = 20
 
+    def get_permissions(self):
+        """Exige correo verificado SOLO al registrar una partida (jugar).
+
+        No se aplica al GET a propósito: ver el propio historial y las
+        estadísticas es inocuo, y bloquearlo dejaría al usuario sin verificar
+        ante una pantalla vacía sin explicación. Lo que se protege es poder
+        registrar partidas, que es lo que significa jugar.
+
+        Por eso el permiso va por método y no en `permission_classes`: puesto
+        ahí, un usuario sin verificar no podría ni mirar su perfil de partidas,
+        y el frontend recibiría un 403 en una pantalla que no tiene nada que
+        ver con jugar.
+        """
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsEmailVerified()]
+        return [IsAuthenticated()]
+
     @extend_schema(
         tags=['Partidas'],
         summary='Listar mis partidas',
@@ -167,13 +184,18 @@ class PartidaListView(APIView):
     @extend_schema(
         tags=['Partidas'],
         summary='Registrar partida',
-        description='Registra una nueva partida jugada asociada al usuario autenticado.',
+        description='Registra una nueva partida jugada asociada al usuario autenticado. '
+                    'Requiere que el correo del usuario esté verificado.',
         request=PartidaCreateSerializer,
         responses={
             201: PartidaSerializer,
             400: inline_serializer(
                 'PartidaError400',
                 {'error': serializers.CharField(required=False)},
+            ),
+            403: inline_serializer(
+                'PartidaCorreoSinVerificar',
+                {'detail': serializers.CharField()},
             ),
         },
     )

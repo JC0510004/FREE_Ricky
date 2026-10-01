@@ -41,19 +41,83 @@ def _enviar_verificacion_email(usuario):
         VerificacionEmail.objects.filter(usuario=usuario).delete()
         VerificacionEmail.objects.create(usuario=usuario, token_hash=token_hash)
 
-    url = f"{settings.FRONTEND_URL}/verificar-email?token={token}"
+    si_url = f"{settings.FRONTEND_URL}/verificar-email?token={token}"
+    no_url = f"{settings.FRONTEND_URL}/login"
+
+    # Plantilla con "¿Eres tú?" en lugar de un enlace de confirmación directo,
+    # igual que la del restablecimiento de contraseña. Motivo: sin este paso
+    # intermedio, cualquier cosa que.visitara la URL por su cuenta confirmaría
+    # la cuenta. Y eso no es solo una hipótesis: los clientes de correo y sus
+    # sistemas antiphishing (Outlook Safe Links, Proofpoint, barra de antivirus
+    # del navegador) siguen los enlaces en segundo plano para analizarlos, y
+    # con la verificación automática al montar la página consumían el token de un
+    # solo uso sin que el usuario hubiera pulsado nada, dejándolo inválido.
+    # Al pedir un clic, ese rastreo previo no completa la verificación.
+    html_message = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body style="margin:0;padding:0;background-color:#f4f6f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f9;min-height:100vh;">
+        <tr>
+          <td align="center" style="padding:40px 16px;">
+            <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+              <tr>
+                <td style="padding:48px 40px 40px;">
+                  <div style="width:56px;height:56px;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);border-radius:50%;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:24px;color:#ffffff;">?</span>
+                  </div>
+                  <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a2e;text-align:center;">¿Eres tú?</h1>
+                  <p style="margin:0 0 28px;font-size:14px;color:#6b7280;text-align:center;line-height:1.5;">
+                    Se creó la cuenta <strong style="color:#1a1a2e;">{usuario.username}</strong><br/>
+                    con el correo <strong style="color:#1a1a2e;">{usuario.email}</strong>
+                  </p>
+                  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                    <tr>
+                      <td align="center">
+                        <a href="{si_url}" style="display:inline-block;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);color:#ffffff;text-decoration:none;padding:14px 48px;border-radius:8px;font-size:15px;font-weight:500;letter-spacing:0.3px;">Sí, soy yo</a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td align="center" style="padding-top:12px;">
+                        <a href="{no_url}" style="display:inline-block;color:#6b7280;text-decoration:none;padding:10px 24px;font-size:13px;">No, cancelar</a>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 40px 32px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
+                        <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
+                          Haz clic en "Sí, soy yo" para confirmar tu correo y poder jugar.
+                          El enlace expira en 60 minutos. Si no creaste esta cuenta, puedes ignorar este correo.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    """
+
     enviar_email(
-        subject='Confirma tu correo - FREE RICKY',
+        subject='¿Eres tú? - FREE RICKY',
         message=(
-            f'Hola {usuario.username}, confirma tu correo para activar tu cuenta:\n\n'
-            f'{url}\n\n'
-            'El enlace expira en 60 minutos.'
+            f'¿Eres tú? Se creó la cuenta {usuario.username} con el correo {usuario.email}.\n\n'
+            f'Sí, soy yo: {si_url}\n'
+            f'No, cancelar: {no_url}\n\n'
+            f'Haz clic en "Sí, soy yo" para confirmar tu correo y poder jugar.\n'
+            f'El enlace expira en 60 minutos. Si no creaste esta cuenta, ignora este correo.'
         ),
-        html_message=(
-            '<p>Hola <strong>%s</strong>, confirma tu correo para activar tu cuenta.</p>'
-            '<p><a href="%s">Confirmar mi correo</a></p>'
-            '<p style="font-size:12px;color:#6b7280;">El enlace expira en 60 minutos.</p>'
-        ) % (usuario.username, url),
+        html_message=html_message,
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[usuario.email],
     )

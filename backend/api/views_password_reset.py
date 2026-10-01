@@ -431,6 +431,11 @@ class VerificarCodigo(APIView):
         codigo = request.data.get('codigo', '')
         token = request.data.get('token', '')
 
+        # Comprobacion de tipo antes de usarlos: sin esto, un {"token": {...}}
+        # o {"codigo": [...]} produce AttributeError en .encode() y responde 500
+        # desde un endpoint publico, cuando solo es una entrada mal formada.
+        if not isinstance(codigo, str) or not isinstance(token, str):
+            codigo, token = '', ''
         if not codigo or not token:
             return Response(
                 {'error': 'Token y código son obligatorios'},
@@ -495,7 +500,7 @@ class ConfirmarIdentidad(APIView):
     def post(self, request):
         token = request.data.get('token', '')
 
-        if not token:
+        if not isinstance(token, str) or not token:
             return HttpResponse(ERROR_HTML, content_type='text/html', status=400)
 
         try:
