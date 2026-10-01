@@ -282,7 +282,7 @@ export default function ForgotPassword() {
                     autoComplete="new-password"
                   />
                   {/* Botón de visibilidad de contraseña */}
-                  <button type="button" className="auth-password-toggle" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}>
+                  <button type="button" className="auth-password-toggle" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Ocultar' : 'Mostrar'}>
                     <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
@@ -300,7 +300,7 @@ export default function ForgotPassword() {
                     autoComplete="new-password"
                   />
                   {/* Botón de visibilidad de confirmación */}
-                  <button type="button" className="auth-password-toggle" onClick={() => setShowConfirmPassword(!showConfirmPassword)} tabIndex={-1}>
+                  <button type="button" className="auth-password-toggle" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? 'Ocultar' : 'Mostrar'}>
                     <span className="material-symbols-outlined">{showConfirmPassword ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>

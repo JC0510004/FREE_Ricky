@@ -118,7 +118,6 @@ export default function Login() {
                   type="button"
                   className="auth-password-toggle"
                   onClick={() => setShowPassword(!showPassword)}
-                  tabIndex={-1}              // Excluido del tab order para accesibilidad
                   aria-label={showPassword ? 'Ocultar' : 'Mostrar'}
                 >
                   <span className="material-symbols-outlined">

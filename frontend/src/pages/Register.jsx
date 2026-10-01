@@ -224,7 +224,6 @@ export default function Register() {
                 <button
                   type="button" className="auth-password-toggle"
                   onClick={() => setShowPassword(!showPassword)}
-                  tabIndex={-1}
                   aria-label={showPassword ? 'Ocultar' : 'Mostrar'}
                 >
                   <span className="material-symbols-outlined">
@@ -286,7 +285,6 @@ export default function Register() {
                 <button
                   type="button" className="auth-password-toggle"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  tabIndex={-1}
                   aria-label={showConfirmPassword ? 'Ocultar' : 'Mostrar'}
                 >
                   <span className="material-symbols-outlined">
