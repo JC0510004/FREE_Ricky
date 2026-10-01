@@ -49,6 +49,18 @@ export default function Home() {
   const nivelesList = niveles?.results || niveles || []
   const partidas = partidasData?.results || partidasData || []
 
+  // Total real de partidas del usuario, leído de `count`. La tabla de abajo
+  // solo enseña las ULTIMAS 5, así que sin esto las demás se descartan en
+  // silencio y el usuario no tiene forma de saber que existen. Se avisa del
+  // recorte en vez de fingir que la lista está completa.
+  // OJO: el backend usa el PageNumberPagination de DRF sin
+  // `page_size_query_param`, asi que `?page_size=N` se ignora (verificado:
+  // `?page_size=1` devuelve la pagina entera). No se puede pedir una ventana
+  // más grande por query.
+  const totalPartidas = partidasData?.count ?? partidas.length
+  const ULTIMAS_PARTIDAS = 5
+  const hayMasPartidas = totalPartidas > Math.min(partidas.length, ULTIMAS_PARTIDAS)
+
   // Niveles que el usuario ya completó (tiene al menos una partida registrada).
   const nivelIdsJugados = new Set(partidas.map((p) => p.nivel))
 
@@ -267,7 +279,7 @@ const esYo = entry.username === user?.username
                         </tr>
                       </thead>
                       <tbody>
-                        {partidas.slice(0, 5).map((p) => (
+                        {partidas.slice(0, ULTIMAS_PARTIDAS).map((p) => (
                           <tr key={p.id}>
                             <td className="fr-bold">{p.nivel_nombre}</td>
                             <td className="fr-mono" style={{ color: 'var(--fr-primary)' }}>{formatNumber(p.puntuacion)}</td>
@@ -280,6 +292,14 @@ const esYo = entry.username === user?.username
                         ))}
                       </tbody>
                     </table>
+                    {hayMasPartidas && (
+                      <p style={{ marginTop: '.75rem', fontSize: '.75rem', color: 'var(--fr-muted-fg)' }}>
+                        Mostrando las {Math.min(partidas.length, ULTIMAS_PARTIDAS)} partidas más recientes
+                        {totalPartidas > partidas.length
+                          ? ` de ${totalPartidas} en total`
+                          : ` de ${totalPartidas}`}.
+                      </p>
+                    )}
                   </div>
                 )}
               </section>

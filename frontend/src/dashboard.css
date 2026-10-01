@@ -589,3 +589,63 @@
     background: var(--fr-primary);
     color: var(--fr-primary-fg);
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   PAGINACION
+   Sin esto, el panel de admin solo podia mostrar la primera pagina del
+   backend (50 filas) y no existia forma de llegar a las siguientes.
+   ══════════════════════════════════════════════════════════════════ */
+.fr-paginacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+    padding: .9rem .25rem .25rem;
+}
+
+.fr-paginacion-info {
+    font-size: .75rem;
+    color: var(--fr-muted-fg);
+}
+
+.fr-paginacion-botones {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.fr-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--fr-muted-fg);
+    background: none;
+    border: 1px solid var(--fr-border);
+    border-radius: .55rem;
+    padding: .45rem .85rem;
+    cursor: pointer;
+    transition: background .25s, color .25s, border-color .25s;
+}
+
+.fr-btn-ghost:hover:not(:disabled) {
+    background: var(--fr-muted);
+    color: var(--fr-fg);
+    border-color: var(--fr-primary);
+}
+
+.fr-btn-ghost:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+/* Foco visible: sin esto, quien navega con teclado no sabe en que boton esta,
+   porque :focus-visible no pinta contorno por defecto en este reset. */
+.fr-btn-ghost:focus-visible,
+.fr-paginacion button:focus-visible {
+    outline: 2px solid var(--fr-primary);
+    outline-offset: 2px;
+}

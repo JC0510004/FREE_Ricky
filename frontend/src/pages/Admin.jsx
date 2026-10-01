@@ -8,6 +8,8 @@ import {
   Swords, Trash2, Trophy, Users, Zap
 } from 'lucide-react'
 import { extractApiError } from '../utils/format'
+import usePaginada from '../hooks/usePaginada'
+import Paginacion from '../components/Paginacion'
 import '../dashboard.css'
 
 /* ─── Tab: Resumen ──────────────────────────────────────────────── */
@@ -67,25 +69,15 @@ function Resumen() {
 
 /* ─── Tab: Usuarios ─────────────────────────────────────────────── */
 function Usuarios({ currentUserId, onCurrentUserUpdated }) {
-  const [usuarios, setUsuarios] = useState([])
-  const [error, setError] = useState('')
   const [notice, setNotice] = useState(null) // { tipo: 'ok'|'error', texto }
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ username: '', email: '', rol: '' })
 
-  // Memorizada para reutilizar la misma referencia en useEffect y handlers
-  // (evita re-renderizados por identidad de función).
-  const load = useCallback((signal, cb) => {
-    API.get('/usuarios/', { signal })
-      .then(r => { setUsuarios(r.data.results || r.data); cb?.() })
-      .catch(e => { if (e?.name !== 'CanceledError') setError('Error al cargar') })
-  }, [])
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    load(ctrl.signal)
-    return () => ctrl.abort()
-  }, [load])
+  // pageSize 50: lo fija UsuarioViewSet en backend/api/views_users.py.
+  const {
+    items: usuarios, total, page, pageSize, totalPaginas,
+    loading, error, reload, setPage,
+  } = usePaginada('/usuarios/', 50)
 
   const clearNotice = useCallback(() => setNotice(null), [])
 
@@ -106,26 +98,28 @@ function Usuarios({ currentUserId, onCurrentUserUpdated }) {
       }
       setEditId(null)
       setNotice({ tipo: 'ok', texto: 'Usuario actualizado correctamente' })
-      load(null, () => setTimeout(clearNotice, 4000))
+      reload()
+      setTimeout(clearNotice, 4000)
     } catch (err) {
       setNotice({ tipo: 'error', texto: extractApiError(err?.response?.data, 'Error al actualizar') })
     }
-  }, [form, load, clearNotice, currentUserId, onCurrentUserUpdated])
+  }, [form, reload, clearNotice, currentUserId, onCurrentUserUpdated])
 
   const del = useCallback(async (id) => {
     if (!confirm('¿Eliminar este usuario?')) return
     try {
       await API.delete(`/usuarios/${id}/`)
       setNotice({ tipo: 'ok', texto: 'Usuario desactivado' })
-      load(null, () => setTimeout(clearNotice, 4000))
+      reload()
+      setTimeout(clearNotice, 4000)
     } catch {
       setNotice({ tipo: 'error', texto: 'Error al eliminar' })
     }
-  }, [load, clearNotice])
+  }, [reload, clearNotice])
 
   return (
     <>
-      {error && <div className="fr-error">{error}</div>}
+      {error && <div className="fr-error">Error al cargar</div>}
       {notice && (
         <div className={notice.tipo === 'ok' ? 'fr-success' : 'fr-error'} style={{ marginBottom: '1rem' }}>
           {notice.tipo === 'ok' && <Check size={14} />}
@@ -141,7 +135,7 @@ function Usuarios({ currentUserId, onCurrentUserUpdated }) {
               <p>Administra las cuentas y permisos del sistema</p>
             </div>
           </div>
-          <span className="fr-badge fr-badge-medium">{usuarios.length} usuarios</span>
+          <span className="fr-badge fr-badge-medium">{total} usuarios</span>
         </div>
         <table className="fr-table" style={{ minWidth: 700 }}>
           <thead>
@@ -193,11 +187,15 @@ function Usuarios({ currentUserId, onCurrentUserUpdated }) {
                 </td>
               </tr>
             ))}
-            {!usuarios.length && (
+            {!usuarios.length && !loading && (
               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--fr-muted-fg)' }}>No hay usuarios registrados</td></tr>
             )}
           </tbody>
         </table>
+        <Paginacion
+          page={page} total={total} pageSize={pageSize} totalPaginas={totalPaginas}
+          loading={loading} onChange={setPage} etiqueta="usuarios"
+        />
       </div>
     </>
   )
@@ -205,49 +203,44 @@ function Usuarios({ currentUserId, onCurrentUserUpdated }) {
 
 /* ─── Tab: Niveles ──────────────────────────────────────────────── */
 function Niveles() {
-  const [niveles, setNiveles] = useState([])
-  const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
   const [newNivel, setNewNivel] = useState({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ nombre: '', dificultad: 'facil', tiempo_limite: '' })
+  // Los errores de crear/editar/borrar son estado propio: `error` del hook es
+  // solo el fallo de carga y no se puede escribir.
+  const [errorAccion, setErrorAccion] = useState('')
 
-  // Memorizada para estabilizar la referencia usada por useEffect y handlers.
-  const load = useCallback((signal) => {
-    API.get('/niveles/', { signal })
-      .then(r => setNiveles(r.data.results || r.data))
-      .catch(e => { if (e?.name !== 'CanceledError') setError('Error al cargar') })
-  }, [])
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    load(ctrl.signal)
-    return () => ctrl.abort()
-  }, [load])
+  // pageSize 50: lo fija NivelViewSet en backend/api/views_game.py.
+  const {
+    items: niveles, total, page, pageSize, totalPaginas,
+    loading, error, reload, setPage,
+  } = usePaginada('/niveles/', 50)
 
   const create = useCallback(async () => {
     try {
       await API.post('/niveles/', { ...newNivel, tiempo_limite: newNivel.tiempo_limite ? Number(newNivel.tiempo_limite) : null })
-      setCreating(false); setNewNivel({ nombre: '', dificultad: 'facil', tiempo_limite: '' }); load()
-    } catch { setError('Error al crear') }
-  }, [newNivel, load])
+      setCreating(false); setNewNivel({ nombre: '', dificultad: 'facil', tiempo_limite: '' }); reload()
+    } catch { setErrorAccion('Error al crear') }
+  }, [newNivel, reload])
 
   const startEdit = useCallback((n) => { setEditId(n.id); setForm({ nombre: n.nombre, dificultad: n.dificultad, tiempo_limite: n.tiempo_limite || '' }) }, [])
 
   const save = useCallback(async (id) => {
-    try { await API.put(`/niveles/${id}/`, { ...form, tiempo_limite: form.tiempo_limite ? Number(form.tiempo_limite) : null }); setEditId(null); load() }
-    catch { setError('Error al actualizar') }
-  }, [form, load])
+    try { await API.put(`/niveles/${id}/`, { ...form, tiempo_limite: form.tiempo_limite ? Number(form.tiempo_limite) : null }); setEditId(null); reload() }
+    catch { setErrorAccion('Error al actualizar') }
+  }, [form, reload])
 
   const del = useCallback(async (id) => {
     if (!confirm('¿Eliminar este nivel?')) return
-    try { await API.delete(`/niveles/${id}/`); load() }
-    catch { setError('Error al eliminar') }
-  }, [load])
+    try { await API.delete(`/niveles/${id}/`); reload() }
+    catch { setErrorAccion('Error al eliminar') }
+  }, [reload])
 
   return (
     <>
-      {error && <div className="fr-error">{error}</div>}
+      {error && <div className="fr-error">Error al cargar</div>}
+      {errorAccion && <div className="fr-error">{errorAccion}</div>}
 
       {creating ? (
         <div className="fr-create-row">
@@ -266,7 +259,7 @@ function Niveles() {
           <button className="fr-btn-primary" type="button" style={{ width: 'auto', padding: '.7rem 1.25rem' }} onClick={() => setCreating(true)}>
             <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>Nuevo nivel
           </button>
-          <span className="fr-section-meta">{niveles.length} niveles configurados</span>
+          <span className="fr-section-meta">{total} niveles configurados</span>
         </div>
       )}
 
@@ -316,11 +309,15 @@ function Niveles() {
                 </tr>
               )
             })}
-            {!niveles.length && (
+            {!niveles.length && !loading && (
               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--fr-muted-fg)' }}>No hay niveles creados</td></tr>
             )}
           </tbody>
         </table>
+        <Paginacion
+          page={page} total={total} pageSize={pageSize} totalPaginas={totalPaginas}
+          loading={loading} onChange={setPage} etiqueta="niveles"
+        />
       </div>
     </>
   )
@@ -328,26 +325,21 @@ function Niveles() {
 
 /* ─── Tab: Partidas ─────────────────────────────────────────────── */
 function Partidas() {
-  const [partidas, setPartidas] = useState([])
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    API.get('/admin/partidas/', { signal: ctrl.signal })
-      .then(r => setPartidas(r.data.results || r.data))
-      .catch(() => setError('Error al cargar'))
-    return () => ctrl.abort()
-  }, [])
+  // pageSize 50: lo fija PartidaAdminViewSet en backend/api/views_game.py.
+  const {
+    items: partidas, total, page, pageSize, totalPaginas,
+    loading, error, setPage,
+  } = usePaginada('/admin/partidas/', 50)
 
   return (
     <>
-      {error && <div className="fr-error">{error}</div>}
+      {error && <div className="fr-error">Error al cargar</div>}
       <div className="fr-section-header">
         <div className="fr-section-header-text">
           <p className="fr-eyebrow">Actividad reciente</p>
           <h2 className="fr-section-title">Partidas registradas</h2>
         </div>
-        <span className="fr-badge fr-badge-medium">{partidas.length} partidas</span>
+        <span className="fr-badge fr-badge-medium">{total} partidas</span>
       </div>
       <div className="fr-table-wrap">
         <table className="fr-table" style={{ minWidth: 850 }}>
@@ -372,11 +364,15 @@ function Partidas() {
                 </tr>
               )
             })}
-            {!partidas.length && (
+            {!partidas.length && !loading && (
               <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--fr-muted-fg)' }}>No hay partidas registradas</td></tr>
             )}
           </tbody>
         </table>
+        <Paginacion
+          page={page} total={total} pageSize={pageSize} totalPaginas={totalPaginas}
+          loading={loading} onChange={setPage} etiqueta="partidas"
+        />
       </div>
     </>
   )
