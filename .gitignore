@@ -83,3 +83,4 @@ Thumbs.db
 # Directorio de configuración de Claude AI: almacena datos locales del asistente.
 # Es específico del usuario y NO debe compartirse entre desarrolladores.
 .claude/
+pentest_reports/
