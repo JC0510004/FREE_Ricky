@@ -242,28 +242,19 @@ class Nivel(models.Model):
 # Almacena cada partida jugada por un usuario en un nivel específico.
 # Registra muertes, tiempo empleado y puntuación obtenida.
 class Partida(models.Model):
-    # Relación con el usuario que jugó la partida (cascade = borrar partidas si se borra el usuario).
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_id')
-    # Relación con el nivel en el que se jugó.
     nivel = models.ForeignKey(Nivel, on_delete=models.CASCADE, db_column='nivel_id')
-    # Número de muertes del jugador en esa partida.
     muertes = models.IntegerField(default=0)
-    # Tiempo empleado en segundos (opcional).
     tiempo = models.IntegerField(blank=True, null=True)
-    # Puntuación obtenida (opcional).
     puntuacion = models.IntegerField(blank=True, null=True)
-    # Fecha/hora en que se jugó la partida.
+    completado = models.BooleanField(default=False)   # 👈 NUEVO
     fecha = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'partidas'
-        # Índices para acelerar consultas frecuentes:
         indexes = [
-            # Buscar partidas de un usuario ordenadas por fecha reciente.
             models.Index(fields=['usuario', '-fecha'], name='idx_partida_usuario_fecha'),
-            # Buscar partidas de un nivel ordenadas por fecha reciente.
             models.Index(fields=['nivel', '-fecha'], name='idx_partida_nivel_fecha'),
-            # Ranking global: ordenar todas las partidas por puntuación.
             models.Index(fields=['-puntuacion'], name='idx_partida_puntuacion'),
         ]
 
