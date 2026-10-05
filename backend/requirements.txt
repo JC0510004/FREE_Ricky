@@ -30,7 +30,8 @@ djangorestframework==3.18.1
 # Se pinea explícitamente porque es dependencia TRANSITIVA: sin este pin,
 # pip resuelve 2.9.0, que arrastra 12 advisories (PYSEC-2026-120, -175, -176,
 # -177, -178, -179 y PYSEC-2025-183). Ninguna la reporta safety.
-pyjwt==2.13.0
+pyjwt==2.15.0
+#Subida a 2.15.0 (antes 2.13.0): pip-audit reportó 13 advisories en 2.13.0.
 
 # djangorestframework-simplejwt: Implementación de JWT (JSON Web Tokens)
 # para autenticación stateless. Permite login/logout sin sesiones de servidor.
