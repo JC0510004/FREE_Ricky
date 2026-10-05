@@ -8,8 +8,8 @@ from .middleware import BruteForceIPMiddleware
 class BruteForceMiddlewareIntegrationTests(SimpleTestCase):
     """Prueba BruteForceIPMiddleware como middleware real.
 
-    Cubre el camino petición -> respuesta. En settings.py este middleware
-    no se carga durante los tests, así que aquí se instancia a mano con
+    Cubre el camino peticion -> respuesta. En settings.py este middleware
+    no se carga durante los tests, asi que aqui se instancia a mano con
     una vista falsa que responde el status que queramos.
     """
 
@@ -21,7 +21,7 @@ class BruteForceMiddlewareIntegrationTests(SimpleTestCase):
         cache.clear()
         self.factory = RequestFactory()
 
-    # ── Helpers ──────────────────────────────────────────────────────
+    # Helpers
 
     def _middleware(self, status_code):
         """Middleware cuya 'vista' siempre responde con status_code."""
@@ -38,12 +38,12 @@ class BruteForceMiddlewareIntegrationTests(SimpleTestCase):
         for _ in range(BruteForceIPMiddleware.MAX_ATTEMPTS):
             falla(self._peticion(ip))
 
-    # ── Tests ────────────────────────────────────────────────────────
+    # Tests
 
     def test_ip_se_bloquea_tras_fallos_repetidos(self):
         self._provocar_bloqueo(self.IP_ATACANTE)
 
-        # La vista respondería 200, pero la IP bloqueada recibe 429
+        # La vista responderia 200, pero la IP bloqueada recibe 429
         respuesta = self._middleware(200)(self._peticion(self.IP_ATACANTE))
 
         self.assertEqual(respuesta.status_code, 429)
@@ -54,4 +54,3 @@ class BruteForceMiddlewareIntegrationTests(SimpleTestCase):
         respuesta = self._middleware(200)(self._peticion(self.IP_NORMAL))
 
         self.assertEqual(respuesta.status_code, 200)
-        
