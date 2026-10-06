@@ -33,9 +33,26 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # para construir URLs correctas detrás de un proxy.
 USE_X_FORWARDED_HOST = True
 
-# TRUSTED_PROXIES: Lista de IPs/rangos de proxies que Django debe confiar
-# para headers de seguridad como X-Forwarded-For.
-TRUSTED_PROXIES = config('TRUSTED_PROXIES', default='127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16').split(',')
+# TRUSTED_PROXIES: redes desde las que se aceptan los headers de reenvio
+# (X-Real-IP, X-Forwarded-For). Quien este en esta lista decide su propia IP,
+# asi que debe ser ESTRECHA: la del proxy que hay delante y nada mas.
+#
+# El default es loopback (desarrollo con Django en el host) mas la subnet de la
+# red de Docker (app_network en docker-compose.yml, que fija su ipam para que
+# las dos cosas coincidan). Si cambias la subnet del compose, cambia aqui y en
+# el TRUSTED_PROXIES de docker-compose.yml.
+#
+# Con la red entera confiada (antes eran 10/8, 172.16/12 y 192.168/16 enteros)
+# valia con llegar a Django sin pasar por nginx para elegir la propia identidad
+# con X-Real-IP, y esa identidad es la que usan a la vez el throttle por IP
+# (api/throttles.py) y el lockout de fuerza bruta (api/middleware.py). El
+# compose no publica el puerto del backend, asi que hoy esa via no existe; el
+# rango estrecho es para que siga sin existir si algun dia se publica, se
+# levanta un segundo contenedor en la red o se cambia el orquestador.
+#
+# En produccion con un balanceador delante, pon aqui su IP/rango y no la red
+# privada completa (DEPLOY_PRODUCCION.md lo marca como paso obligatorio).
+TRUSTED_PROXIES = config('TRUSTED_PROXIES', default='127.0.0.1,::1,172.16.42.0/24').split(',')
 
 # ─── FRONTEND / API URLS (configurables por env) ───────────────────────
 # FRONTEND_URL: URL base del frontend, usada en CORS y redirecciones.

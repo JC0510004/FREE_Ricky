@@ -393,8 +393,13 @@ services:
       # Tiene que incluir la red del proxy (nginx, o el balanceador que haya
       # delante) pero NO la red entera: quien esté en TRUSTED_PROXIES decide su
       # propia IP con X-Real-IP. Ver la nota larga de config/settings.py.
-      # Con Docker, el valor por defecto de settings.py ya cubre el bridge.
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      # Por eso el valor por defecto es loopback (caso de Django corriendo en el
+      # host) mas SOLO la subnet de app_network, que esta fijada abajo en
+      # networks.app_network.ipam. Antes venian 10.0.0.0/8, 172.16.0.0/12 y
+      # 192.168.0.0/16 enteros: cualquier red privada podia elegir identidad
+      # con X-Real-IP en cuanto llegara a Django sin pasar por nginx.
+      # En produccion con LB delante, sobreescribe con su IP/rango.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1,::1,172.16.42.0/24}
 
     # Red interna del proyecto.
     networks:
@@ -531,6 +536,17 @@ volumes:
 # Red bridge aislada que permite comunicación interna entre servicios.
 # Los servicios se comunican por nombre de servicio (resolución DNS automática).
 # Ningún servicio expone puertos al mundo exterior excepto los mapeados en ports.
+#
+# El subnet va FIJADO, no lo elige Docker: TRUSTED_PROXIES (arriba, en backend)
+# tiene que saberlo para confiar solo en nginx y en nadie más, y sin esto
+# habría que poner rangos privados enteros y confiar en toda la LAN.
+# Si cambias este subnet, cambia tambien el default de TRUSTED_PROXIES en
+# docker-compose.yml y en backend/config/settings.py (los tres a la vez).
+# Si el levantamiento avisa de solapamiento con otra red de la maquina, elige
+# otra tercera octeta en los tres sitios.
 networks:
   app_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.42.0/24

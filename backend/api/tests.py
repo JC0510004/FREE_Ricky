@@ -2171,6 +2171,110 @@ class AdminSeguridadTests(TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# LAS DOS BANDERAS DE ESTADO DEL USUARIO NO PUEDEN DESINCRONIZARSE
+# ═══════════════════════════════════════════════════════════════════════════════
+# Usuario tiene `is_active` (la cuenta funciona) y `desactivado_por_admin` (el
+# cierre lo decidió un administrador y solo él puede deshacerlo). Las dos se
+# escriben juntas en un único sitio (views_users.py:195-197); el resto del
+# código escribe una sola, y de ahí salían los dos estados rotos:
+#
+# - ACTIVA con la marca: views_email.py:85 rechaza la verificación de una
+#   cuenta que ya está activa, y el usuario no puede jugar.
+# - CERRADA sin la marca: RegisterSerializer reactiva la cuenta con solo
+#   volver a registrarse, deshaciendo el cierre.
+#
+# El panel de administración es el sitio donde ocurría: ahí is_active se
+# alterna a mano y la marca no. Ahora la normaliza Usuario.save() y, para la
+# dirección contraria, UsuarioAdmin.save_model.
+@override_settings(ROOT_URLCONF='api.urls_admin_test')
+class BanderasEstadoTests(TestCase):
+    def setUp(self):
+        self.admin = Usuario.objects.create_user(
+            username='root',
+            email='root@ejemplo.com',
+            password='AdminPass123!',
+            rol='admin',
+        )
+        self.victima = Usuario.objects.create_user(
+            username='victima',
+            email='victima@ejemplo.com',
+            password='Abcdef123!',
+        )
+
+    def _cerrar_como_admin(self):
+        self.victima.is_active = False
+        self.victima.desactivado_por_admin = True
+        self.victima.save(update_fields=['is_active', 'desactivado_por_admin'])
+
+    def _url_cambio(self):
+        return reverse('admin:api_usuario_change', args=[self.victima.pk])
+
+    def _datos_cambio(self, activa):
+        # Sin la clave 'is_active' la casilla queda desmarcada, que es como el
+        # panel comunica "cerrar cuenta". El resto de campos son los que el
+        # form exige para validar.
+        datos = {
+            'username': 'victima',
+            'email': 'victima@ejemplo.com',
+            'rol': 'jugador',
+            'is_verified': 'on',
+            # contador editable en el form, hay que mandarlo para que valide
+            'lockout_count': '0',
+        }
+        if activa:
+            datos['is_active'] = 'on'
+        return datos
+
+    def test_reactivar_deja_la_marca_limpia(self):
+        """Reactivalo quien lo reactiva: una cuenta activa no lleva marca."""
+        self._cerrar_como_admin()
+
+        # Reactivación por ORM con update_fields=['is_active'], que es el
+        # patrón que usaba tests.py:1005 y que usaría cualquier endpoint de
+        # reactivación que escriba solo ese campo.
+        self.victima.is_active = True
+        self.victima.save(update_fields=['is_active'])
+
+        self.victima.refresh_from_db()
+        self.assertTrue(self.victima.is_active)
+        self.assertFalse(
+            self.victima.desactivado_por_admin,
+            'una cuenta activa no puede conservar la marca de cierre de admin',
+        )
+
+    def test_cerrar_desde_el_panel_deja_la_marca(self):
+        """El panel alterna is_active a mano: tiene que cerrar con la marca.
+
+        Sin ella, el cierre se deshace con solo volver a registrarse.
+        """
+        self.client.force_login(self.admin)
+
+        response = self.client.post(self._url_cambio(), self._datos_cambio(activa=False))
+        self.assertEqual(response.status_code, 302, response.content[:300])
+
+        self.victima.refresh_from_db()
+        self.assertFalse(self.victima.is_active)
+        self.assertTrue(
+            self.victima.desactivado_por_admin,
+            'cerrar la cuenta desde el panel debe marcarla como cierre de admin',
+        )
+
+    def test_reactivar_desde_el_panel_limpia_la_marca(self):
+        self._cerrar_como_admin()
+        self.client.force_login(self.admin)
+
+        response = self.client.post(self._url_cambio(), self._datos_cambio(activa=True))
+        self.assertEqual(response.status_code, 302, response.content[:300])
+
+        self.victima.refresh_from_db()
+        self.assertTrue(self.victima.is_active)
+        self.assertFalse(
+            self.victima.desactivado_por_admin,
+            'reactivar desde el panel debe revocar la marca en el mismo guardado',
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # REGRESION: LOS THROTTLES PUBLICOS NO SE ESQUIVAN AUTENTICANDOSE
 # ═══════════════════════════════════════════════════════════════════════════════
 # Con AnonRateThrottle, get_cache_key() devuelve None en cuanto la peticion
@@ -2330,7 +2434,7 @@ class ThrottleBypassTests(TestCase):
     def test_detras_de_proxy_confiable_se_usa_x_real_ip(self):
         """Con proxy de confianza, la identidad viene de X-Real-IP (nginx lo fija)."""
         self._cuota('login', '2/minute')
-        nginx = '172.20.0.3'  # dentro de TRUSTED_PROXIES por defecto
+        nginx = '172.16.42.2'  # dentro de la subnet de confianza por defecto
 
         for _ in range(2):
             self.client.post(

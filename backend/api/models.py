@@ -101,6 +101,28 @@ class Usuario(AbstractBaseUser):
     def __str__(self):
         return self.username
 
+    # Mantiene la invariante desactivado_por_admin => cuenta cerrada.
+    #
+    # La marca solo significa algo con la cuenta cerrada: una cuenta ACTIVA con
+    # la marca puesta es una contradiccion, y es exactamente la deriva que se
+    # abria desde el panel de admin, donde is_active se alterna a mano. Al
+    # guardar una cuenta activa se limpia la marca, de modo que reactivar es
+    # siempre una decision del administrador y esa decision revoca la anterior
+    # en el mismo guardado. No hay caso legitimo que se pierda: toda cerradura
+    # de admin escribe is_active=False junto con la marca
+    # (views_users.py:195-197) y las reactivaciones (VerificarEmailView,
+    # RegisterSerializer) ya rechazan antes las cuentas marcadas.
+    def save(self, *args, **kwargs):
+        if self.is_active and self.desactivado_por_admin:
+            self.desactivado_por_admin = False
+            # Si el llamante guardo con update_fields, hay que añadir el campo
+            # al conjunto: sin eso la normalizacion se queda solo en memoria y
+            # la deriva sigue viva en la base de datos.
+            campos = kwargs.get('update_fields')
+            if campos is not None:
+                kwargs['update_fields'] = set(campos) | {'desactivado_por_admin'}
+        super().save(*args, **kwargs)
+
     # Verifica si el usuario tiene un permiso específico. Solo admins tienen permisos.
     def has_perm(self, perm, obj=None):
         return self.rol == 'admin'
