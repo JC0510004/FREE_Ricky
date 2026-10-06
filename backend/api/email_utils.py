@@ -13,11 +13,24 @@ def enviar_email(subject, message, recipient_list, html_message=None, from_email
     Sustituye a los `send_mail(..., fail_silently=True)` originales: en
     producción un correo perdido (verificación, restablecimiento o alerta de
     contraseña) es un problema de seguridad y no puede pasar desapercibido.
-    El fallo se loguea con nivel ERROR en los loggers 'seguridad' y
-    'auditoria' (JSON en producción) y se deja que la operación continúe,
-    manteniendo el comportamiento observable de la API.
+    El fallo se loguea con nivel ERROR en los loggers 'seguridad' y 'auditoria'
+    (JSON en producción) y se deja que la operación continúe, manteniendo el
+    comportamiento observable de la API.
     """
     from_email = from_email or settings.DEFAULT_FROM_EMAIL
+
+    # Mismo criterio que el aviso de arranque de apps.py: con backend de
+    # consola el envío "funciona" (imprime en la terminal y devuelve sin
+    # error), así que quien prueba el flujo ve respuestas 200 y en su bandeja
+    # no aparece nada. Aquí queda registrado en el log en el momento exacto
+    # en que debería haber salido un correo. Los tests usan locmem, así que
+    # este aviso no se dispara en la suite.
+    if settings.EMAIL_BACKEND.endswith('console.EmailBackend'):
+        logger.warning(
+            f"EMAIL NO ENVIADO (backend de consola, sin credenciales SMTP): {subject} "
+            f"-> {list(recipient_list)}"
+        )
+
     try:
         send_mail(
             subject=subject,

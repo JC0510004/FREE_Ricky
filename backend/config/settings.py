@@ -509,6 +509,16 @@ _email_pass = config('EMAIL_HOST_PASSWORD', default='')
 
 # Si hay credenciales de SMTP configuradas, usa el backend real.
 # Si no, usa el backend de consola (imprime emails en la terminal, útil en desarrollo).
+#
+# ESE "SI NO" ES UNA TRAMPA FACIL DE PISAR: con EMAIL_HOST_PASSWORD vacío todo
+# arranca perfectamente, la API responde 200 y los correos salen igual... a la
+# terminal del servidor. El usuario ve "Correo enviado" y en su Gmail no llega
+# nada, que es exactamente el síntoma de los flujos de verificación y de
+# restablecimiento "rotos". Por eso:
+#   - apps.py avisa al arrancar si seguimos en consola,
+#   - email_utils.enviar_email avisa en CADA envío que no salió,
+# y la forma de comprobarlo en un despliegue es:
+#   python manage.py sendtestemail tu@correo.com
 EMAIL_BACKEND = (
     'django.core.mail.backends.smtp.EmailBackend'
     if _email_user and _email_pass
@@ -517,6 +527,12 @@ EMAIL_BACKEND = (
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')       # Servidor SMTP
 EMAIL_PORT = int(config('EMAIL_PORT', default='587'))             # Puerto SMTP (587 = TLS)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default='True').lower() == 'true'  # Usar cifrado TLS
+# Solo para 465/SSL: Gmail usa 587 con STARTTLS, así que por defecto va en False.
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default='False').lower() == 'true'
+# Sin timeout, un SMTP colgado deja la petición de registro/reset colgada
+# hasta que se cancele: el usuario ve un spinner eterno y el throttle ya
+# ha consumido su cuota. 20 s es holgado (Gmail contesta en <2 s).
+EMAIL_TIMEOUT = int(config('EMAIL_TIMEOUT', default='20'))
 EMAIL_HOST_USER = _email_user       # Usuario/correo SMTP
 EMAIL_HOST_PASSWORD = _email_pass   # Contraseña SMTP (app password de Gmail)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@free-ricky.com')  # Email remitente

@@ -17,7 +17,7 @@ import hashlib
 from django.urls import reverse
 
 # Códigos de estado HTTP de DRF para assertions legibles y consistentes
-from rest_framework import status
+from rest_framework import status, serializers
 
 # APIClient: cliente de prueba de DRF que simula peticiones HTTP reales
 # sin levantar un servidor; es rápido y permite testing de APIs REST
@@ -2272,6 +2272,44 @@ class BanderasEstadoTests(TestCase):
             self.victima.desactivado_por_admin,
             'reactivar desde el panel debe revocar la marca en el mismo guardado',
         )
+
+    def test_alta_inactiva_desde_el_panel_queda_marcada(self):
+        """Crear una cuenta DESACTIVADA desde el panel también deja la marca.
+
+        save_model comparaba contra el is_active anterior, que en un alta no
+        existe, así que esa rama dejaba pasar el guardado sin marca: nacía una
+        cuenta cerrada indistinguible de una pendiente de reactivación, y el
+        registro público la reactivaba con solo volver a registrarse.
+        """
+        self.client.force_login(self.admin)
+
+        response = self.client.post(reverse('admin:api_usuario_add'), {
+            'username': 'nuevo_cerrado',
+            'email': 'cerrado@ejemplo.com',
+            'rol': 'jugador',
+            'lockout_count': '0',
+            # sin 'is_active': la casilla queda desmarcada
+        })
+        self.assertEqual(response.status_code, 302, response.content[:300])
+
+        creado = Usuario.objects.get(username='nuevo_cerrado')
+        self.assertFalse(creado.is_active)
+        self.assertTrue(
+            creado.desactivado_por_admin,
+            'un alta cerrada desde el panel debe llevar la marca, igual que un cierre',
+        )
+
+        # Y con la marca, la reactivación pública no puede con ella.
+        from .serializers import RegisterSerializer
+        ser = RegisterSerializer(data={
+            'username': 'nuevo_cerrado',
+            'email': 'cerrado@ejemplo.com',
+            'password': 'NuevaPass123!',
+            'confirm_password': 'NuevaPass123!',
+        })
+        self.assertTrue(ser.is_valid(), ser.errors)
+        with self.assertRaises(serializers.ValidationError):
+            ser.save()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

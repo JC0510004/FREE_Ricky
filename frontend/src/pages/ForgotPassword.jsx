@@ -62,7 +62,7 @@ export default function ForgotPassword() {
   const [error, setError] = useState('')
 
   // ─── Control del flujo paso a paso ───
-  // 'form' -> 'sent' -> 'not-confirmed'/'just-confirmed' -> 'reset' -> 'success'
+  // 'form' -> 'sent' -> ('pendiente' -> 'just-confirmed' | 'link-invalido') -> 'reset' -> 'success'
   const [step, setStep] = useState('form')
 
   // ─── Estado del formulario de nueva contraseña ───
@@ -72,29 +72,51 @@ export default function ForgotPassword() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  // ─── Efecto inicial: verificar token si viene en la URL ───
-  // Cuando el usuario abre el enlace desde el correo, se verifica el token automáticamente.
+  // ─── Efecto inicial: estado del token si viene en la URL ───
+  // El enlace del correo NO confirma nada por sí solo: aquí solo se CONSULTA
+  // el estado del token. La confirmación (POST /password-reset/confirmar/)
+  // ocurre cuando el usuario pulsa el botón del paso 'pendiente', igual que
+  // en VerificarEmail.
+  //
+  // Motivo (el mismo que allí): los clientes de correo y sus sistemas
+  // antiphishing (Outlook Safe Links, Proofpoint, antivirus del navegador)
+  // siguen los enlaces en segundo plano para analizarlos. Si la confirmación
+  // ocurriera al montar la página, un escáner marcaría la identidad como
+  // confirmada sin que nadie pulsara nada, que es justo lo que el paso
+  // intermedio del backend está diseñado para demostrar.
   useEffect(() => {
     const controller = new AbortController()
     if (urlToken) {
       tokenRef.current = urlToken
-      API.post('/password-reset/confirmar/', { token: urlToken }, { signal: controller.signal })
-        .then(() => {
-          setStep('just-confirmed')
-        })
-        .catch(() => {
-          API.get(`/password-reset/verificar/?token=${urlToken}`, { signal: controller.signal })
-            .then((res) => {
-              if (res.data?.confirmado) {
-                setStep('reset')
-              } else {
-                setStep('not-confirmed')
-              }
-            })
-            .catch(() => {})
-        })
+      API.get(`/password-reset/verificar/?token=${urlToken}`, { signal: controller.signal })
+        // `confirmed=1` viene del redirect del backend cuando la confirmación
+        // ya se hizo: se respeta para no repetir el paso.
+        .then((res) => setStep(
+          res.data?.confirmado || searchParams.get('confirmed') === '1' ? 'reset' : 'pendiente',
+        ))
+        // 429 u otro fallo de red: se ofrece el botón y el backend dirá lo
+        // que corresponda al pulsarlo (el error se muestra en ese momento).
+        .catch(() => setStep('pendiente'))
     }
     return () => controller.abort()
+  }, [urlToken, searchParams])
+
+  // ─── Confirmación explícita de la identidad ───
+  // Solo se llama al pulsar "Sí, soy yo", nunca al montar el componente.
+  const handleConfirmarIdentidad = useCallback(async () => {
+    setError('')
+    setIsLoading(true)
+    try {
+      await API.post('/password-reset/confirmar/', { token: tokenRef.current || urlToken })
+      setStep('just-confirmed')
+    } catch {
+      // El backend responde HTML en los 400 de este endpoint, así que no hay
+      // JSON que leer: mensaje genérico y opción de pedir un enlace nuevo.
+      setError('El enlace no es válido o ha expirado. Solicita uno nuevo.')
+      setStep('link-invalido')
+    } finally {
+      setIsLoading(false)
+    }
   }, [urlToken])
 
   // ─── Paso 1: Envío del correo de recuperación ───
@@ -210,7 +232,7 @@ export default function ForgotPassword() {
             <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#22c55e', marginBottom: 16 }}>mail</span>
             <h1 className="auth-title">Correo Enviado</h1>
             <p className="auth-subtitle" style={{ marginBottom: 24 }}>
-              Revisa tu correo: haz clic en <strong>"Sí, soy yo"</strong> y anota el <strong>código de 6 dígitos</strong>. Serás redirigido automáticamente para restablecer tu contraseña.
+              Revisa tu correo: haz clic en <strong>"Sí, soy yo"</strong> y anota el <strong>código de 6 dígitos</strong>. Al abrir el enlace pulsa el botón de la página y podrás restablecer tu contraseña.
             </p>
 
             {/* Botón para volver al login */}
@@ -223,21 +245,43 @@ export default function ForgotPassword() {
     )
   }
 
-  // Paso: identidad no confirmada aún
-  if (step === 'not-confirmed') {
+  // Paso: el enlace del correo abrió esta página, falta pulsar (sin esto,
+  // cualquier cosa que visitara la URL por su cuenta confirmaría la identidad)
+  if (step === 'pendiente') {
     return (
       <div className="auth-page">
         <div className="auth-container">
           <div className="auth-card" style={{ textAlign: 'center' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#eab308', marginBottom: 16 }}>pending</span>
-            <h1 className="auth-title">Identidad No Confirmada</h1>
+            <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#9FE0C3', marginBottom: 16 }}>help</span>
+            <h1 className="auth-title">¿Eres Tú?</h1>
             <p className="auth-subtitle" style={{ marginBottom: 24 }}>
-              Aún no has confirmado tu identidad. Revisa tu correo y haz clic en "Sí, soy yo".
+              Pulsa el botón para confirmar que solicitaste este restablecimiento.
+              Después podrás escribir tu nueva contraseña.
             </p>
+            <button type="button" onClick={handleConfirmarIdentidad} className="auth-submit" disabled={isLoading}>
+              {isLoading ? 'Confirmando...' : 'Sí, soy yo'}
+            </button>
+            <p className="auth-hint" style={{ marginTop: '16px' }}>
+              ¿No has pedido esto? Cierra esta página y no se cambia nada.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
-            {/* Botón para reenviar el correo de recuperación */}
+  // Paso: el enlace no sirve (expirado, ya usado o incorrecto)
+  if (step === 'link-invalido') {
+    return (
+      <div className="auth-page">
+        <div className="auth-container">
+          <div className="auth-card" style={{ textAlign: 'center' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#eab308', marginBottom: 16 }}>error</span>
+            <h1 className="auth-title">Enlace No Válido</h1>
+            <p className="auth-subtitle" style={{ marginBottom: 24 }}>{error}</p>
+
             <button type="button" onClick={() => { setStep('form'); tokenRef.current = ''; setEmail(''); setError(''); }} className="auth-submit" style={{ background: 'rgba(255,255,255,0.1)' }}>
-              Reenviar correo
+              Solicitar un enlace nuevo
             </button>
           </div>
         </div>

@@ -354,11 +354,16 @@ services:
       DB_PORT: 3306           # Puerto estándar de MySQL dentro de la red Docker
 
       # Configuración de correo electrónico para envío de notificaciones.
+      # Sin EMAIL_HOST_PASSWORD, settings usa el backend de consola y los
+      # correos NO salen: acaban en `docker compose logs backend`. Gmail usa
+      # 587 + STARTTLS con una App Password (ver .env.example).
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-${EMAIL_HOST_USER}}
       EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
       EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-20}
 
       # Tiempos de expiración de tokens JWT para seguridad.
       # AccessToken: 15 minutos (acceso breve reduce riesgo si se compromete).

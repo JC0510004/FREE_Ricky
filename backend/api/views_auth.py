@@ -91,10 +91,10 @@ def _enviar_verificacion_email(usuario):
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
-                        <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
-                          Haz clic en "Sí, soy yo" para confirmar tu correo y poder jugar.
-                          El enlace expira en 60 minutos. Si no creaste esta cuenta, puedes ignorar este correo.
-                        </p>
+                          <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
+                            Abre <strong>"Sí, soy yo"</strong> y pulsa el botón de la página para confirmar tu correo y poder jugar.
+                            El enlace expira en 60 minutos. Si no creaste esta cuenta, puedes ignorar este correo.
+                          </p>
                       </td>
                     </tr>
                   </table>
@@ -114,7 +114,7 @@ def _enviar_verificacion_email(usuario):
             f'¿Eres tú? Se creó la cuenta {usuario.username} con el correo {usuario.email}.\n\n'
             f'Sí, soy yo: {si_url}\n'
             f'No, cancelar: {no_url}\n\n'
-            f'Haz clic en "Sí, soy yo" para confirmar tu correo y poder jugar.\n'
+            f'Abre "Sí, soy yo" y pulsa el botón de la página para confirmar tu correo.\n'
             f'El enlace expira en 60 minutos. Si no creaste esta cuenta, ignora este correo.'
         ),
         html_message=html_message,

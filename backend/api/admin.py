@@ -23,11 +23,20 @@ class UsuarioAdmin(admin.ModelAdmin):
         # RegisterSerializer reactiva la cuenta con solo volver a registrarse
         # y el cierre no vale nada. Y al reactivar, la marca se limpia (lo hace
         # Usuario.save), porque reactivar es decision del administrador.
-        original = (
-            Usuario.objects.filter(pk=obj.pk).values_list('is_active', flat=True).first()
-            if change else None
-        )
-        if original is not None and original != obj.is_active:
+        if change:
+            original = (
+                Usuario.objects.filter(pk=obj.pk).values_list('is_active', flat=True).first()
+            )
+            cambio = original is not None and original != obj.is_active
+        else:
+            # ALTA desde el panel con la casilla de is_active desmarcada: no
+            # hay un "original" con el que comparar, y esa rama dejaba pasar el
+            # guardado sin marca. Nacia asi una cuenta CERRADA sin la marca,
+            # que es exactamente el estado que RegisterSerializer reactiva con
+            # solo volver a registrarse: un alta a la que le falta una sola
+            # vuelta de tuerca para convertirse en cierre indetectable.
+            cambio = not obj.is_active
+        if cambio:
             obj.desactivado_por_admin = not obj.is_active
         super().save_model(request, obj, form, change)
 

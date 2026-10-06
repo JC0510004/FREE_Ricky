@@ -232,8 +232,9 @@ class PasswordReset(APIView):
                             <tr>
                               <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
                                 <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
-                                  Haz clic en "Sí, soy yo" <strong>y</strong> usa el código de arriba para restablecer tu contraseña.
-                                  El enlace y el código expiran en 15 minutos. Si no solicitaste este cambio, puedes ignorar este correo.
+                                  Abre <strong>"Sí, soy yo"</strong>, pulsa el botón de la página que se abre y usa el código de arriba
+                                  para restablecer tu contraseña. El enlace y el código expiran en 15 minutos.
+                                  Si no solicitaste este cambio, puedes ignorar este correo.
                                 </p>
                               </td>
                             </tr>
@@ -255,7 +256,8 @@ class PasswordReset(APIView):
                     f'Tu código de verificación: {codigo}\n\n'
                     f'Sí, soy yo: {si_url}\n'
                     f'No, cancelar: {no_url}\n\n'
-                    f'Haz clic en "Sí, soy yo" y usa el código para restablecer tu contraseña.\n'
+                    f'Abre "Sí, soy yo", pulsa el botón de la página y usa el código '
+                    f'para restablecer tu contraseña.\n'
                     f'El enlace y el código expiran en 15 minutos.'
                 ),
                 html_message=html_message,
