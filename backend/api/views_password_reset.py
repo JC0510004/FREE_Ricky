@@ -23,9 +23,12 @@ from .throttles import (
     CodigoResetThrottle,
     ConfirmarIdentidadThrottle,
     VerificarConfirmacionThrottle,
+    ConfirmarPasswordResetThrottle,
 )
 from .email_utils import enviar_email
+from .views_auth import _set_refresh_cookie
 
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
 
@@ -204,17 +207,18 @@ class PasswordReset(APIView):
                       <tr>
                         <td style="padding:48px 40px 40px;">
                           <div style="width:56px;height:56px;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);border-radius:50%;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;">
-                            <span style="font-size:24px;color:#ffffff;">?</span>
+                            <span style="font-size:24px;color:#ffffff;">&#9993;</span>
                           </div>
-                          <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a2e;text-align:center;">¿Eres tú?</h1>
+                          <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a2e;text-align:center;">Restablece tu contraseña</h1>
                           <p style="margin:0 0 28px;font-size:14px;color:#6b7280;text-align:center;line-height:1.5;">
-                            Se solicitó un restablecimiento de contraseña para la cuenta<br/>
-                            <strong style="color:#1a1a2e;">{email}</strong>
+                            Solicitaste restablecer la contraseña de la cuenta<br/>
+                            <strong style="color:#1a1a2e;">{email}</strong><br/>
+                            Pulsa el botón, escribe el código de abajo y pon tu contraseña nueva.
                           </p>
                           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
                             <tr>
                               <td align="center">
-                                <a href="{si_url}" style="display:inline-block;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);color:#ffffff;text-decoration:none;padding:14px 48px;border-radius:8px;font-size:15px;font-weight:500;letter-spacing:0.3px;">Sí, soy yo</a>
+                                <a href="{si_url}" style="display:inline-block;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);color:#ffffff;text-decoration:none;padding:14px 48px;border-radius:8px;font-size:15px;font-weight:500;letter-spacing:0.3px;">Restablecer mi contraseña</a>
                               </td>
                             </tr>
                             <tr>
@@ -232,9 +236,8 @@ class PasswordReset(APIView):
                             <tr>
                               <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
                                 <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
-                                  Abre <strong>"Sí, soy yo"</strong>, pulsa el botón de la página que se abre y usa el código de arriba
-                                  para restablecer tu contraseña. El enlace y el código expiran en 15 minutos.
-                                  Si no solicitaste este cambio, puedes ignorar este correo.
+                                  El enlace y el código caducan en 15 minutos.
+                                  Si no solicitaste este cambio, ignora este correo: no se cambia nada.
                                 </p>
                               </td>
                             </tr>
@@ -250,15 +253,15 @@ class PasswordReset(APIView):
             """
 
             enviar_email(
-                subject='¿Eres tú? - FREE RICKY',
+                subject='Restablece tu contraseña - FREE RICKY',
                 message=(
-                    f'¿Eres tú? Se solicitó un restablecimiento de contraseña para {email}.\n\n'
-                    f'Tu código de verificación: {codigo}\n\n'
-                    f'Sí, soy yo: {si_url}\n'
+                    f'Solicitaste restablecer la contraseña de la cuenta {email}.\n\n'
+                    f'Pulsa el botón, escribe este código y pon tu contraseña nueva:\n\n'
+                    f'Código de verificación: {codigo}\n'
+                    f'Restablecer mi contraseña: {si_url}\n'
                     f'No, cancelar: {no_url}\n\n'
-                    f'Abre "Sí, soy yo", pulsa el botón de la página y usa el código '
-                    f'para restablecer tu contraseña.\n'
-                    f'El enlace y el código expiran en 15 minutos.'
+                    f'El enlace y el código caducan en 15 minutos. Si no fuiste tú, '
+                    f'ignora este correo: no se cambia nada.'
                 ),
                 html_message=html_message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
@@ -279,7 +282,10 @@ class PasswordReset(APIView):
 
 class PasswordResetConfirm(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [PasswordResetThrottle]
+    # Scope propio ('password_reset_confirm'), no el del envio de correos
+    # ('password_reset'): reintentar el formulario no debe consumir la cuota
+    # de solicitudes de reset, que es la que limita los emails.
+    throttle_classes = [ConfirmarPasswordResetThrottle]
 
     @extend_schema(
         tags=['Contraseña'],
@@ -321,8 +327,10 @@ class PasswordResetConfirm(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # El token solo es válido si el usuario confirmó su identidad desde
-            # el enlace del correo ("Sí, soy yo"). El frontend ya lo exige así.
+            # El token solo es válido si la página abierta desde el enlace del
+            # correo confirmó la identidad (POST /password-reset/confirmar/).
+            # El frontend lo hace al cargar; sin ese paso, un token sin usar
+            # no sirve para cambiar la contraseña.
             if not reset_record.confirmado:
                 return Response(
                     {'error': 'Primero confirma tu identidad desde el enlace del correo'},
@@ -389,7 +397,24 @@ class PasswordResetConfirm(APIView):
             )
             audit_logger.info(f"RESET_PASSWORD_COMPLETADO user_id={usuario.id} username={usuario.username}")
 
-            return Response({'mensaje': 'Contraseña restablecida correctamente'})
+            # Auto-login: el token + el código de 6 dígitos ya demuestran la
+            # propiedad de la cuenta, así que se emiten las credenciales en vez
+            # de obligar a escribir la contraseña recién cambiada otra vez.
+            # OJO: se emiten DESPUÉS de arriba, donde los refresh tokens
+            # antiguos se meten en la blacklist.
+            refresh = RefreshToken.for_user(usuario)
+            response = Response({
+                'mensaje': 'Contraseña restablecida correctamente',
+                'usuario': {
+                    'id': usuario.id,
+                    'username': usuario.username,
+                    'email': usuario.email,
+                    'rol': usuario.rol,
+                },
+                'access_token': str(refresh.access_token),
+            })
+            _set_refresh_cookie(response, str(refresh))
+            return response
         except ConfirmacionReset.DoesNotExist:
             return Response(
                 {'error': 'Token inválido o expirado'},

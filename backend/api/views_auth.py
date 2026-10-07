@@ -38,21 +38,29 @@ def _enviar_verificacion_email(usuario):
     token = uuid4().hex
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     with transaction.atomic():
-        VerificacionEmail.objects.filter(usuario=usuario).delete()
+        # Los tokens anteriores NO se invalidan al reenviar: el enlace del
+        # primer correo sigue siendo de un solo uso y caduca en 60 minutos,
+        # pero no se convierte en un 400 al pulsarse. Antes se borraban todos
+        # y bastaba pulsar 'Reenviar' para tumbar el propio enlace del registro
+        # (el usuario abre el primer correo y veía 'token inválido' mientras el
+        # correo más reciente funcionaba). Solo se limpian los ya caducados.
+        VerificacionEmail.objects.filter(
+            usuario=usuario,
+            created_at__lt=timezone.now() - timezone.timedelta(minutes=VerificacionEmail.TOKEN_EXPIRY_MINUTES),
+        ).delete()
         VerificacionEmail.objects.create(usuario=usuario, token_hash=token_hash)
 
     si_url = f"{settings.FRONTEND_URL}/verificar-email?token={token}"
     no_url = f"{settings.FRONTEND_URL}/login"
 
-    # Plantilla con "¿Eres tú?" en lugar de un enlace de confirmación directo,
-    # igual que la del restablecimiento de contraseña. Motivo: sin este paso
-    # intermedio, cualquier cosa que.visitara la URL por su cuenta confirmaría
-    # la cuenta. Y eso no es solo una hipótesis: los clientes de correo y sus
-    # sistemas antiphishing (Outlook Safe Links, Proofpoint, barra de antivirus
-    # del navegador) siguen los enlaces en segundo plano para analizarlos, y
-    # con la verificación automática al montar la página consumían el token de un
-    # solo uso sin que el usuario hubiera pulsado nada, dejándolo inválido.
-    # Al pedir un clic, ese rastreo previo no completa la verificación.
+    # El enlace verifica directo al abrir la página, igual que el de
+    # restablecer contraseña: quien hace clic ya demostró posesión del correo,
+    # así que no se le vuelve a preguntar "¿Eres tú?". Esto NO consume el token
+    # durante el rastreo antiphishing (Outlook Safe Links, Proofpoint,
+    # antivirus del navegador): esos rastreadores hacen GET de la URL sin
+    # ejecutar JS, y la verificación se dispara por POST desde la aplicación
+    # (VerificarEmail.jsx, al montar). Solo el navegador real del usuario llega
+    # a montar la página y consumir el token de un solo uso.
     html_message = f"""
     <!DOCTYPE html>
     <html>
@@ -65,9 +73,9 @@ def _enviar_verificacion_email(usuario):
               <tr>
                 <td style="padding:48px 40px 40px;">
                   <div style="width:56px;height:56px;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);border-radius:50%;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;">
-                    <span style="font-size:24px;color:#ffffff;">?</span>
+                    <span style="font-size:24px;color:#ffffff;">&#9993;</span>
                   </div>
-                  <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a2e;text-align:center;">¿Eres tú?</h1>
+                  <h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#1a1a2e;text-align:center;">Verifica tu correo</h1>
                   <p style="margin:0 0 28px;font-size:14px;color:#6b7280;text-align:center;line-height:1.5;">
                     Se creó la cuenta <strong style="color:#1a1a2e;">{usuario.username}</strong><br/>
                     con el correo <strong style="color:#1a1a2e;">{usuario.email}</strong>
@@ -75,7 +83,9 @@ def _enviar_verificacion_email(usuario):
                   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
                     <tr>
                       <td align="center">
-                        <a href="{si_url}" style="display:inline-block;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);color:#ffffff;text-decoration:none;padding:14px 48px;border-radius:8px;font-size:15px;font-weight:500;letter-spacing:0.3px;">Sí, soy yo</a>
+                        <a href="{si_url}"
+                          style="display:inline-block;background:linear-gradient(135deg,#9FE0C3,#9FBCE0);color:#ffffff;text-decoration:none;
+                          padding:14px 48px;border-radius:8px;font-size:15px;font-weight:500;letter-spacing:0.3px;">Verificar mi correo</a>
                       </td>
                     </tr>
                     <tr>
@@ -92,7 +102,7 @@ def _enviar_verificacion_email(usuario):
                     <tr>
                       <td style="border-top:1px solid #e5e7eb;padding-top:20px;">
                           <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.5;">
-                            Abre <strong>"Sí, soy yo"</strong> y pulsa el botón de la página para confirmar tu correo y poder jugar.
+                            Abre <strong>"Verificar mi correo"</strong> y tu correo quedará confirmado al instante: podrás jugar de inmediato.
                             El enlace expira en 60 minutos. Si no creaste esta cuenta, puedes ignorar este correo.
                           </p>
                       </td>
@@ -109,12 +119,12 @@ def _enviar_verificacion_email(usuario):
     """
 
     enviar_email(
-        subject='¿Eres tú? - FREE RICKY',
+        subject='Verifica tu correo - FREE RICKY',
         message=(
-            f'¿Eres tú? Se creó la cuenta {usuario.username} con el correo {usuario.email}.\n\n'
-            f'Sí, soy yo: {si_url}\n'
+            f'Verifica tu correo. Se creó la cuenta {usuario.username} con el correo {usuario.email}.\n\n'
+            f'Verificar mi correo: {si_url}\n'
             f'No, cancelar: {no_url}\n\n'
-            f'Abre "Sí, soy yo" y pulsa el botón de la página para confirmar tu correo.\n'
+            f'Al abrir el enlace tu correo quedará confirmado y podrás jugar de inmediato.\n'
             f'El enlace expira en 60 minutos. Si no creaste esta cuenta, ignora este correo.'
         ),
         html_message=html_message,
@@ -124,9 +134,11 @@ def _enviar_verificacion_email(usuario):
 
 
 def _set_refresh_cookie(response, response_obj):
-    # Secure: en producción siempre; en DEBUG solo si se fuerza HTTPS detrás
-    # del proxy (SECURE_SSL_REDIRECT=True), para no romper el desarrollo local.
-    _secure = not settings.DEBUG or getattr(settings, 'SECURE_SSL_REDIRECT', False)
+    # Secure controlada por REFRESH_COOKIE_SECURE (config/settings.py): Secure
+    # en producción, no en desarrollo, pero forzable desde .env para los
+    # despliegues reales por http (p. ej. una IP de LAN sin TLS), donde un
+    # navegador descartaría la cookie Secure y la sesión moriría a los 15 min.
+    _secure = settings.REFRESH_COOKIE_SECURE
     response.set_cookie(
         'refresh_token',
         response_obj,

@@ -378,6 +378,13 @@ services:
       # Redirección SSL en producción: fuerza HTTPS para todas las peticiones.
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
 
+      # `Secure` en la cookie de refresh. Default: True en producción, False en
+      # DEBUG (settings.py). Forzarla a False en un despliegue real por http
+      # (p. ej. FRONTEND_BIND=0.0.0.0 para probar desde el móvil en la LAN sin
+      # TLS): los navegadores descartan una cookie Secure fuera de localhost y
+      # la sesión moriría a los 15 minutos.
+      REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-}
+
       # Migraciones al arrancar el contenedor.
       #
       # entrypoint.sh ejecutaba `manage.py migrate` SIEMPRE, en cada arranque y en

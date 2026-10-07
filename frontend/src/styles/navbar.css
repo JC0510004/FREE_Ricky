@@ -434,6 +434,17 @@
     cursor: default;
 }
 
+/* Error del reenvío: se muestra en su propia línea, en rojo oscuro legible
+   sobre el fondo ámbar del banner. */
+.verify-banner-error {
+    flex-basis: 100%;
+    text-align: center;
+    color: #6b1111;
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
 @media (max-width: 768px) {
     .verify-banner {
         top: 84px;

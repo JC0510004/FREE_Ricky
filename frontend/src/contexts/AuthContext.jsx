@@ -131,6 +131,19 @@ export function AuthProvider({ children }) {
     return response
   }, [])
 
+  // ─── FUNCIÓN: INICIAR SESIÓN CON UNA RESPUESTA YA RECIBIDA ─────────
+  // Igual que register() con auto-login: cuando el backend devuelve
+  // usuario + access_token en la misma respuesta (p. ej. tras restablecer
+  // la contraseña), se persiste la sesión sin volver a pedir credenciales.
+  const loginWithResponse = useCallback((data) => {
+    const payload = authService.establishSession(data)
+    if (payload) {
+      setUser(payload.usuario)
+      setTokenReady(true)
+    }
+    return payload
+  }, [])
+
   // ─── FUNCIÓN: CERRAR SESIÓN ───────────────────────────────────────
   // Llama al servicio de auth para cerrar la sesión (notifica al backend
   // y limpia tokens) y luego pone el usuario en null para que la UI
@@ -227,8 +240,8 @@ export function AuthProvider({ children }) {
   // lo que causaría re-renderizados innecesarios en todos los
   // componentes hijos que consumen este contexto.
   const value = useMemo(
-    () => ({ user, isAuthenticated, isLoading, tokenReady, login, register, logout, updateUser, checkSession }),
-    [user, isAuthenticated, isLoading, tokenReady, login, register, logout, updateUser, checkSession]
+    () => ({ user, isAuthenticated, isLoading, tokenReady, login, loginWithResponse, register, logout, updateUser, checkSession }),
+    [user, isAuthenticated, isLoading, tokenReady, login, loginWithResponse, register, logout, updateUser, checkSession]
   )
 
   // ─── RENDERIZADO ───────────────────────────────────────────────────

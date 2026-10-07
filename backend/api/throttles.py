@@ -113,3 +113,45 @@ class VerificarConfirmacionThrottle(PublicIPThrottle):
     # generador de logs sin control. 30 por hora da margen a un flujo real
     # (el frontend lo consulta al cargar la vista) sin abrir la puerta.
     scope = 'password_reset_verificar'
+
+
+class ConfirmarPasswordResetThrottle(PublicIPThrottle):
+    # POST /api/password-reset/confirm/ - fija la nueva contrasena. Estuvo con
+    # `PasswordResetThrottle` (scope 'password_reset', 3/hora), el MISMO cubo
+    # que limitaba el envio del email: confirmar consumia la cuota de correos,
+    # y un usuario que reintentaba el formulario (codigo o contrasena fallidos)
+    # se quedaba sin poder pedir un reset nuevo durante una hora. Scope propio:
+    # aqui se limita la confirmacion en si, no los correos.
+    scope = 'password_reset_confirm'
+
+
+class ReenviarVerificacionThrottle(SimpleRateThrottle):
+    # POST /api/verificar-email/reenviar/ - envia un correo de verificacion
+    # nuevo. No tenia throttle: con el JWT en memoria, un usuario autenticado
+    # podia martillear el endpoint y rellenar su propia bandeja (se observaron
+    # 7 envios en 40 segundos). Limita el ENVIO de emails; la validacion del
+    # token en si sigue con su propia cuota ('verificar_email').
+    #
+    # Cuota por identidad, no por IP. El endpoint ahora es publico (permite
+    # reenviar sin sesion pidiendo el email) y detras de nginx todas las IPs de
+    # una misma red llegan con el mismo REMOTE_ADDR (el del proxy): con la cuota
+    # por IP, un unico balde compartia los reenvios de TODA la LAN y ademas los
+    # intentos anonimos (incluso para correos que no existen) lo agotaban,
+    # bloqueando el reenvio legitimo durante una hora. Reparto:
+    #   - Con sesion: el balde es del USUARIO (5/hora). El banner reenvia con
+    #     sesion abierta: ya no colisiona con el resto de la LAN ni con intentos
+    #     anonimos de la misma IP.
+    #   - Sin sesion: el balde es de la IP (misma regla de confianza que
+    #     PublicIPThrottle: la cabecera solo se honra si viene de un proxy de
+    #     confianza), asi el envio anonimo sigue limitado por red.
+    scope = 'reenviar_verificacion'
+
+    def get_cache_key(self, request, view):
+        if getattr(request, 'user', None) and getattr(request.user, 'is_authenticated', False):
+            # Balde por usuario, hasheado igual que las IPs para no guardar
+            # identificadores a claro en la clave de Redis.
+            ident = 'usuario:' + hashlib.sha256(str(request.user.pk).encode()).hexdigest()
+        else:
+            ip = get_client_ip(request) or 'ip-desconocida'
+            ident = 'ip:' + hashlib.sha256(ip.encode()).hexdigest()
+        return self.cache_format % {'scope': self.scope, 'ident': ident}

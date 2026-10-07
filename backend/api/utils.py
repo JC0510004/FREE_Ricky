@@ -9,6 +9,8 @@ import logging
 # Se usa para prevenir ataques XSS (Cross-Site Scripting) en entradas de usuario
 import bleach
 
+from rest_framework.exceptions import Throttled
+
 # Manejador de excepciones por defecto de Django REST Framework;
 # se extiende para personalizar las respuestas de error
 from rest_framework.views import exception_handler
@@ -41,6 +43,24 @@ def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
 
     if response is not None:
+        # ─── CASO 0: Rate limiting ────────────────────────────────────
+        # Un 429 de throttle con `detail` en inglés era ilegible en el frontend
+        # y caía en el fallback genérico ("Error en la solicitud"). Se devuelve
+        # un mensaje claro (y con el tiempo de espera si DRF lo conoce) usando
+        # la clave `error`, que las páginas ya saben renderizar.
+        if isinstance(exc, Throttled):
+            wait = exc.wait
+            if wait is not None and wait >= 60:
+                msg = f'Demasiados intentos. Espera {int(wait // 60)} minuto(s) antes de intentarlo de nuevo.'
+            elif wait is not None:
+                msg = f'Demasiados intentos. Espera {int(wait)} segundo(s) antes de intentarlo de nuevo.'
+            else:
+                msg = 'Demasiados intentos. Espera un poco y vuelve a intentarlo.'
+            return Response(
+                {'error': msg},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         # ─── CASO 1: Excepción manejada por DRF ──────────────────────────
         # Convierte los datos de error a un formato seguro de solo strings.
         # Esto evita que objetos complejos o listas anidadas se filtren

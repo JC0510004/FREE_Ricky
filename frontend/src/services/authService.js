@@ -79,6 +79,19 @@ export const authService = {
     return response
   },
 
+  // ─── MÉTODO: ESTABLECER SESIÓN DESDE UNA RESPUESTA ─────────────────
+  // Persiste la sesión a partir de una respuesta del backend que ya trae
+  // usuario + access_token (registro con auto-login o restablecimiento de
+  // contraseña). No hace ninguna petición: solo guarda lo que llega.
+  // Retorna: el payload si había credenciales, null si no.
+  establishSession(data) {
+    if (!data?.access_token || !data?.usuario) return null
+
+    localStorage.setItem(USER_KEY, JSON.stringify(data.usuario))
+    setAccessToken(data.access_token)
+    return data
+  },
+
   // ─── MÉTODO: CIERRE DE SESIÓN ─────────────────────────────────────
   // Cierra la sesión del usuario actual. Primero notifica al backend
   // (para invalidar el refresh token en la cookie del servidor) y luego
@@ -109,6 +122,17 @@ export const authService = {
   // los datos del usuario sincronizados con el backend.
   async verifySession() {
     try {
+      // El access token vive SOLO en memoria (tokenStore), así que tras un F5
+      // no hay cabecera que enviar: /verify/ responde 401 con
+      // "Authentication credentials were not provided", que el interceptor de
+      // axios NO considera renovable (solo lo hace ante `token_not_valid`) y
+      // devolvía null → la sesión se tiraba en cada recarga. Renovamos con la
+      // cookie refresh ANTES de mirar, que es para lo que está este método
+      // según la documentación de tokenStore.
+      if (!getAccessToken()) {
+        const res = await API.post('/token/refresh/')
+        if (res?.data?.access_token) setAccessToken(res.data.access_token)
+      }
       const { data } = await API.get('/verify/')
       return data
     } catch {

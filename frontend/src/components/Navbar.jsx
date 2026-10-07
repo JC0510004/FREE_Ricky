@@ -94,16 +94,20 @@ export default function Navbar() {
   // Estado para el reenvío del correo de confirmación desde el propio banner.
   const [resending, setResending] = useState(false);
   const [resendSent, setResendSent] = useState(false);
+  const [resendError, setResendError] = useState('');
 
   // ─── Manejador de reenvío del correo de verificación ───
+  // El error se muestra en el banner: un 429 (cuota de reenvíos) o un fallo
+  // de red no pueden quedar mudos, que era un botón "muerto" sin feedback.
   const handleResendVerification = useCallback(async () => {
     setResending(true);
     setResendSent(false);
+    setResendError('');
     try {
       await API.post('/verificar-email/reenviar/');
       setResendSent(true);
-    } catch {
-      setResendSent(false);
+    } catch (err) {
+      setResendError(err?.response?.data?.error || 'No se pudo reenviar el correo. Intenta más tarde.');
     } finally {
       setResending(false);
     }
@@ -256,6 +260,9 @@ export default function Navbar() {
           >
             {resendSent ? 'Correo enviado' : resending ? 'Enviando...' : 'Reenviar correo'}
           </button>
+          {resendError && (
+            <span className="verify-banner-error" role="alert">{resendError}</span>
+          )}
         </div>
       )}
     </>

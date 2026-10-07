@@ -156,6 +156,145 @@ class ThrottleNoEvadibleTests(TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# CUOTA DEL REENVÍO DE VERIFICACIÓN: POR IDENTIDAD, NO POR IP
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# `reenviar_verificacion` estuvo con PublicIPThrottle (siempre por IP). Con el
+# endpoint vuelto público (acepta un email sin sesión) la cuota por IP dejó de
+# describir el flujo real: detras de nginx todas las IPs de una misma LAN llegan
+# con el mismo REMOTE_ADDR (el del proxy), así que un único balde de 5/hora
+# compartía los reenvíos de toda la red, y además los intentos anónimos (incluso
+# para correos que no existen) lo agotaban y bloqueaban el reenvío legítimo una
+# hora entera. La cuota pasó a ser por identidad: usuario autenticado (su balde)
+# o IP cuando es anónimo. Estos tests fijan ese reparto.
+class ReenviarVerificacionPorIdentidadTests(TestCase):
+    def setUp(self):
+        django_cache.clear()
+        self.usuario_a = Usuario.objects.create_user(
+            username='reenvio-a',
+            email='reenvio-a@example.com',
+            password='AtacantePass123!',
+        )
+        self.usuario_b = Usuario.objects.create_user(
+            username='reenvio-b',
+            email='reenvio-b@example.com',
+            password='AtacantePass123!',
+        )
+        self._rates = dict(django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'])
+        self.client = APIClient()
+
+    def tearDown(self):
+        django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'].update(self._rates)
+        django_cache.clear()
+
+    def _cuota(self, scope, rate):
+        django_settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'][scope] = rate
+
+    def _reenviar(self):
+        return self.client.post(reverse('reenviar_verificacion'), {}, format='json')
+
+    def test_autenticado_agota_su_propia_cuota(self):
+        """Con sesión el balde es del usuario: tras el cupo toca 429."""
+        self._cuota('reenviar_verificacion', '2/minute')
+        self.client.force_authenticate(user=self.usuario_a)
+
+        for _ in range(2):
+            self.assertNotEqual(
+                self._reenviar().status_code,
+                status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        self.assertEqual(
+            self._reenviar().status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'El usuario autenticado no puede reenviar sin limite',
+        )
+
+    def test_usuarios_distintos_no_comparten_cuota(self):
+        """Agotar el balde de A no bloquea a B."""
+        self._cuota('reenviar_verificacion', '2/minute')
+        self.client.force_authenticate(user=self.usuario_a)
+        for _ in range(2):
+            self._reenviar()
+        self.assertEqual(self._reenviar().status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+        self.client.force_authenticate(user=self.usuario_b)
+        self.assertNotEqual(
+            self._reenviar().status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'La cuota es por usuario: un usuario no puede bloquear el reenvio de otro',
+        )
+
+    def test_anonimo_agota_su_cuota_por_ip(self):
+        """Sin sesión la cuota es por IP, y un intento anónimo también consume."""
+        self._cuota('reenviar_verificacion', '2/minute')
+        for _ in range(2):
+            self.client.post(
+                reverse('reenviar_verificacion'),
+                {'email': 'nadie@example.com'},
+                format='json',
+            )
+        response = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'email': 'nadie@example.com'},
+            format='json',
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'El reenvío anónimo también tiene tope por IP',
+        )
+
+    def test_anonimo_y_autenticado_tienen_baldes_separados(self):
+        """Agotar el balde anónimo de la IP no bloquea al usuario con sesión.
+
+        Es la diferencia deliberada con el resto de endpoints públicos: el reenvío
+        con sesión es del usuario, así que el banner no muere porque la LAN gastó
+        la cuota anónima de la IP.
+        """
+        self._cuota('reenviar_verificacion', '2/minute')
+        for _ in range(2):
+            self.client.post(
+                reverse('reenviar_verificacion'),
+                {'email': 'nadie@example.com'},
+                format='json',
+            )
+        self.assertEqual(
+            self.client.post(
+                reverse('reenviar_verificacion'),
+                {'email': 'nadie@example.com'},
+                format='json',
+            ).status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+        self.client.force_authenticate(user=self.usuario_a)
+        self.assertNotEqual(
+            self._reenviar().status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'Agotar la cuota anónima de la IP no puede bloquear el reenvío con sesión',
+        )
+
+    def test_agotar_balde_de_usuario_no_bloquea_anonimo_de_la_misma_ip(self):
+        """La dirección inversa: la cuota del usuario no toca el balde anónimo IP."""
+        self._cuota('reenviar_verificacion', '2/minute')
+        self.client.force_authenticate(user=self.usuario_a)
+        for _ in range(2):
+            self._reenviar()
+        self.assertEqual(self._reenviar().status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+        self.client.force_authenticate(user=None)
+        self.assertNotEqual(
+            self.client.post(
+                reverse('reenviar_verificacion'),
+                {'email': 'nadie@example.com'},
+                format='json',
+            ).status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'Gastar el balde del usuario no puede bloquear los reenvíos anónimos de la IP',
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # INVARIANTES: por qué existen estos dos tests
 # ═══════════════════════════════════════════════════════════════════════════════
 #

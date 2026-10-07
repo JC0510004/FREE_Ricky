@@ -1,52 +1,92 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import API from '../api/axios'
+import { useAuth } from '../contexts/useAuth'
 
 export default function VerificarEmail() {
   const navigate = useNavigate()
+  const { loginWithResponse } = useAuth()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') || ''
 
-  // Estado del flujo: 'confirmar' → 'verificando' → 'exito' | 'error'
+  // Estado del flujo: 'verificando' → 'exito' | 'error'
   //
-  // 'confirmar' es un paso intermedio deliberado, no un descuido: el enlace del
-  // correo abre esta página pero NO verifica nada por sí solo, hace falta pulsar
-  // el botón. Los clientes de correo y sus sistemas antiphishing (Outlook Safe
-  // Links, Proofpoint, el antivirus del navegador) siguen los enlaces en
-  // segundo plano para analizarlos, y si se verificara al montar la página
-  // consumirían el token de un solo uso sin que nadie hubiera pulsado nada,
-  // dejándolo invalidado justo cuando el usuario llega a pulsarlo.
-  const [status, setStatus] = useState('confirmar')
+  // El enlace verifica directo al abrirse, igual que el de restablecer
+  // contraseña: quien lo abre ya demostró posesión del correo, así que no hay
+  // un segundo "Sí, soy yo". Los rastreadores antiphishing (Outlook Safe
+  // Links, Proofpoint, el antivirus del navegador) hacen GET de la URL sin
+  // ejecutar JS, así que nunca disparan el POST de abajo: el token de un solo
+  // uso solo se consume cuando el navegador real del usuario monta la página.
+  const [status, setStatus] = useState(token ? 'verificando' : 'error')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [correoReenviado, setCorreoReenviado] = useState(false)
+  const [emailReenvio, setEmailReenvio] = useState('')
+  // El correo a mano solo se pide si hace falta: con el token del enlace en la
+  // URL el reenvío identifica la cuenta por el token (mismo clic que en el PC);
+  // el campo aparece solo al abrir sin token o si el backend no resolvió.
+  const [necesitaCorreo, setNecesitaCorreo] = useState(() => !token)
+  // Verificar el email abre sesión (el backend devuelve tokens como el reset):
+  // con sesión el botón final lleva a /home, sin ella al login.
+  const [sesionAbierta, setSesionAbierta] = useState(false)
 
-  // ─── Confirmación explícita del token ───
-  // Solo se llama al pulsar el botón, nunca al montar el componente.
-  const handleConfirmar = async () => {
-    setIsLoading(true)
-    setError('')
-    try {
-      await API.post('/verificar-email/', { token })
-      setStatus('exito')
-    } catch {
-      setStatus('error')
-      setError('El enlace es inválido o ha expirado. Puedes solicitarlo de nuevo.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Dispara la verificación una sola vez, aunque React re-ejecute el efecto
+  // (StrictMode en desarrollo) o la página reutilice el mismo token.
+  const verificadaRef = useRef(false)
+
+  // ─── Verificación automática al abrir el enlace ───
+  // Solo se llama si hay token y una sola vez; nunca en un GET de rastreo.
+  useEffect(() => {
+    if (!token || verificadaRef.current) return
+    verificadaRef.current = true
+    const controller = new AbortController()
+
+    API.post('/verificar-email/', { token }, { signal: controller.signal })
+      .then((res) => {
+        if (controller.signal.aborted) return
+        // Auto-login (mismo contrato que /password-reset/confirm/).
+        setSesionAbierta(!!loginWithResponse(res.data))
+        setStatus('exito')
+      })
+      .catch((err) => {
+        if (controller.signal.aborted || err?.code === 'ERR_CANCELED') return
+        setStatus('error')
+        // Muestra el motivo real cuando el backend lo da (p. ej. 429 de la
+        // cuota compartida de la LAN), en vez del mensaje genérico.
+        const data = err?.response?.data
+        setError(data?.error || data?.detail || 'El enlace es inválido o ha expirado. Puedes solicitarlo de nuevo.')
+      })
+
+    return () => controller.abort()
+  }, [token, loginWithResponse])
 
   // ─── Reenvío del correo de verificación ───
-  // Requiere sesión iniciada (backend honra la cookie/refresh si existe).
+  // El backend acepta el email sin sesión (el enlace se abre en el navegador
+  // interno del correo del móvil, donde no hay cookie). Con token en la URL el
+  // reenvío se hace solo por el token: nada que teclear. El email del cuerpo es
+  // la vía de respaldo cuando el token no resuelve (enlace roto/consumido).
   const handleReenviar = async () => {
+    const correo = emailReenvio.trim()
+    const body = {}
+    if (token) body.token = token
+    if (correo) body.email = correo
+
+    if (necesitaCorreo && (!correo || !correo.includes('@'))) {
+      setError('Indica tu correo para reenviar el enlace')
+      return
+    }
     setIsLoading(true)
     setError('')
     try {
-      await API.post('/verificar-email/reenviar/')
+      await API.post('/verificar-email/reenviar/', body)
       setCorreoReenviado(true)
-    } catch {
-      setError('No se pudo reenviar el correo. Intenta más tarde.')
+    } catch (err) {
+      if (err?.response?.status === 400) {
+        setNecesitaCorreo(true)
+        setError('Indica tu correo para reenviar el enlace')
+      } else {
+        setError(err?.response?.data?.error || 'No se pudo reenviar el correo. Intenta más tarde.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -60,31 +100,6 @@ export default function VerificarEmail() {
     <div className="auth-page">
       <div className="auth-container">
         <div className="auth-card" style={{ textAlign: 'center' }}>
-
-          {/* Paso intermedio: el enlace se abrió pero nada se ha verificado aún */}
-          {status === 'confirmar' && token && (
-            <>
-              <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#9FE0C3', marginBottom: 16 }}>
-                help
-              </span>
-              <h1 className="auth-title">¿Eres Tú?</h1>
-              <p className="auth-subtitle" style={{ marginBottom: 24 }}>
-                Pulsa el botón para confirmar que este correo es tuyo. Verificarlo
-                es lo que te permite jugar.
-              </p>
-              <button
-                type="button"
-                onClick={handleConfirmar}
-                className="auth-submit"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Verificando...' : 'Sí, soy yo'}
-              </button>
-              <p className="auth-hint" style={{ marginTop: '16px' }}>
-                ¿No has pedido esto? Cierra esta página: tu cuenta sigue sin verificar.
-              </p>
-            </>
-          )}
 
           {status === 'verificando' && (
             <>
@@ -101,10 +116,13 @@ export default function VerificarEmail() {
               </span>
               <h1 className="auth-title">Correo Verificado</h1>
               <p className="auth-subtitle" style={{ marginBottom: 24 }}>
-                Tu correo electrónico ha sido confirmado. Ya puedes jugar.
+                {sesionAbierta
+                  ? 'Tu correo electrónico ha sido confirmado y tu sesión está abierta.'
+                  : 'Tu correo electrónico ha sido confirmado. Ya puedes jugar.'}
               </p>
-              <button type="button" onClick={() => navigate('/login')} className="auth-submit">
-                Iniciar Sesión
+              {/* Con sesión (auto-login) se entra directo al juego; sin ella, al login */}
+              <button type="button" onClick={() => navigate(sesionAbierta ? '/home' : '/login')} className="auth-submit">
+                {sesionAbierta ? 'Jugar ahora' : 'Iniciar Sesión'}
               </button>
             </>
           )}
@@ -123,15 +141,31 @@ export default function VerificarEmail() {
                   Correo reenviado. Revisa tu bandeja de entrada.
                 </p>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleReenviar}
-                  className="auth-submit"
-                  style={{ background: 'rgba(255,255,255,0.1)', marginBottom: 16 }}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Enviando...' : 'Reenviar correo de verificación'}
-                </button>
+                <>
+                  {necesitaCorreo && (
+                    <div className="auth-field" style={{ textAlign: 'left', marginBottom: 16 }}>
+                      <label htmlFor="email-reenvio">Tu correo electrónico</label>
+                      <input
+                        id="email-reenvio"
+                        type="email"
+                        value={emailReenvio}
+                        onChange={(e) => setEmailReenvio(e.target.value)}
+                        placeholder="tu@email.com"
+                        autoComplete="email"
+                        disabled={isLoading}
+                      />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleReenviar}
+                    className="auth-submit"
+                    style={{ background: 'rgba(255,255,255,0.1)', marginTop: 12 }}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Reenviando...' : 'Reenviar correo de verificación'}
+                  </button>
+                </>
               )}
             </>
           )}

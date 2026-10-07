@@ -417,7 +417,7 @@ class PartidaSerializer(serializers.ModelSerializer):
         model = Partida
         # Campos visibles: IDs, datos del usuario y nivel, estadísticas de la partida
         fields = ['id', 'usuario', 'usuario_username', 'nivel', 'nivel_nombre',
-                  'nivel_dificultad', 'muertes', 'tiempo', 'puntuacion', 'fecha']
+                  'nivel_dificultad', 'muertes', 'tiempo', 'puntuacion', 'fecha', 'completado']
         # Solo lectura: el usuario y nivel se asignan del servidor; la fecha
         # se genera automáticamente al momento de crear la partida
         read_only_fields = ['id', 'usuario', 'usuario_username', 'nivel_nombre',
@@ -434,7 +434,7 @@ class PartidaCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Partida
         # Campos de entrada: nivel elegido y estadísticas de la partida
-        fields = ['nivel', 'muertes', 'tiempo', 'puntuacion']
+        fields = ['nivel', 'muertes', 'tiempo', 'puntuacion', 'completado']
 
     # ─── VALIDACIONES DE RANGO ────────────────────────────────────────────
     # Cada campo numérico tiene validaciones de rango para evitar datos

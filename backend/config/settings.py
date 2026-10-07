@@ -268,9 +268,11 @@ REST_FRAMEWORK = {
         'register': '3/minute',        # Registro: 3 por minuto (anti spam)
         'password_reset': '3/hour',    # Reset password: 3 por hora
         'password_reset_codigo': '10/minute',  # Verificación de código: 10 por minuto (anti fuerza bruta)
+        'password_reset_confirm': '10/hour',   # Fijar la nueva contraseña: scope propio, no consume la cuota de envío
         'change_password': '10/minute', # Cambio de contraseña: 10 por minuto
         'refresh': '30/minute',        # Refresh token: 30 por minuto por IP
-        'verificar_email': '5/hour',   # Verificación de email: evita fuerza bruta por token
+        'verificar_email': '60/hour',   # Verificación de email: no envía correo; el token es de 128 bits (fuerza bruta inviable). 60/h por IP (toda la LAN comparte IP tras nginx)
+        'reenviar_verificacion': '5/hour',   # Reenviar correo de verificación: limita envíos de email
         'password_reset_confirmar': '10/hour',   # Confirmar token del enlace: sin esto era ilimitado
         'password_reset_verificar': '30/hour',   # Consultar si un token está confirmado: sin esto era ilimitado
     },
@@ -317,11 +319,19 @@ if 'test' in sys.argv:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['login'] = '1000/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['admin_login'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['register'] = '1000/minute'
+    # Los límites de tráfico GENERAL (con o sin sesión) también deben
+    # descartar: la suite entera lanza cientos de peticiones por minuto
+    # desde la misma IP y del mismo usuario, y sin relajarlos cualquier
+    # test que caiga a mitad de suite recibe 429.
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['anon'] = '100000/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['user'] = '100000/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_codigo'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_confirm'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['change_password'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['refresh'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['verificar_email'] = '100/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['reenviar_verificacion'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_confirmar'] = '100/minute'
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_verificar'] = '100/minute'
     REST_FRAMEWORK['PAGE_SIZE'] = 100  # Más elementos por página en tests
@@ -329,6 +339,7 @@ if 'test' in sys.argv:
 # En modo DEBUG se relajan los límites para facilitar el desarrollo.
 if DEBUG:
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset'] = '60/minute'
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_confirm'] = '60/minute'
     # También los dos endpoints del enlace de reset. A 10/hora un desarrollador
     # reprobando el flujo en local se topa con el 429 y piensa que está roto.
     REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['password_reset_confirmar'] = '60/minute'
@@ -405,6 +416,20 @@ if not DEBUG:
     _ssl_redirect = os.environ.get('SECURE_SSL_REDIRECT', 'False')
     if _ssl_redirect.lower() == 'true' and 'test' not in sys.argv:
         SECURE_SSL_REDIRECT = True
+
+# `Secure` en la cookie HTTP-only de refresh. El default replica el
+# comportamiento original (Secure en producción, no Secure en desarrollo local
+# con DEBUG), pero se puede forzar desde .env: un despliegue con DEBUG=False
+# servido por http en una IP de LAN (probar desde el móvil sin TLS) hace que
+# los navegadores descarten la cookie Secure fuera de localhost, y la sesión
+# entera moriría a los 15 minutos (cuando expira el access token y no hay
+# refresh que lo renueve). Con REFRESH_COOKIE_SECURE=False en ese entorno la
+# cookie vuelve a funcionar; en producción con HTTPS nunca debe tocarse.
+_cookie_secure = os.environ.get('REFRESH_COOKIE_SECURE', '')
+if _cookie_secure:
+    REFRESH_COOKIE_SECURE = _cookie_secure.lower() in ('1', 'true', 'yes')
+else:
+    REFRESH_COOKIE_SECURE = not DEBUG
 
 # Configuración de sesiones HTTP.
 SESSION_COOKIE_AGE = 1800                    # 30 minutos de expiración de sesión

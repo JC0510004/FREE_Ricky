@@ -57,6 +57,10 @@ frontend/node_modules/
 # Contiene archivos HTML/JS/CSS minificados generados, NO código fuente.
 frontend/dist/
 
+# Cobertura de tests del frontend (vitest coverage): informe HTML/JS generado
+# automáticamente en cada ejecución con --coverage. No es código fuente.
+frontend/coverage/
+
 # ─── DOCKER ────────────────────────────────────────────────────────────────
 # Directorio de datos MySQL montado como volumen por Docker Compose.
 # Contiene la base de datos en formato binario de InnoDB.

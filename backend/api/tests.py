@@ -190,6 +190,230 @@ class RegistroTests(TestCase):
         usuario.refresh_from_db()
         self.assertTrue(usuario.is_verified)
 
+    # Pulsar 'Reenviar' en el banner NO debe tumbar el enlace del primer correo:
+    # el usuario normalmente abre el PRIMER email, que antes quedaba invalidado
+    # (400 "token inválido") por el mero hecho de reenviar.
+    def test_reenviar_no_invalida_token_anterior(self):
+        from api.models import VerificacionEmail
+
+        self.client.post(self.url, self.valid_data, format='json')
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        token_viejo = match.group(1)
+
+        usuario = Usuario.objects.get(username='testuser')
+        self.client.force_authenticate(usuario)
+        resp = self.client.post(reverse('reenviar_verificacion'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 2)
+        # El reenvío no borró el token anterior: siguen vivos ambos.
+        self.assertEqual(VerificacionEmail.objects.count(), 2)
+
+        # El enlace del PRIMER correo sigue siendo válido (de un solo uso).
+        resp = self.client.post(reverse('verificar_email'), {'token': token_viejo}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.is_verified)
+
+    # Verificar el correo abre sesión: el backend devuelve access_token y fija
+    # la cookie de refresh (mismo contrato que /password-reset/confirm/), para
+    # que el flujo desde el móvil (navegador interno del correo, sin sesión
+    # previa) termine jugando sin otro login.
+    def test_verificar_email_inicia_sesion(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        resp = self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('access_token', resp.data)
+        self.assertTrue(resp.data['is_verified'])
+        self.assertEqual(resp.data['usuario']['username'], 'testuser')
+        self.assertIn('refresh_token', resp.cookies)
+        # El access_token emitido sirve realmente: /verify/ lee el perfil.
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {resp.data["access_token"]}')
+        verify = self.client.get(reverse('verify_session'))
+        self.assertEqual(verify.status_code, status.HTTP_200_OK)
+        self.assertTrue(verify.data['authenticated'])
+
+    # El reenvío funciona sin sesión: el enlace se abre en el navegador del
+    # correo del móvil, donde no hay cookie ni JWT. Se pasa el email en el
+    # cuerpo y el token nuevo generado también sirve.
+    def test_reenviar_sin_sesion_con_email_envia_correo(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'email': 'test@gmail.com'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 2)
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[1].body)
+        self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        usuario = Usuario.objects.get(username='testuser')
+        self.assertTrue(usuario.is_verified)
+
+    # Sin sesión y con un email que no existe, la respuesta es la misma
+    # (anti enumeración, criterio idéntico a /password-reset/) y no se envía
+    # nada: no puede servir de oráculo de cuentas existentes.
+    def test_reenviar_sin_sesion_email_inexistente_respuesta_generica(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'email': 'noexiste@gmail.com'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['mensaje'], 'Correo de verificación enviado')
+        self.assertEqual(len(mail.outbox), 1)
+
+    # Igual para una cuenta ya verificada: respuesta idéntica sin enviar correo.
+    def test_reenviar_sin_sesion_cuenta_ya_verificada_no_envia(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'email': 'test@gmail.com'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['mensaje'], 'Correo de verificación enviado')
+        self.assertEqual(len(mail.outbox), 1)
+
+    # Sin sesión y sin email no hay nada que enviar: 400 con explicación.
+    def test_reenviar_sin_sesion_sin_email_rechazado(self):
+        resp = self.client.post(reverse('reenviar_verificacion'), {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # Un token expirado se rechaza pero NO se borra: el usuario, en la misma
+    # página del fallo, pulsa 'Reenviar' y el backend identifica la cuenta por
+    # ese token para mandar otro correo sin pedir el email a mano (móvil).
+    def test_verificar_token_expirado_no_borra_registro(self):
+        from django.utils import timezone as tz
+        from api.models import VerificacionEmail
+
+        self.client.post(self.url, self.valid_data, format='json')
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        registro = VerificacionEmail.objects.get(
+            token_hash=hashlib.sha256(match.group(1).encode()).hexdigest()
+        )
+        registro.created_at = tz.now() - tz.timedelta(minutes=61)
+        registro.save(update_fields=['created_at'])
+
+        resp = self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            VerificacionEmail.objects.filter(token_hash=registro.token_hash).exists(),
+            'El token expirado debe seguir en la BD para que el reenvío por token funcione',
+        )
+
+    # Sin sesión y con el TOKEN del enlace no hay que teclear nada: el backend
+    # resuelve la cuenta por el token y manda un correo nuevo (flujo móvil).
+    def test_reenviar_sin_sesion_con_token_del_enlace_reenvia(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'token': match.group(1)},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 2)
+        nuevo = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[1].body)
+        resp = self.client.post(reverse('verificar_email'), {'token': nuevo.group(1)}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(Usuario.objects.get(username='testuser').is_verified)
+
+    # El caso real del móvil: el enlace caducó, 'Sí soy yo' falla y al pulsar
+    # 'Reenviar' el token expirado (que sigue en la BD) reenvía sin email a mano.
+    def test_reenviar_sin_sesion_con_token_expirado_reenvia(self):
+        from django.utils import timezone as tz
+        from api.models import VerificacionEmail
+
+        self.client.post(self.url, self.valid_data, format='json')
+        match = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        registro = VerificacionEmail.objects.get(
+            token_hash=hashlib.sha256(match.group(1).encode()).hexdigest()
+        )
+        registro.created_at = tz.now() - tz.timedelta(minutes=61)
+        registro.save(update_fields=['created_at'])
+
+        fallo = self.client.post(reverse('verificar_email'), {'token': match.group(1)}, format='json')
+        self.assertEqual(fallo.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'token': match.group(1)},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 2)
+        nuevo = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[1].body)
+        self.client.post(reverse('verificar_email'), {'token': nuevo.group(1)}, format='json')
+        self.assertTrue(Usuario.objects.get(username='testuser').is_verified)
+
+    # Un token que no corresponde a ningún enlace no da pistas: pedir el correo.
+    def test_reenviar_sin_sesion_con_token_invalido_rechazado(self):
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'token': 'a' * 32},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # Si el token no resuelve (enlace roto/consumido) pero el email sí, se
+    # reenvía por el email: el campo sigue siendo la vía de respaldo.
+    def test_reenviar_sin_sesion_token_invalido_y_email_valido_envia(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'token': 'a' * 32, 'email': 'test@gmail.com'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 2)
+
+    # Un enlace antiguo que sigue existiendo (row viva) y apunta a una cuenta
+    # ya verificada no envía nada: genérica igual que con el email, sin delatar
+    # el estado ni confirmar de qué cuenta es.
+    def test_reenviar_sin_sesion_con_token_de_cuenta_ya_verificada_respuesta_generica(self):
+        self.client.post(self.url, self.valid_data, format='json')
+        primer = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[0].body)
+        # Reenvío: deja vivo el primer token y crea otro; se verifica con el nuevo.
+        self.client.post(
+            reverse('reenviar_verificacion'),
+            {'email': 'test@gmail.com'},
+            format='json',
+        )
+        segundo = re.search(r'verificar-email\?token=([0-9a-f]+)', mail.outbox[1].body)
+        verif = self.client.post(reverse('verificar_email'), {'token': segundo.group(1)}, format='json')
+        self.assertEqual(verif.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 2)
+
+        # El primer enlace sigue existiendo pero la cuenta ya está verificada:
+        # genérica sin enviar.
+        resp = self.client.post(
+            reverse('reenviar_verificacion'),
+            {'token': primer.group(1)},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['mensaje'], 'Correo de verificación enviado')
+        self.assertEqual(len(mail.outbox), 2)
+
+    # La cookie de refresh respeta REFRESH_COOKIE_SECURE: False para los
+    # despliegues reales por http en LAN (una cookie Secure se descartaría y la
+    # sesión moriría a los 15 min); True en producción con HTTPS.
+    @override_settings(REFRESH_COOKIE_SECURE=False)
+    def test_refresh_cookie_secure_false_configurable(self):
+        resp = self.client.post(self.url, self.valid_data, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(resp.cookies['refresh_token']['secure'])
+
+    @override_settings(REFRESH_COOKIE_SECURE=True)
+    def test_refresh_cookie_secure_true_configurable(self):
+        resp = self.client.post(self.url, self.valid_data, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(resp.cookies['refresh_token']['secure'])
+
     # Un token de verificación inválido o expirado debe ser rechazado.
     def test_registro_verificacion_token_invalido(self):
         self.client.post(self.url, self.valid_data, format='json')
@@ -766,6 +990,15 @@ class PasswordResetTests(TestCase):
         # Verificar que la contraseña cambió
         usuario = Usuario.objects.get(username='testuser')
         self.assertTrue(usuario.check_password('NewPass123!'))
+
+    def test_confirm_reset_abre_sesion_auto(self):
+        """El restablecimiento devuelve credenciales: no hay que loguearse otra vez."""
+        self._crear_reset(confirmado=True)
+        response = self._confirmar()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access_token', response.data)
+        self.assertEqual(response.data['usuario']['username'], 'testuser')
+        self.assertIn('refresh_token', response.cookies)
 
     def test_confirm_reset_requiere_confirmacion_previa(self):
         # El token existe pero el usuario NO confirmó su identidad desde el
@@ -2433,6 +2666,93 @@ class ThrottleBypassTests(TestCase):
             response.status_code,
             status.HTTP_429_TOO_MANY_REQUESTS,
             'El reset de contrasena no puede usarse para bombardear correo con sesion activa',
+        )
+
+    def test_confirm_reset_no_consume_cuota_de_envio(self):
+        """Confirmar el reset usa scope propio: reintentar el formulario no
+        puede gastar la cuota (3/hora) que limita el envio del email."""
+        self._cuota('password_reset', '1/minute')
+        self._cuota('password_reset_confirm', '100/minute')
+        self.client.credentials()
+
+        # Un envio consume el unico cupo del scope de envio.
+        response = self.client.post(
+            reverse('password_reset'),
+            {'email': 'atacante@example.com'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Confirmar con un token inexistente es un 400 de validacion, NO un
+        # 429: el confirm no toca el cubo de envio (el scope es otro).
+        response = self.client.post(
+            reverse('password_reset_confirm'),
+            {'token': 'x', 'codigo': '000000', 'password': 'x', 'confirm_password': 'x'},
+            format='json',
+        )
+        self.assertNotEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Un segundo envio YA se topa con la cuota de envio agotada.
+        response = self.client.post(
+            reverse('password_reset'),
+            {'email': 'atacante@example.com'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_confirm_reset_tiene_cuota_propia(self):
+        """password_reset_confirm se agota solo, sin tocar otros scopes."""
+        self._cuota('password_reset_confirm', '1/minute')
+        self._cuota('password_reset', '100/minute')
+        body = {'token': 'x', 'codigo': '000000', 'password': 'x', 'confirm_password': 'x'}
+
+        # La primera confirmacion consume el unico cupo del scope propio.
+        self.client.post(reverse('password_reset_confirm'), body, format='json')
+        response = self.client.post(reverse('password_reset_confirm'), body, format='json')
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Pero pedir un reset nuevo (scope distinto) sigue funcionando.
+        response = self.client.post(
+            reverse('password_reset'),
+            {'email': 'atacante@example.com'},
+            format='json',
+        )
+        self.assertNotEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_reenviar_verificacion_no_se_puede_martillear(self):
+        """Reenviar el correo de verificacion tiene topo aunque haya sesion."""
+        token = self._access_token()
+        self._cuota('reenviar_verificacion', '1/minute')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        response = self.client.post(reverse('reenviar_verificacion'), {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        response = self.client.post(reverse('reenviar_verificacion'), {}, format='json')
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            'Un usuario con sesion no puede reenviar el correo sin limite',
+        )
+
+    def test_throttle_de_429_responde_mensaje_claro(self):
+        """Un 429 por rate limit explica el motivo, no cae en el genérico."""
+        self._cuota('password_reset', '1/minute')
+        self.client.post(
+            reverse('password_reset'),
+            {'email': 'atacante@example.com'},
+            format='json',
+        )
+        response = self.client.post(
+            reverse('password_reset'),
+            {'email': 'atacante@example.com'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertIn(
+            'Demasiados intentos',
+            str(response.data.get('error', '')),
+            'El 429 debe explicar el bloqueo, no ser un error genérico',
         )
 
     def test_throttle_publico_ignora_xff_manipulado(self):
