@@ -3,9 +3,17 @@
 // comprueban lo que sí puede romperse: que rendericen, que los enlaces
 // apunten a donde deben y que las imágenes tengan texto alternativo.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+
+// Community usa useAuth para ocultar el botón de registro a usuarios con
+// sesión. Se mockea el hook para no necesitar un AuthProvider real (que haría
+// peticiones de red).
+const authMock = vi.fn()
+vi.mock('../contexts/useAuth', () => ({
+  useAuth: () => authMock(),
+}))
 
 import Community from './Community'
 import Footer from './Footer'
@@ -18,6 +26,12 @@ function renderConRouter(ui) {
 }
 
 describe('Community', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Por defecto, visitante sin sesión.
+    authMock.mockReturnValue({ isAuthenticated: false })
+  })
+
   it('muestra la etiqueta y el título de la sección', () => {
     renderConRouter(<Community />)
     expect(screen.getByText('COMUNIDAD')).toBeTruthy()
@@ -30,6 +44,14 @@ describe('Community', () => {
     renderConRouter(<Community />)
     const boton = screen.getByRole('link', { name: 'ÚNETE A LA TRIPULACIÓN' })
     expect(boton.getAttribute('href')).toBe('/register')
+  })
+
+  it('oculta el botón de registro a usuarios con sesión iniciada', () => {
+    authMock.mockReturnValue({ isAuthenticated: true })
+    renderConRouter(<Community />)
+    expect(
+      screen.queryByRole('link', { name: 'ÚNETE A LA TRIPULACIÓN' })
+    ).toBeNull()
   })
 
   it('la sección tiene el id al que apunta el pie de página', () => {

@@ -6,7 +6,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import App from './App.jsx'
 import {
-  Login, Register, ForgotPassword, VerificarEmail, Admin, Home, Settings
+  Login, Register, ForgotPassword, VerificarEmail, Admin, Home, Settings, Juego
 } from './routes/lazyPages'
 
 import './styles/base.css'
@@ -70,6 +70,14 @@ createRoot(document.getElementById('root')).render(
           <Route path="/home" element={
             <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
               <ProtectedRoute><Home /></ProtectedRoute>
+            </Suspense>
+          } />
+
+          {/* ─── RUTA PROTEGIDA: JUEGO (UNITY WEBGL) ─────────── */}
+          {/* Requiere autenticación. Carga el build WebGL desde /unity/ */}
+          <Route path="/juego" element={
+            <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
+              <ProtectedRoute><Juego /></ProtectedRoute>
             </Suspense>
           } />
 

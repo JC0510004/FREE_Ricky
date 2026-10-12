@@ -1,37 +1,36 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Unity, useUnityContext } from 'react-unity-webgl'
 import { useAuth } from '../contexts/useAuth'
+
+const ORIGEN_JUEGO = 'http://192.168.18.50:8080'
 
 export default function Juego() {
   const { user } = useAuth()
+  const iframeRef = useRef(null)
 
-  const { unityProvider, sendMessage, isLoaded, loadingProgression } = useUnityContext({
-    loaderUrl: '/unity/BuildWebGL.loader.js',
-    dataUrl: '/unity/BuildWebGL.data',
-    frameworkUrl: '/unity/BuildWebGL.framework.js',
-    codeUrl: '/unity/BuildWebGL.wasm',
-  })
-
-  // Cuando el juego termina de cargar, le mandamos el nombre del usuario.
-  // 'WebBridge' = nombre del objeto en la escena, 'SetPlayerName' = su método.
   useEffect(() => {
-    if (isLoaded && user?.username) {
-      sendMessage('WebBridge', 'SetPlayerName', user.username)
+    function onMessage(e) {
+      if (e.origin !== ORIGEN_JUEGO) return
+      if (e.data?.type === 'unityListo' && user?.username) {
+        iframeRef.current?.contentWindow.postMessage(
+          { type: 'setPlayerName', nombre: user.username },
+          ORIGEN_JUEGO
+        )
+      }
     }
-  }, [isLoaded, user, sendMessage])
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [user])
 
   return (
     <div style={{ padding: 20 }}>
       <Link to="/home">← Volver al panel</Link>
-
-      {!isLoaded && (
-        <p>Cargando juego... {Math.round(loadingProgression * 100)}%</p>
-      )}
-
-      <Unity
-        unityProvider={unityProvider}
-        style={{ width: 960, height: 540, visibility: isLoaded ? 'visible' : 'hidden' }}
+      <iframe
+        ref={iframeRef}
+        src={ORIGEN_JUEGO}
+        title="Salt Born"
+        style={{ width: 960, height: 540, border: 0, display: 'block' }}
+        allow="fullscreen"
       />
     </div>
   )
