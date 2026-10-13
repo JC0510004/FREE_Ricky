@@ -84,6 +84,19 @@
     box-shadow: 0 0 25px rgba(255, 182, 140, 0.8);
     transform: scale(1.05);
 }
+
+.hero-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+.hero-button:disabled:hover {
+    background-color: var(--primary-color);
+    box-shadow: none;
+    transform: none;
+}
 /* Manifesto Section */
 .manifesto {
     padding: 128px 32px;

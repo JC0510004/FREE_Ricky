@@ -46,12 +46,11 @@ describe('Community', () => {
     expect(boton.getAttribute('href')).toBe('/register')
   })
 
-  it('oculta el botón de registro a usuarios con sesión iniciada', () => {
+  it('con sesión iniciada el botón lleva al juego', () => {
     authMock.mockReturnValue({ isAuthenticated: true })
     renderConRouter(<Community />)
-    expect(
-      screen.queryByRole('link', { name: 'ÚNETE A LA TRIPULACIÓN' })
-    ).toBeNull()
+    const boton = screen.getByRole('link', { name: 'ÚNETE A LA TRIPULACIÓN' })
+    expect(boton.getAttribute('href')).toBe('/juego')
   })
 
   it('la sección tiene el id al que apunta el pie de página', () => {

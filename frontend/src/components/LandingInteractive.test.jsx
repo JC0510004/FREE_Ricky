@@ -7,6 +7,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
+// Hero usa useAuth para decidir a dónde lleva su botón principal. Se mockea
+// el hook para no necesitar un AuthProvider real (que haría peticiones de red).
+const authMock = vi.fn()
+vi.mock('../contexts/useAuth', () => ({
+  useAuth: () => authMock(),
+}))
+
 import Hero from './Hero'
 import Team from './Team'
 import LoadingScreen from './LoadingScreen'
@@ -35,6 +42,8 @@ function mostrarSeccion(visible) {
 beforeEach(() => {
   observadores = []
   vi.stubGlobal('IntersectionObserver', FalsoObserver)
+  // Por defecto, visitante sin sesión.
+  authMock.mockReturnValue({ isAuthenticated: false, user: null })
 })
 
 afterEach(() => {
@@ -121,6 +130,21 @@ describe('Hero', () => {
       renderHero()
       const boton = screen.getByRole('link', { name: 'COMIENZA LA BÚSQUEDA' })
       expect(boton.getAttribute('href')).toBe('/register')
+    })
+
+    it('con sesión verificada el botón principal lleva al juego', () => {
+      authMock.mockReturnValue({ isAuthenticated: true, user: { is_verified: true } })
+      renderHero()
+      const boton = screen.getByRole('link', { name: 'COMIENZA LA BÚSQUEDA' })
+      expect(boton.getAttribute('href')).toBe('/juego')
+    })
+
+    it('con sesión sin verificar el botón principal queda apagado', () => {
+      authMock.mockReturnValue({ isAuthenticated: true, user: { is_verified: false } })
+      renderHero()
+      const boton = screen.getByRole('button', { name: 'COMIENZA LA BÚSQUEDA' })
+      expect(boton.disabled).toBe(true)
+      expect(screen.queryByRole('link', { name: 'COMIENZA LA BÚSQUEDA' })).toBeNull()
     })
 
     it('tiene las cinco capas con su velocidad', () => {

@@ -5,8 +5,16 @@
 
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/useAuth';
 
 export default function Hero() {
+  // ─── Sesión del usuario ───
+  // El botón principal cambia de destino según haya sesión: visitante al
+  // registro, usuario con sesión al juego. El backend exige el correo
+  // verificado para jugar, así que sin verificar el botón queda apagado.
+  const { isAuthenticated, user } = useAuth();
+  const correoVerificado = Boolean(user?.is_verified);
+
   // ─── Referencia al elemento sección ───
   // Se usa useRef para obtener acceso directo al DOM del <section>
   // y poder consultar sus hijos y observar su visibilidad en viewport
@@ -207,10 +215,33 @@ export default function Hero() {
         </p>
 
         {/* ─── Botón de llamada a la acción ─── */}
-        {/* Link al registro; es el punto de conversión principal del hero */}
+        {/* Punto de conversión principal: sin sesión lleva al registro; con
+            sesión verificada lleva al juego. Sin verificar queda apagado con
+            un aviso, para que el usuario sepa qué le falta. */}
         <div className="hero-buttons">
-          <Link to="/register" className="hero-button">COMIENZA LA BÚSQUEDA</Link>
+          {isAuthenticated && !correoVerificado ? (
+            <button
+              type="button"
+              className="hero-button"
+              disabled
+              title="Verifica tu correo electrónico para poder jugar"
+            >
+              COMIENZA LA BÚSQUEDA
+            </button>
+          ) : (
+            <Link to={isAuthenticated ? '/juego' : '/register'} className="hero-button">
+              COMIENZA LA BÚSQUEDA
+            </Link>
+          )}
         </div>
+
+        {isAuthenticated && !correoVerificado && (
+          <p className="hero-description">
+            Verifica tu correo para poder jugar. Te enviamos un correo al
+            registrarte; si no lo ves, revisa la carpeta de spam o pídelo de
+            nuevo desde tu perfil.
+          </p>
+        )}
 
       </div>
     </section>
