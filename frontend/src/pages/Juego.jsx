@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 
 const ORIGEN_JUEGO = 'http://192.168.18.50:8080'
+const URL_JUEGO = `${ORIGEN_JUEGO}/?v=20261013a`
 
 export default function Juego() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const iframeRef = useRef(null)
 
   useEffect(() => {
@@ -17,17 +19,17 @@ export default function Juego() {
           ORIGEN_JUEGO
         )
       }
+      if (e.data?.type === 'salirPanel') navigate('/home')
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [user])
+  }, [user, navigate])
 
   return (
     <div style={{ padding: 20 }}>
-      <Link to="/home">← Volver al panel</Link>
       <iframe
         ref={iframeRef}
-        src={ORIGEN_JUEGO}
+        src={URL_JUEGO}
         title="Salt Born"
         style={{ width: 960, height: 540, border: 0, display: 'block' }}
         allow="fullscreen"
