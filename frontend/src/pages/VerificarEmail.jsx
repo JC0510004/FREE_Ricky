@@ -36,28 +36,21 @@ export default function VerificarEmail() {
 
   // ─── Verificación automática al abrir el enlace ───
   // Solo se llama si hay token y una sola vez; nunca en un GET de rastreo.
-  useEffect(() => {
+    useEffect(() => {
     if (!token || verificadaRef.current) return
     verificadaRef.current = true
-    const controller = new AbortController()
 
-    API.post('/verificar-email/', { token }, { signal: controller.signal })
+    API.post('/verificar-email/', { token })
       .then((res) => {
-        if (controller.signal.aborted) return
         // Auto-login (mismo contrato que /password-reset/confirm/).
         setSesionAbierta(!!loginWithResponse(res.data))
         setStatus('exito')
       })
       .catch((err) => {
-        if (controller.signal.aborted || err?.code === 'ERR_CANCELED') return
         setStatus('error')
-        // Muestra el motivo real cuando el backend lo da (p. ej. 429 de la
-        // cuota compartida de la LAN), en vez del mensaje genérico.
         const data = err?.response?.data
         setError(data?.error || data?.detail || 'El enlace es inválido o ha expirado. Puedes solicitarlo de nuevo.')
       })
-
-    return () => controller.abort()
   }, [token, loginWithResponse])
 
   // ─── Reenvío del correo de verificación ───
