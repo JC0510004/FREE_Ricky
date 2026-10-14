@@ -609,6 +609,60 @@
         transform: translateY(0);
     }
 }
+
+/* Móvil: la tarjeta del carrusel pasa a ser fluida y las flechas se
+   superponen a sus lados. Antes iban en fila (fija 288px + 2 botones) y
+   el contenedor, con overflow: hidden, recortaba el botón "siguiente". */
+@media (max-width: 560px) {
+    .team {
+        padding: 64px 20px;
+    }
+
+    .team-title {
+        font-size: 32px;
+        margin: 12px 0 24px 0;
+    }
+
+    .team-quote {
+        padding-left: 20px;
+    }
+
+    .team-quote p {
+        font-size: 17px;
+    }
+
+    .team-right {
+        gap: 0;
+    }
+
+    .team-card {
+        width: 100%;
+        max-width: 300px;
+        height: auto;
+        min-height: 360px;
+        transform: none;
+    }
+
+    .carousel-button {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 40px;
+        height: 40px;
+    }
+
+    .carousel-button.prev {
+        left: -8px;
+    }
+
+    .carousel-button.next {
+        right: -8px;
+    }
+
+    .carousel-button:hover {
+        transform: translateY(-50%) scale(1.1);
+    }
+}
 /* Community Section */
 .community {
     padding: 128px 32px;

@@ -751,12 +751,12 @@
 
 /* Responsive */
 @media (max-width: 1024px) {
-    .hero-content {
+    .gaming-dashboard .hero-content {
         flex-direction: column;
         align-items: flex-start;
     }
 
-    .hero-stats {
+    .gaming-dashboard .hero-stats {
         width: 100%;
         justify-content: space-between;
     }
@@ -786,11 +786,11 @@
         padding: 40px 16px;
     }
 
-    .hero-title {
+    .gaming-dashboard .hero-title {
         font-size: 32px;
     }
 
-    .hero-stat-value {
+    .gaming-dashboard .hero-stat-value {
         font-size: 24px;
     }
 
