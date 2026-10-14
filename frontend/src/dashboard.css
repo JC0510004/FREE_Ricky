@@ -63,6 +63,13 @@
 .fr-grid-sidebar { display: grid; gap: 2.5rem; }
 @media (min-width: 1280px) { .fr-grid-sidebar { grid-template-columns: 1fr 280px; } }
 
+/* Sin min-width:0, las tablas con celdas nowrap (Ranking, Últimas Partidas)
+   fijan el ancho mínimo de la columna y el grid NO encoge: en el móvil el
+   panel aparentaba ~404px y se salía del viewport en vez de adaptarse.
+   min-width:0 deja que la tabla scrollee dentro de .fr-table-wrap
+   (overflow-x:auto) sin arrastrar al grid entero. */
+.fr-grid-sidebar > * { min-width: 0; }
+
 .fr-col-stack { display: flex; flex-direction: column; gap: 2.5rem; }
 
 .fr-grid-settings { display: grid; gap: 1.25rem; }
