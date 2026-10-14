@@ -187,13 +187,9 @@ export default function ForgotPassword() {
                 ? 'Tu contraseña ha sido actualizada y tu sesión está abierta.'
                 : 'Tu contraseña ha sido actualizada correctamente.'}
             </p>
-            {/* Con sesión abierta se entra directo al juego; sin ella, al login */}
-            <button
-              type="button"
-              onClick={() => navigate(sesionIniciada ? '/home' : '/login')}
-              className="auth-submit"
-            >
-              {sesionIniciada ? 'Jugar ahora' : 'Iniciar Sesión'}
+            {/* Un único botón de vuelta al inicio; no se ofrece acceso directo al juego. */}
+            <button type="button" onClick={() => navigate('/')} className="auth-submit">
+              Ir al inicio
             </button>
           </div>
         </div>

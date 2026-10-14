@@ -100,7 +100,7 @@ describe('ForgotPassword', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Contraseña Restablecida' })).toBeInTheDocument())
     expect(loginWithResponseMock).toHaveBeenCalledWith(payload)
-    expect(screen.getByRole('button', { name: 'Jugar ahora' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ir al inicio' })).toBeInTheDocument()
   })
 
   it('si el backend no emite credenciales, el final lleva al login', async () => {
@@ -116,6 +116,6 @@ describe('ForgotPassword', () => {
     rellenarFormulario()
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Contraseña Restablecida' })).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Iniciar Sesión' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ir al inicio' })).toBeInTheDocument()
   })
 })

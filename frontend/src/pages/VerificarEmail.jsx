@@ -27,7 +27,7 @@ export default function VerificarEmail() {
   // el campo aparece solo al abrir sin token o si el backend no resolvió.
   const [necesitaCorreo, setNecesitaCorreo] = useState(() => !token)
   // Verificar el email abre sesión (el backend devuelve tokens como el reset):
-  // con sesión el botón final lleva a /home, sin ella al login.
+  // solo decide el mensaje de éxito; el botón final siempre vuelve al inicio.
   const [sesionAbierta, setSesionAbierta] = useState(false)
 
   // Dispara la verificación una sola vez, aunque React re-ejecute el efecto
@@ -113,9 +113,9 @@ export default function VerificarEmail() {
                   ? 'Tu correo electrónico ha sido confirmado y tu sesión está abierta.'
                   : 'Tu correo electrónico ha sido confirmado. Ya puedes jugar.'}
               </p>
-              {/* Con sesión (auto-login) se entra directo al juego; sin ella, al login */}
-              <button type="button" onClick={() => navigate(sesionAbierta ? '/home' : '/login')} className="auth-submit">
-                {sesionAbierta ? 'Jugar ahora' : 'Iniciar Sesión'}
+              {/* Un único botón de vuelta al inicio; no se ofrece acceso directo al juego. */}
+              <button type="button" onClick={() => navigate('/')} className="auth-submit">
+                Ir al inicio
               </button>
             </>
           )}

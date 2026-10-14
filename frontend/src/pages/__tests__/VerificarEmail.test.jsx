@@ -80,7 +80,7 @@ describe('VerificarEmail - verificación automática', () => {
       expect(post).toHaveBeenCalledWith('/verificar-email/', { token: 'abc123' })
   })
 
-  it('con sesión abierta: confirma, avisa y el botón lleva a /home', async () => {
+  it('con sesión abierta: confirma, avisa y el botón vuelve al inicio', async () => {
     simular({ verificar: () => Promise.resolve({ data: { access_token: 't' } }) })
     renderPagina()
 
@@ -88,11 +88,11 @@ describe('VerificarEmail - verificación automática', () => {
     expect(loginWithResponse).toHaveBeenCalledWith({ access_token: 't' })
     expect(screen.getByText(/tu sesión está abierta/i)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Jugar ahora' }))
-    expect(navegar).toHaveBeenCalledWith('/home')
+    fireEvent.click(screen.getByRole('button', { name: 'Ir al inicio' }))
+    expect(navegar).toHaveBeenCalledWith('/')
   })
 
-  it('sin sesión (no hubo auto-login): el botón lleva a /login', async () => {
+  it('sin sesión (no hubo auto-login): el botón también vuelve al inicio', async () => {
     loginWithResponse.mockReturnValue(null)
     simular({ verificar: () => Promise.resolve({ data: {} }) })
     renderPagina()
@@ -101,8 +101,8 @@ describe('VerificarEmail - verificación automática', () => {
     expect(screen.getByText(/Ya puedes jugar/i)).toBeTruthy()
     expect(screen.queryByText(/tu sesión está abierta/i)).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar Sesión' }))
-    expect(navegar).toHaveBeenCalledWith('/login')
+    fireEvent.click(screen.getByRole('button', { name: 'Ir al inicio' }))
+    expect(navegar).toHaveBeenCalledWith('/')
   })
 
   it('siempre ofrece volver al inicio de sesión', () => {
