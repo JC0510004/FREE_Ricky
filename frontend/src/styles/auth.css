@@ -134,6 +134,26 @@
     color: rgba(255, 255, 255, 0.3);
 }
 
+/* Autofill de Chrome: pinta el campo de fondo claro y el texto (blanco)
+   desaparece. Se sustituye ese fondo por el oscuro del tema manteniendo el
+   texto legible. El box-shadow inset es la única forma fiable de taparlo. */
+.auth-field input:-webkit-autofill,
+.auth-field input:-webkit-autofill:hover,
+.admin-edit-input:-webkit-autofill,
+.admin-edit-input:-webkit-autofill:hover {
+    -webkit-text-fill-color: #fff;
+    caret-color: #fff;
+    -webkit-box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.3) inset;
+    box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.3) inset;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+.auth-field input:-webkit-autofill:focus,
+.admin-edit-input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5) inset;
+    box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5) inset;
+}
+
 .auth-hint {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.45);
