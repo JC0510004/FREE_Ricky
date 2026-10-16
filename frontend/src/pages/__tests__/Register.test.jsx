@@ -124,11 +124,12 @@ describe('Register - validación en el navegador', () => {
     expect(registrar).not.toHaveBeenCalled()
   })
 
-  it('acepta "_" como carácter especial', () => {
+    it('acepta "_" como carácter especial', async () => {
     registrar.mockResolvedValue({ access_token: 'x' })
     renderRegister()
     rellenar({ password: 'Clave123_', confirmPassword: 'Clave123_' })
     enviar()
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/'))
     expect(screen.queryByText('Debe tener un carácter especial')).toBeNull()
   })
 })

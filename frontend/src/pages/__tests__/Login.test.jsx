@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
-vi.mock('./ErrorMessage', () => ({
+vi.mock('../../components/ErrorMessage', () => ({
   default: ({ message }) => (message ? <div role="alert">{message}</div> : null),
 }))
 
 let loginMock
 let navigateMock
 
-vi.mock('../contexts/useAuth', () => ({
+vi.mock('../../contexts/useAuth', () => ({
   useAuth: () => ({ login: loginMock }),
 }))
 
@@ -21,7 +21,7 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-import Login from './Login'
+import Login from '../Login'
 
 describe('Login', () => {
   beforeEach(() => {

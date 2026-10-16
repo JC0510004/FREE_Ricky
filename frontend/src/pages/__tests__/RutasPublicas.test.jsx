@@ -3,8 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
-import { AuthProvider } from '../contexts/AuthContext'
-import { ForgotPassword } from '../routes/lazyPages'
+import { AuthProvider } from '../../contexts/AuthContext'
+import { ForgotPassword } from '../../routes/lazyPages'
 
 describe('rutas públicas', () => {
   it('/forgot-password monta ForgotPassword y no la landing', async () => {
