@@ -62,7 +62,7 @@ export default function Home() {
   const hayMasPartidas = totalPartidas > Math.min(partidas.length, ULTIMAS_PARTIDAS)
 
   // Niveles que el usuario ya completó (tiene al menos una partida registrada).
-  const nivelIdsJugados = new Set(partidas.map((p) => p.nivel))
+  const nivelIdsJugados = new Set(partidas.filter((p) => p.completado).map((p) => p.nivel))
 
   // Tarjetas de estadísticas construidas con los datos reales.
   const statsCards = [

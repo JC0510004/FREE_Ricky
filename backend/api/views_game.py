@@ -201,11 +201,15 @@ class PartidaListView(APIView):
     )
     def post(self, request):
         serializer = PartidaCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            partida = serializer.save(usuario=request.user)
-            data = PartidaSerializer(partida).data
-            return Response(data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = serializer.validated_data
+        completado = d.get('completado', False)
+        tiempo = d.get('tiempo') or 0
+        muertes = d.get('muertes') or 0
+        puntuacion = max(1000 - tiempo * 2 - muertes * 50, 0) if completado else 0
+        partida = serializer.save(usuario=request.user, puntuacion=puntuacion)
+        return Response(PartidaSerializer(partida).data, status=status.HTTP_201_CREATED)
 
 
 class PartidaDetailView(APIView):
