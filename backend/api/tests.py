@@ -1700,7 +1700,7 @@ class FlujoIntegracionTests(TestCase):
             'nivel': nivel.pk,
             'muertes': 2,
             'tiempo': 90,
-            'puntuacion': 750,
+            'completado': True,
         }, format='json')
         self.assertEqual(partida.status_code, status.HTTP_201_CREATED)
 
@@ -1708,7 +1708,7 @@ class FlujoIntegracionTests(TestCase):
         stats = self.client.get(self.stats_url)
         self.assertEqual(stats.status_code, status.HTTP_200_OK)
         self.assertEqual(stats.data['total_partidas'], 1)
-        self.assertEqual(stats.data['mejor_puntuacion'], 750)
+        self.assertEqual(stats.data['mejor_puntuacion'], 720)
 
         # 7. Ranking público
         ranking = self.client.get(self.ranking_url)

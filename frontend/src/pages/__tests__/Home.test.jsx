@@ -44,6 +44,7 @@ const partida = (n) => ({
   puntuacion: 100 + n,
   muertes: n,
   tiempo: 60,
+  completado: true,
   fecha: '2026-01-15T10:00:00Z',
 })
 
