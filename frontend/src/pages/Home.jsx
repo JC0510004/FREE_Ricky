@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import useFetch from '../hooks/useFetch'
 import {
@@ -33,6 +33,7 @@ const DIFICULTAD_ICON = [Trophy, Swords, Gamepad2, Zap]
 
 export default function Home() {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
   // ─── Datos desde la API real ────────────────────────────────────
   // El backend expone estadísticas, niveles, ranking y partidas del usuario.
@@ -177,10 +178,9 @@ export default function Home() {
                           className="fr-btn-primary"
                           type="button"
                           style={{ marginTop: '1.25rem' }}
-                          disabled
-                          title="Próximamente disponible"
+                          onClick={() => navigate('/juego')}
                         >
-                          <Play size={14} fill="currentColor" />Próximamente
+                          <Play size={14} fill="currentColor" />Jugar
                         </button>
                       </article>
                     )
@@ -275,7 +275,7 @@ const esYo = entry.username === user?.username
                     <table className="fr-table">
                       <thead>
                         <tr>
-                          <th>Nivel</th><th>Puntaje</th><th>Muertes</th><th>Tiempo</th><th>Fecha</th>
+                          <th>Nivel</th><th>Puntaje</th><th>Muertes</th><th>Tiempo</th><th>Estado</th><th>Fecha</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -285,6 +285,11 @@ const esYo = entry.username === user?.username
                             <td className="fr-mono" style={{ color: 'var(--fr-primary)' }}>{formatNumber(p.puntuacion)}</td>
                             <td>{p.muertes}</td>
                             <td>{formatDuration(p.tiempo)}</td>
+                            <td>
+                              <span className={`fr-badge fr-badge-${p.completado ? 'easy' : 'hard'} fr-badge-inline`}>
+                                {p.completado ? 'Completado' : 'No completado'}
+                              </span>
+                            </td>
                             <td style={{ color: 'var(--fr-muted-fg)' }}>
                               {new Date(p.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </td>

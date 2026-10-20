@@ -6,12 +6,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
+const { navegar } = vi.hoisted(() => ({ navegar: vi.fn() }))
+
 import Home from '../Home'
 import useFetch from '../../hooks/useFetch'
 import { useAuth } from '../../contexts/useAuth'
 
 vi.mock('../../hooks/useFetch', () => ({ default: vi.fn() }))
 vi.mock('../../contexts/useAuth', () => ({ useAuth: vi.fn() }))
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useNavigate: () => navegar,
+}))
 
 const VACIO = { data: null, loading: false, error: null }
 const USUARIO = { username: 'juan', email: 'juan@test.com', rol: 'jugador' }
@@ -187,12 +193,14 @@ describe('Home', () => {
       expect(within(volcan).getByText('Nuevo desafío')).toBeTruthy()
     })
 
-    it('los botones de jugar están deshabilitados (próximamente)', () => {
+    it('los botones de nivel dicen "Jugar" y navegan al juego', () => {
       mockApi({ '/niveles/': { data: niveles } })
       renderHome()
-      const botones = screen.getAllByRole('button', { name: /próximamente/i })
+      const botones = screen.getAllByRole('button', { name: /jugar/i })
       expect(botones).toHaveLength(2)
-      botones.forEach((b) => expect(b.disabled).toBe(true))
+      navegar.mockClear()
+      fireEvent.click(botones[0])
+      expect(navegar).toHaveBeenCalledWith('/juego')
     })
 
     it('muestra un nivel con dificultad desconocida sin romperse', () => {
@@ -316,6 +324,17 @@ describe('Home', () => {
       expect(screen.getByText('101')).toBeTruthy()
       expect(screen.getByText('1m')).toBeTruthy()
       expect(screen.getByText(/2026/)).toBeTruthy()
+    })
+
+    it('muestra el estado Completado / No completado de cada partida', () => {
+      const results = [
+        { ...partida(1), completado: true },
+        { ...partida(2), completado: false },
+      ]
+      mockApi({ '/partidas/': { data: { count: 2, results } } })
+      renderHome()
+      expect(screen.getByText('Completado')).toBeTruthy()
+      expect(screen.getByText('No completado')).toBeTruthy()
     })
 
     it('acepta una lista simple sin paginar', () => {
