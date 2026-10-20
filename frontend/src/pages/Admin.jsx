@@ -325,11 +325,38 @@ function Niveles() {
 
 /* ─── Tab: Partidas ─────────────────────────────────────────────── */
 function Partidas() {
-  // pageSize 50: lo fija PartidaAdminViewSet en backend/api/views_game.py.
+  // Desplegable que alimenta el filtro de niveles. Se pide con pageSize 50
+  // (lo fija NivelViewSet); los niveles son pocos.
+  const { items: niveles } = usePaginada('/niveles/', 50)
+
+  // '' = sin filtrar; nivelSel guarda el id, nombreQ el texto de búsqueda.
+  const [nivelSel, setNivelSel] = useState('')
+  const [nombreQ, setNombreQ] = useState('')
+
+  // El endpoint devuelve un resumen agregado por usuario (una fila por
+  // jugador): suma de puntos, mejor puntuación, muertes y tiempo totales,
+  // ordenado de menor a mayor. Cualquier filtro cambia la URL y refetchea.
+  const params = new URLSearchParams()
+  if (nivelSel) params.set('nivel', nivelSel)
+  if (nombreQ.trim()) params.set('nombre', nombreQ.trim())
+  const qs = params.toString()
+  const urlResumen = qs ? `/admin/partidas/?${qs}` : '/admin/partidas/'
+
+  // pageSize 50: lo fija AdminPartidasView.
   const {
-    items: partidas, total, page, pageSize, totalPaginas,
+    items: resumen, total, page, pageSize, totalPaginas,
     loading, error, setPage,
-  } = usePaginada('/admin/partidas/', 50)
+  } = usePaginada(urlResumen, 50)
+
+  // Al cambiar cualquier filtro se vuelve a la página 1: si no, se pediría
+  // una página que quizá ya no existe con el filtro nuevo y saltaría un 404.
+  const aplicarFiltro = (setter) => (valor) => {
+    setPage(1)
+    setter(valor)
+  }
+
+  const fmtTiempo = (t) =>
+    t == null ? '-' : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
 
   return (
     <>
@@ -339,32 +366,46 @@ function Partidas() {
           <p className="fr-eyebrow">Actividad reciente</p>
           <h2 className="fr-section-title">Partidas registradas</h2>
         </div>
-        <span className="fr-badge fr-badge-medium">{total} partidas</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
+          <select
+            className="fr-select"
+            aria-label="Filtrar por nivel"
+            value={nivelSel}
+            onChange={(e) => aplicarFiltro(setNivelSel)(e.target.value)}
+          >
+            <option value="">Todos los niveles</option>
+            {niveles.map((n) => (
+              <option key={n.id} value={n.id}>{n.nombre}</option>
+            ))}
+          </select>
+          <input
+            className="fr-input fr-input-sm"
+            type="search"
+            aria-label="Buscar jugador por nombre"
+            placeholder="Buscar jugador…"
+            value={nombreQ}
+            onChange={(e) => aplicarFiltro(setNombreQ)(e.target.value)}
+          />
+          <span className="fr-badge fr-badge-medium">{total} jugadores</span>
+        </div>
       </div>
       <div className="fr-table-wrap">
         <table className="fr-table" style={{ minWidth: 850 }}>
           <thead>
-            <tr><th>Jugador</th><th>Nivel</th><th>Pts</th><th>Muertes</th><th>Tiempo</th><th>Fecha</th></tr>
+            <tr><th>Jugador</th><th>Pts acumulados</th><th>Mejor puntaje</th><th>Muertes</th><th>Tiempo</th><th>Partidas</th></tr>
           </thead>
           <tbody>
-            {partidas.map((p, i) => {
-              const tone = p.nivel_dificultad === 'dificil' ? 'hard' : p.nivel_dificultad === 'medio' ? 'medium' : 'easy'
-              const toneShort = tone === 'hard' ? 'D' : tone === 'medium' ? 'M' : 'F'
-              return (
-                <tr key={p.id || `${p.usuario_username}-${i}`}>
-                  <td className="fr-bold">{p.usuario_username}</td>
-                  <td>
-                    {p.nivel_nombre}
-                    <span className={`fr-badge fr-badge-${tone} fr-badge-inline`}>{toneShort}</span>
-                  </td>
-                  <td className="fr-pts-col">{p.puntuacion}</td>
-                  <td className="fr-mono">{p.muertes}</td>
-                  <td className="fr-mono">{p.tiempo != null ? `${Math.floor(p.tiempo / 60)}:${String(p.tiempo % 60).padStart(2, '0')}` : '-'}</td>
-                  <td style={{ color: 'var(--fr-muted-fg)' }}>{new Date(p.fecha).toLocaleDateString()}</td>
-                </tr>
-              )
-            })}
-            {!partidas.length && !loading && (
+            {resumen.map((r, i) => (
+              <tr key={r.usuario_username || i}>
+                <td className="fr-bold">{r.usuario_username}</td>
+                <td className="fr-pts-col">{r.puntos_totales}</td>
+                <td className="fr-pts-col">{r.mejor_puntuacion}</td>
+                <td className="fr-mono">{r.muertes_totales}</td>
+                <td className="fr-mono">{fmtTiempo(r.tiempo_total)}</td>
+                <td className="fr-mono">{r.num_partidas}</td>
+              </tr>
+            ))}
+            {!resumen.length && !loading && (
               <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--fr-muted-fg)' }}>No hay partidas registradas</td></tr>
             )}
           </tbody>

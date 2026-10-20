@@ -4,7 +4,7 @@
 // El resto (pestañas, formularios, mensajes) es el componente real.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 const { auth, navegar, api, paginada, listados } = vi.hoisted(() => ({
@@ -51,9 +51,9 @@ const NIVELES = [
 ]
 
 const PARTIDAS = [
-  { id: 1, usuario_username: 'juan', nivel_nombre: 'Isla', nivel_dificultad: 'facil', puntuacion: 900, muertes: 3, tiempo: 125, fecha: '2026-03-01T12:00:00Z' },
-  { id: 2, usuario_username: 'ana', nivel_nombre: 'Tormenta', nivel_dificultad: 'dificil', puntuacion: 450, muertes: 7, tiempo: null, fecha: '2026-03-02T12:00:00Z' },
-  { usuario_username: 'luis', nivel_nombre: 'Marea', nivel_dificultad: 'medio', puntuacion: 700, muertes: 1, tiempo: 59, fecha: '2026-03-03T12:00:00Z' },
+  { usuario_username: 'ana', puntos_totales: 450, mejor_puntuacion: 450, muertes_totales: 7, tiempo_total: null, num_partidas: 1 },
+  { usuario_username: 'luis', puntos_totales: 700, mejor_puntuacion: 700, muertes_totales: 1, tiempo_total: 59, num_partidas: 1 },
+  { usuario_username: 'juan', puntos_totales: 1350, mejor_puntuacion: 900, muertes_totales: 5, tiempo_total: 205, num_partidas: 3 },
 ]
 
 const STATS = {
@@ -684,6 +684,8 @@ describe('Admin - pestaña Partidas', () => {
   beforeEach(() => {
     lista = hacerListado({ items: PARTIDAS, total: 3 })
     listados.current['/admin/partidas/'] = lista
+    // El desplegable de niveles pide su propia lista.
+    listados.current['/niveles/'] = hacerListado({ items: NIVELES, total: 3 })
   })
 
   async function abrirPartidas() {
@@ -693,25 +695,64 @@ describe('Admin - pestaña Partidas', () => {
     return resultado
   }
 
-  it('lista jugador, nivel, puntos y muertes', async () => {
-    await abrirPartidas()
-    ;['juan', 'ana', 'luis', 'Isla', 'Tormenta', 'Marea', '900', '450', '700'].forEach((t) =>
-      expect(screen.getByText(t)).toBeInTheDocument(),
+  it('lista cada usuario una sola vez con sus puntos acumulados y mejor puntaje', async () => {
+    const { container } = await abrirPartidas()
+    // Solo la tabla: los desplegables también contienen esos nombres.
+    const tbody = container.querySelector('tbody')
+    ;['ana', 'luis', 'juan'].forEach((u) =>
+      expect(within(tbody).getAllByText(u)).toHaveLength(1),
     )
-    expect(screen.getByText('3 partidas')).toBeInTheDocument()
+    // ana 450+450, luis 700+700, juan 1350+900
+    ;['450', '700', '1350', '900'].forEach((p) =>
+      expect(screen.getAllByText(p).length).toBeGreaterThan(0),
+    )
+    expect(screen.getByText('3 jugadores')).toBeInTheDocument()
   })
 
-  it('da formato m:ss al tiempo y "-" si no hay', async () => {
+  it('da formato m:ss al tiempo total y "-" si no hay', async () => {
     await abrirPartidas()
-    expect(screen.getByText('2:05')).toBeInTheDocument() // 125 s
+    expect(screen.getByText('3:25')).toBeInTheDocument() // 205 s
     expect(screen.getByText('0:59')).toBeInTheDocument() // 59 s
     expect(screen.getByText('-')).toBeInTheDocument() // sin tiempo
   })
 
-  it('la etiqueta corta de dificultad es F, D o M', async () => {
-    const { container } = await abrirPartidas()
-    const etiquetas = [...container.querySelectorAll('.fr-badge-inline')].map((e) => e.textContent)
-    expect(etiquetas).toEqual(['F', 'D', 'M'])
+  it('el desplegable lista los niveles y filtra el resumen', async () => {
+    await abrirPartidas()
+    const select = screen.getByLabelText('Filtrar por nivel')
+    expect(select).toBeInTheDocument()
+    expect(screen.getByText('Todos los niveles')).toBeInTheDocument()
+    ;['Isla', 'Tormenta', 'Marea'].forEach((n) =>
+      expect(screen.getByText(n)).toBeInTheDocument(),
+    )
+
+    fireEvent.change(select, { target: { value: '10' } })
+    expect(paginada).toHaveBeenCalledWith('/admin/partidas/?nivel=10', 50)
+  })
+
+  it('la búsqueda por nombre filtra el resumen', async () => {
+    await abrirPartidas()
+    const input = screen.getByLabelText('Buscar jugador por nombre')
+    fireEvent.change(input, { target: { value: 'ana' } })
+    expect(paginada).toHaveBeenCalledWith('/admin/partidas/?nombre=ana', 50)
+  })
+
+  it('combina el filtro de nivel con la búsqueda', async () => {
+    await abrirPartidas()
+    fireEvent.change(screen.getByLabelText('Filtrar por nivel'), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('Buscar jugador por nombre'), { target: { value: 'ju' } })
+    expect(paginada).toHaveBeenCalledWith('/admin/partidas/?nivel=10&nombre=ju', 50)
+  })
+
+  it('al filtrar vuelve a la página 1', async () => {
+    await abrirPartidas()
+    fireEvent.change(screen.getByLabelText('Buscar jugador por nombre'), { target: { value: 'x' } })
+    expect(lista.setPage).toHaveBeenCalledWith(1)
+  })
+
+  it('al cambiar de nivel vuelve a la página 1', async () => {
+    await abrirPartidas()
+    fireEvent.change(screen.getByLabelText('Filtrar por nivel'), { target: { value: '11' } })
+    expect(lista.setPage).toHaveBeenCalledWith(1)
   })
 
   it('sin partidas avisa que no hay', async () => {

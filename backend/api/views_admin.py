@@ -1,17 +1,17 @@
-from django.db.models import Avg, Count, Sum, Max
+from django.db.models import Avg, Count, Sum, Max, Value
+from django.db.models.functions import Coalesce
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import serializers
+from rest_framework import serializers, status
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiParameter
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import Usuario, Partida, Nivel
-from .serializers import PartidaSerializer
 from .permissions import IsAdminRole
 
 
@@ -24,16 +24,75 @@ class AdminPartidasView(APIView):
     @extend_schema(
         tags=['Administración'],
         summary='Partidas (admin)',
-        description='Devuelve la lista paginada de todas las partidas de todos los usuarios. Solo administradores.',
-        responses={200: PartidaSerializer(many=True)},
+        description='Devuelve un resumen agregado por usuario (una fila por usuario): '
+                    'suma de puntos de todos sus intentos, mejor puntuación, muertes totales '
+                    'y tiempo total, ordenado de menor a mayor por puntos acumulados. '
+                    'Admite los query params opcionales `nivel` (id del nivel) y '
+                    '`nombre` (búsqueda parcial por username) para filtrar. '
+                    'Solo administradores.',
+        parameters=[
+            OpenApiParameter(name='nivel', type=int, required=False,
+                             description='Filtra las partidas de un nivel concreto.'),
+            OpenApiParameter(name='nombre', type=str, required=False,
+                             description='Búsqueda parcial por username (insensible a mayúsculas).'),
+        ],
+        responses={200: inline_serializer(
+            'PartidaResumen',
+            {
+                'usuario_username': serializers.CharField(),
+                'puntos_totales': serializers.IntegerField(),
+                'mejor_puntuacion': serializers.IntegerField(),
+                'muertes_totales': serializers.IntegerField(),
+                'tiempo_total': serializers.IntegerField(allow_null=True),
+                'num_partidas': serializers.IntegerField(),
+            },
+            many=True,
+        )},
     )
     def get(self, request):
-        partidas = Partida.objects.select_related('usuario', 'nivel').order_by('-fecha')
+        # .values() hace el JOIN con usuario automáticamente: no hace falta
+        # select_related aquí (la respuesta solo lleva username, no objetos).
+        partidas = Partida.objects.all()
+
+        # Filtro opcional por nivel (query param ?nivel=<id>).
+        nivel_param = request.query_params.get('nivel')
+        if nivel_param is not None:
+            try:
+                partidas = partidas.filter(nivel_id=int(nivel_param))
+            except (TypeError, ValueError):
+                return Response({'error': 'nivel inválido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Búsqueda parcial por username (?nombre=texto, insensible a mayúsculas).
+        nombre_param = request.query_params.get('nombre')
+        if nombre_param:
+            partidas = partidas.filter(usuario__username__icontains=nombre_param)
+
+        # Una sola fila por usuario con sus agregados.
+        resumen = (
+            partidas
+            .values('usuario_id', 'usuario__username')
+            .annotate(
+                puntos_totales=Coalesce(Sum('puntuacion'), Value(0)),
+                mejor_puntuacion=Coalesce(Max('puntuacion'), Value(0)),
+                muertes_totales=Coalesce(Sum('muertes'), Value(0)),
+                tiempo_total=Sum('tiempo'),
+                num_partidas=Count('id'),
+            )
+            .order_by('puntos_totales', 'usuario__username')
+        )
+
         paginator = self.pagination_class()
         paginator.page_size = self.page_size
-        page_obj = paginator.paginate_queryset(partidas, request)
-        serializer = PartidaSerializer(page_obj, many=True)
-        return paginator.get_paginated_response(serializer.data)
+        page_obj = paginator.paginate_queryset(resumen, request)
+        filas = [{
+            'usuario_username': r['usuario__username'],
+            'puntos_totales': r['puntos_totales'],
+            'mejor_puntuacion': r['mejor_puntuacion'],
+            'muertes_totales': r['muertes_totales'],
+            'tiempo_total': r['tiempo_total'],
+            'num_partidas': r['num_partidas'],
+        } for r in page_obj]
+        return paginator.get_paginated_response(filas)
 
 
 class AdminStatsView(APIView):

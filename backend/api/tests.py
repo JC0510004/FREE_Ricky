@@ -2904,3 +2904,113 @@ class EmailVerificadoParaJugarTests(TestCase):
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertFalse(resp.data['usuario']['is_verified'])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TESTS - RESUMEN DE PARTIDAS POR USUARIO (admin)
+# ═══════════════════════════════════════════════════════════════════════════════
+class AdminPartidasResumenTests(TestCase):
+    """GET /admin/partidas/ devuelve una fila por usuario agregada."""
+
+    def setUp(self):
+        self.client = APIClient()
+        from rest_framework_simplejwt.tokens import RefreshToken
+        admin = Usuario.objects.create_superuser(
+            username='admin_resumen',
+            email='admin_resumen@gmail.com',
+            password='AdminPass123!',
+        )
+        self.token = str(RefreshToken.for_user(admin).access_token)
+        self.url = reverse('admin_partidas')
+
+        self.nivel_a = Nivel.objects.create(nombre='Nivel A', dificultad='facil')
+        self.nivel_b = Nivel.objects.create(nombre='Nivel B', dificultad='dificil')
+
+        self.jugador = Usuario.objects.create_user(
+            username='multiplayer', email='multi@gmail.com', password='TestPass123!',
+        )
+        self.otro = Usuario.objects.create_user(
+            username='otro', email='otro@gmail.com', password='TestPass123!',
+        )
+
+        # 'multiplayer': 3 intentos (2 en nivel A, 1 en nivel B).
+        Partida.objects.create(usuario=self.jugador, nivel=self.nivel_a,
+                               muertes=2, tiempo=100, puntuacion=600, completado=True)
+        Partida.objects.create(usuario=self.jugador, nivel=self.nivel_a,
+                               muertes=4, tiempo=80, puntuacion=800, completado=True)
+        Partida.objects.create(usuario=self.jugador, nivel=self.nivel_b,
+                               muertes=1, tiempo=50, puntuacion=400, completado=True)
+        # 'otro': 1 intento con menos puntos (debería encabezar con el orden ASC).
+        Partida.objects.create(usuario=self.otro, nivel=self.nivel_b,
+                               muertes=0, tiempo=30, puntuacion=200, completado=True)
+
+    def _get(self, query=''):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
+        return self.client.get(self.url + query)
+
+    def test_una_fila_por_usuario_con_agregados(self):
+        resp = self._get()
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['count'], 2)
+
+        fila = {f['usuario_username']: f for f in resp.data['results']}
+        self.assertCountEqual(fila.keys(), ['multiplayer', 'otro'])
+
+        mp = fila['multiplayer']
+        self.assertEqual(mp['num_partidas'], 3)
+        self.assertEqual(mp['puntos_totales'], 1800)   # 600 + 800 + 400
+        self.assertEqual(mp['mejor_puntuacion'], 800)  # el mayor de los intentos
+        self.assertEqual(mp['muertes_totales'], 7)     # 2 + 4 + 1
+        self.assertEqual(mp['tiempo_total'], 230)      # 100 + 80 + 50
+
+    def test_ordena_de_menor_a_mayor_por_puntos(self):
+        resp = self._get()
+        usuarios = [f['usuario_username'] for f in resp.data['results']]
+        self.assertEqual(usuarios, ['otro', 'multiplayer'])  # 200 < 1800
+
+    def test_filtro_por_nivel_agrega_solo_ese_nivel(self):
+        resp = self._get(f'?nivel={self.nivel_b.pk}')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['count'], 2)
+
+        fila = {f['usuario_username']: f for f in resp.data['results']}
+        # 'multiplayer' solo su partida del nivel B.
+        self.assertEqual(fila['multiplayer']['num_partidas'], 1)
+        self.assertEqual(fila['multiplayer']['puntos_totales'], 400)
+        self.assertEqual(fila['multiplayer']['mejor_puntuacion'], 400)
+        self.assertEqual(fila['otro']['puntos_totales'], 200)
+
+    def test_nivel_invalido_devuelve_400(self):
+        resp = self._get('?nivel=abc')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_respuesta_paginada(self):
+        resp = self._get()
+        self.assertIn('count', resp.data)
+        self.assertIn('results', resp.data)
+
+    def test_filtro_por_jugador_eliminado_se_ignora(self):
+        # El param ?usuario ya no filtra: se ignora y devuelve todo.
+        resp = self._get(f'?usuario={self.otro.pk}')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['count'], 2)
+
+    def test_busqueda_por_nombre_parcial_e_insensible(self):
+        # Parcial: 'multi' contiene 'multiplayer'.
+        resp = self._get('?nombre=multi')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['count'], 1)
+        self.assertEqual(resp.data['results'][0]['usuario_username'], 'multiplayer')
+
+        # Insensible a mayúsculas: 'OTRO' encuentra a 'otro'.
+        resp = self._get('?nombre=OTRO')
+        self.assertEqual(resp.data['count'], 1)
+        self.assertEqual(resp.data['results'][0]['usuario_username'], 'otro')
+
+    def test_los_filtros_se_combinan(self):
+        resp = self._get(f'?nivel={self.nivel_b.pk}&nombre=multi')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['count'], 1)
+        fila = resp.data['results'][0]
+        self.assertEqual(fila['usuario_username'], 'multiplayer')
+        self.assertEqual(fila['puntos_totales'], 400)
