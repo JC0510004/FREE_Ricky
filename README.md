@@ -91,7 +91,7 @@ viven el rate limit, el `deny all` de `/admin/` y las cabeceras de seguridad.
 | Servidor      | Gunicorn (`-w 2 --threads 2`)                                 |
 | Frontend      | React 19, Vite 8, React Router 7, Axios, react-unity-webgl    |
 | Servidor web  | nginx (sirve el build + proxy de `/api`)                      |
-| Orquestación  | Docker / Docker Compose                                       |
+| Orquestación  | Docker / Docker Compose.                                       |
 | CI/CD         | GitHub Actions (tests, lint, build, Docker, security scan)    |
 
 ---
