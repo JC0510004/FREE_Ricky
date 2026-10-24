@@ -433,8 +433,9 @@ class PartidaSerializer(serializers.ModelSerializer):
 class PartidaCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Partida
-        # Campos de entrada: nivel elegido y estadísticas de la partida
-        fields = ['nivel', 'muertes', 'tiempo', 'puntuacion', 'completado']
+        # Campos de entrada: nivel elegido y estadísticas de la partida.
+        # La puntuación NO se acepta del cliente: la calcula el servidor en create().
+        fields = ['nivel', 'muertes', 'tiempo', 'completado']
 
     # ─── VALIDACIONES DE RANGO ────────────────────────────────────────────
     # Cada campo numérico tiene validaciones de rango para evitar datos
@@ -449,16 +450,6 @@ class PartidaCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Muertes fuera de rango permitido')
         return value
 
-    # Valida que la puntuación sea no negativa y dentro de un rango máximo
-    # que evite desbordamiento de tipos en estadísticas agregadas
-    def validate_puntuacion(self, value):
-        # Puede ser None si el jugador no completó ciertos objetivos
-        if value is not None and value < 0:
-            raise serializers.ValidationError('La puntuación no puede ser negativa')
-        if value is not None and value > 999999:
-            raise serializers.ValidationError('Puntuación fuera de rango permitido')
-        return value
-
     # Valida que el tiempo sea no negativo y no supere 24 horas (86400 segundos).
     # Un tiempo mayor a un día completo se considera un dato inválido.
     def validate_tiempo(self, value):
@@ -467,6 +458,28 @@ class PartidaCreateSerializer(serializers.ModelSerializer):
         if value is not None and value > 86400:
             raise serializers.ValidationError('Tiempo fuera de rango permitido')
         return value
+    # ─── CREACIÓN DE LA PARTIDA ───────────────────────────────────────────
+    # La puntuación se calcula SIEMPRE en el servidor:
+    # - Si completado=True: max(1000 - tiempo * 2 - muertes * 50, 0)
+    # - Si completado=False: 0 (ignora cualquier valor enviado por el cliente)
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data.pop('puntuacion', None)
+        usuario = validated_data.pop('usuario', None) or (getattr(request, 'user') if request else None)
+
+        if usuario is None:
+            raise serializers.ValidationError({'detail': 'No se ha podido identificar al usuario'})
+
+        completado = validated_data.get('completado', False)
+        tiempo = validated_data.get('tiempo') or 0
+        muertes = validated_data.get('muertes') or 0
+
+        if completado:
+            puntuacion = max(1000 - tiempo * 2 - muertes * 50, 0)
+        else:
+            puntuacion = 0
+
+        return Partida.objects.create(usuario=usuario, puntuacion=puntuacion, **validated_data)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -200,7 +200,7 @@ describe('Home', () => {
       expect(botones).toHaveLength(2)
       navegar.mockClear()
       fireEvent.click(botones[0])
-      expect(navegar).toHaveBeenCalledWith('/juego')
+      expect(navegar).toHaveBeenCalledWith('/juego', { state: { nivelId: 1, nivelNombre: 'Bosque' } })
     })
 
     it('muestra un nivel con dificultad desconocida sin romperse', () => {

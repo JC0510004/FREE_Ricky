@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import serializers, status
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
-
+from rest_framework.exceptions import AuthenticationFailed
 from drf_spectacular.utils import extend_schema, inline_serializer
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -32,8 +32,16 @@ class RankingEntrySerializer(serializers.Serializer):
     total_partidas = serializers.IntegerField()
     promedio_puntuacion = serializers.FloatField(allow_null=True)
 
+class JWTOpcional(JWTAuthentication):
+    """Si el token es inválido o vencido, trata la petición como anónima."""
+    def authenticate(self, request):
+        try:
+            return super().authenticate(request)
+        except AuthenticationFailed:
+            return None
 
 class NivelListView(APIView):
+    authentication_classes = [JWTOpcional]
     pagination_class = PageNumberPagination
     page_size = 50
 
@@ -42,10 +50,6 @@ class NivelListView(APIView):
             return [AllowAny()]
         return [IsAuthenticated()]
 
-    def get_authentication_classes(self):
-        if self.request.method == 'GET':
-            return []
-        return [JWTAuthentication()]
 
     @extend_schema(
         tags=['Niveles'],
@@ -200,15 +204,10 @@ class PartidaListView(APIView):
         },
     )
     def post(self, request):
-        serializer = PartidaCreateSerializer(data=request.data)
+        serializer = PartidaCreateSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        d = serializer.validated_data
-        completado = d.get('completado', False)
-        tiempo = d.get('tiempo') or 0
-        muertes = d.get('muertes') or 0
-        puntuacion = max(1000 - tiempo * 2 - muertes * 50, 0) if completado else 0
-        partida = serializer.save(usuario=request.user, puntuacion=puntuacion)
+        partida = serializer.save(usuario=request.user)
         return Response(PartidaSerializer(partida).data, status=status.HTTP_201_CREATED)
 
 

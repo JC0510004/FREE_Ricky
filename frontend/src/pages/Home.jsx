@@ -178,7 +178,7 @@ export default function Home() {
                           className="fr-btn-primary"
                           type="button"
                           style={{ marginTop: '1.25rem' }}
-                          onClick={() => navigate('/juego')}
+                          onClick={() => navigate('/juego', { state: { nivelId: nivel.id, nivelNombre: nivel.nombre } })}
                         >
                           <Play size={14} fill="currentColor" />Jugar
                         </button>
