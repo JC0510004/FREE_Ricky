@@ -344,4 +344,4 @@ Por definir. Añade un archivo `LICENSE` con los términos de distribución ante
 publicar el proyecto.
 
 ## mejoras 
-La Comunicacion de la pagina con el juego funcione
+La Comunicacion de la pagina con el juego funcione y traiga los datos correctamente 
