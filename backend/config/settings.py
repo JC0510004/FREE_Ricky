@@ -573,3 +573,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Crear directorio de logs si no existe (necesario para los handlers de logging).
 LOGS_DIR = BASE_DIR / 'logs'
 os.makedirs(LOGS_DIR, exist_ok=True)
+
+
+# CSRF TRUSTED ORIGINS
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="http://localhost:5173,http://127.0.0.1:5173,http://[::1]:5173"
+).split(",")
