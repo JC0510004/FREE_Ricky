@@ -121,7 +121,7 @@ jobs:
         working-directory: backend
 
       - name: Run tests
-        run: python manage.py test api --verbosity=2 --traceback --parallel 1
+        run: python manage.py test api --verbosity=2 --traceback
         working-directory: backend
 
   # ─── JOB: LINTING DEL BACKEND ────────────────────────────────────────────
