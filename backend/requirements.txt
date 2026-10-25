@@ -24,7 +24,7 @@ asgiref==3.11.1
 # django.utils.cache.cc_delim_re, que Django 6.1 eliminó. Es decir, 3.17.2
 # arreglaba los CVEs pero era incompatible con Django 6.1. 3.18.1 arregla
 # ambos a la vez, verificado con los 118 tests del backend.
-djangorestframework==3.18.1
+djangorestframework==3.18.2
 
 # PyJWT: lo usa djangorestframework-simplejwt para firmar y verificar tokens.
 # Se pinea explícitamente porque es dependencia TRANSITIVA: sin este pin,
