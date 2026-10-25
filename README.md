@@ -342,3 +342,7 @@ rollback.
 
 Por definir. Añade un archivo `LICENSE` con los términos de distribución antes de
 publicar el proyecto.
+
+## Actualización Juego
+
+El juego ya cuenta con más de 15 pistas de audio.
