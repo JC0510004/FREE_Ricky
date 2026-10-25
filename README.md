@@ -342,3 +342,6 @@ rollback.
 
 Por definir. Añade un archivo `LICENSE` con los términos de distribución antes de
 publicar el proyecto.
+
+## mejoras 
+La Comunicacion de la pagina con el juego funcione
