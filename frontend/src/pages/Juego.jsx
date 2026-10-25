@@ -13,7 +13,7 @@ async function guardarResultado(datos, nivelIdFallback) {
     const { data } = await API.get('/niveles/')
     const lista = data.results || data
     nivel = lista.find((n) => normalizar(n.nombre) === normalizar(datos.escena))
-  } catch (e) {
+  } catch {
     // ignore
   }
   if (!nivel && nivelIdFallback != null) {
@@ -21,7 +21,7 @@ async function guardarResultado(datos, nivelIdFallback) {
       const { data } = await API.get('/niveles/')
       const lista = data.results || data
       nivel = lista.find((n) => Number(n.id) === Number(nivelIdFallback))
-    } catch (e) {
+    } catch {
       // ignore
     }
   }

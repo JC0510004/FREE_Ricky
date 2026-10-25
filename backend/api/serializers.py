@@ -458,6 +458,7 @@ class PartidaCreateSerializer(serializers.ModelSerializer):
         if value is not None and value > 86400:
             raise serializers.ValidationError('Tiempo fuera de rango permitido')
         return value
+
     # ─── CREACIÓN DE LA PARTIDA ───────────────────────────────────────────
     # La puntuación se calcula SIEMPRE en el servidor:
     # - Si completado=True: max(1000 - tiempo * 2 - muertes * 50, 0)

@@ -32,6 +32,7 @@ class RankingEntrySerializer(serializers.Serializer):
     total_partidas = serializers.IntegerField()
     promedio_puntuacion = serializers.FloatField(allow_null=True)
 
+
 class JWTOpcional(JWTAuthentication):
     """Si el token es inválido o vencido, trata la petición como anónima."""
     def authenticate(self, request):
@@ -39,6 +40,7 @@ class JWTOpcional(JWTAuthentication):
             return super().authenticate(request)
         except AuthenticationFailed:
             return None
+
 
 class NivelListView(APIView):
     authentication_classes = [JWTOpcional]
@@ -49,7 +51,6 @@ class NivelListView(APIView):
         if self.request.method == 'GET':
             return [AllowAny()]
         return [IsAuthenticated()]
-
 
     @extend_schema(
         tags=['Niveles'],
