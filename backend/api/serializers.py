@@ -437,6 +437,17 @@ class PartidaCreateSerializer(serializers.ModelSerializer):
         # La puntuación NO se acepta del cliente: la calcula el servidor en create().
         fields = ['nivel', 'muertes', 'tiempo', 'completado']
 
+    def validate(self, attrs):
+        data = getattr(self, 'initial_data', {}) or {}
+        if 'puntuacion' in data and data.get('puntuacion') is not None:
+            try:
+                puntuacion = float(data.get('puntuacion'))
+                if puntuacion < 0:
+                    raise serializers.ValidationError({'puntuacion': ['La puntuación no puede ser negativa']})
+            except (TypeError, ValueError):
+                pass
+        return attrs
+
     # ─── VALIDACIONES DE RANGO ────────────────────────────────────────────
     # Cada campo numérico tiene validaciones de rango para evitar datos
     # atípicos o maliciosos que podrían distorsionar las estadísticas.
