@@ -12,29 +12,51 @@ async function guardarResultado(datos, nivelIdFallback) {
   try {
     const { data } = await API.get('/niveles/')
     const lista = data.results || data
-    nivel = lista.find((n) => normalizar(n.nombre) === normalizar(datos.escena))
-  } catch {
-    // ignore
+    if (datos?.escena) {
+      nivel = lista.find((n) => normalizar(n.nombre) === normalizar(datos.escena))
+    }
+    if (!nivel && nivelIdFallback != null) {
+      nivel = lista.find((n) => Number(n.id) === Number(nivelIdFallback))
+    }
+    if (!nivel && datos?.nivelId != null) {
+      nivel = lista.find((n) => Number(n.id) === Number(datos.nivelId))
+    }
+  } catch (e) {
+    console.error('[guardarResultado] error buscando niveles', e)
   }
+
   if (!nivel && nivelIdFallback != null) {
     try {
-      const { data } = await API.get('/niveles/')
-      const lista = data.results || data
-      nivel = lista.find((n) => Number(n.id) === Number(nivelIdFallback))
-    } catch {
-      // ignore
+      await API.post('/partidas/', {
+        nivel: Number(nivelIdFallback),
+        muertes: datos?.muertes ?? 0,
+        tiempo: datos?.tiempo ?? 0,
+        completado: true,
+      })
+      console.log('[guardarResultado] Guardado con fallback nivelId')
+      return
+    } catch (e) {
+      console.error('[guardarResultado] fallo con fallback', e)
+      return
     }
   }
+
   if (!nivel) {
-    console.warn('No hay un nivel en el panel que coincida con la escena:', datos.escena)
+    console.warn('No hay un nivel en el panel que coincida con la escena:', datos?.escena, 'nivelIdFallback:', nivelIdFallback)
     return
   }
-  await API.post('/partidas/', {
-    nivel: nivel.id,
-    muertes: datos.muertes || 0,
-    tiempo: datos.tiempo || 0,
-    completado: datos.completado || false,
-  })
+
+  try {
+    await API.post('/partidas/', {
+      nivel: nivel.id,
+      muertes: datos?.muertes ?? 0,
+      tiempo: datos?.tiempo ?? 0,
+      completado: true,
+    })
+    console.log('[guardarResultado] Partida completada guardada OK')
+  } catch (e) {
+    console.error('[guardarResultado] error guardando partida', e)
+  }
 }
 
 function extraerDatos(obj) {
@@ -108,7 +130,9 @@ export default function Juego() {
       console.log('[Juego] mensaje', e.origin, e.data)
       if (e.origin !== ORIGEN_JUEGO) return
 
-      const candidatos = [
+  // SIEMPRE intentar extraer muertes/tiempo aunque el type sea distinto
+      const candidatosGlobal = [
+        e.data,
         e.data?.datos,
         e.data?.stats,
         e.data?.hud,
@@ -117,27 +141,21 @@ export default function Juego() {
         e.data?.data,
         e.data?.resultado,
         e.data?.partida,
-        e.data,
-      ]
+        e.data?.finalStats,
+      e.data?.endStats,
+    ]
 
-      for (const c of candidatos) {
-        const extraido = extraerDatos(c)
-        if (extraido) {
-          if (extraido.muertes !== null) {
-            muertesRef.current = extraido.muertes
-            console.log('[Juego] Actualizando muertes:', muertesRef.current)
-          }
-          if (extraido.tiempo !== null) {
-            tiempoRef.current = extraido.tiempo
-            console.log('[Juego] Actualizando tiempo:', tiempoRef.current)
-          }
-
-          if (esperandoAbandonoRef.current && !guardadoRef.current) {
-            guardarAbandono(true)
-            return
-          }
+    for (const c of candidatosGlobal) {
+      const extraido = extraerDatos(c)
+      if (extraido) {
+        if (extraido.muertes !== null) {
+          muertesRef.current = extraido.muertes
+        }
+        if (extraido.tiempo !== null) {
+          tiempoRef.current = extraido.tiempo
         }
       }
+    }
 
       if (e.data?.type === 'resultadoPartida') {
         guardadoRef.current = true
@@ -146,12 +164,16 @@ export default function Juego() {
           clearTimeout(timeoutRef.current)
           timeoutRef.current = null
         }
-        guardarResultado(e.data.datos, nivelId).catch((err) => console.error('No se pudo guardar partida', err))
+        guardarResultado(e.data.datos || e.data, nivelId)
+          .catch((err) => console.error('No se pudo guardar partida', err))
+          .finally(() => {
+            setTimeout(() => navigate('/home'), 600)
+          })
         return
       }
 
-      if (e.data?.type === 'stats' || e.data?.type === 'hudUpdate' || e.data?.type === 'gameStats' || e.data?.type === 'updateStats') {
-        const extraido = extraerDatos(e.data?.datos || e.data?.stats || e.data)
+      if (e.data?.type === 'stats' || e.data?.type === 'hudUpdate' || e.data?.type === 'gameStats' || e.data?.type === 'updateStats' || e.data?.type === 'finalStats' || e.data?.type === 'endStats') {
+        const extraido = extraerDatos(e.data?.datos || e.data?.stats || e.data?.finalStats || e.data)
         if (extraido) {
           if (extraido.muertes !== null) muertesRef.current = extraido.muertes
           if (extraido.tiempo !== null) tiempoRef.current = extraido.tiempo
@@ -183,42 +205,43 @@ export default function Juego() {
           return
         }
 
-        if (nivelId != null) {
-          // Mirar si ya trae los datos en este mismo mensaje
-          const directos = [e.data?.datos, e.data?.stats, e.data?.hud, e.data]
-          for (const c of directos) {
-            const extraido = extraerDatos(c)
-            if (extraido) {
-              if (extraido.muertes !== null) muertesRef.current = extraido.muertes
-              if (extraido.tiempo !== null) tiempoRef.current = extraido.tiempo
-            }
+        const directos = [e.data?.datos, e.data?.stats, e.data?.hud, e.data?.final, e.data?.finalStats, e.data]
+        for (const c of directos) {
+          const extraido = extraerDatos(c)
+          if (extraido) {
+            if (extraido.muertes !== null) muertesRef.current = extraido.muertes
+            if (extraido.tiempo !== null) tiempoRef.current = extraido.tiempo
           }
+        }
 
-          // Pedir explícitamente
-          try {
-            const win = iframeRef.current?.contentWindow
-            win?.postMessage({ type: 'solicitarDatos' }, ORIGEN_JUEGO)
-            win?.postMessage({ type: 'pedirStats' }, ORIGEN_JUEGO)
-            win?.postMessage({ type: 'getStats' }, ORIGEN_JUEGO)
-            win?.postMessage({ type: 'requestStats' }, ORIGEN_JUEGO)
-            win?.postMessage({ type: 'getFinalStats' }, ORIGEN_JUEGO)
-            win?.postMessage({ type: 'enviarDatos' }, ORIGEN_JUEGO)
-          } catch (err) {
-            console.error(err)
-          }
-
-          esperandoAbandonoRef.current = true
-
-          // Esperar hasta 2 segundos por si envía los datos después
-          if (timeoutRef.current) clearTimeout(timeoutRef.current)
-          timeoutRef.current = setTimeout(() => {
-            guardarAbandono(true)
-          }, 2000)
-
+        if (nivelId == null) {
+          navigate('/home')
           return
         }
 
-        navigate('/home')
+        const win = iframeRef.current?.contentWindow
+        try {
+          win?.postMessage({ type: 'solicitarDatos' }, ORIGEN_JUEGO)
+          win?.postMessage({ type: 'pedirStats' }, ORIGEN_JUEGO)
+          win?.postMessage({ type: 'getStats' }, ORIGEN_JUEGO)
+          win?.postMessage({ type: 'requestStats' }, ORIGEN_JUEGO)
+          win?.postMessage({ type: 'getFinalStats' }, ORIGEN_JUEGO)
+          win?.postMessage({ type: 'enviarDatos' }, ORIGEN_JUEGO)
+          win?.postMessage({ type: 'finalizarPartida' }, ORIGEN_JUEGO)
+          win?.postMessage({ type: 'getGameData' }, ORIGEN_JUEGO)
+          win?.postMessage({ action: 'getStats' }, ORIGEN_JUEGO)
+        } catch (err) {
+          console.error(err)
+        }
+
+        esperandoAbandonoRef.current = true
+
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => {
+          console.log('[Juego] Timeout salirPanel -> guardando con', muertesRef.current, tiempoRef.current)
+          guardarAbandono(true)
+        }, 3000)
+
         return
       }
     }
