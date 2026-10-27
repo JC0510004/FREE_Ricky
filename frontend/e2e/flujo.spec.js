@@ -19,6 +19,8 @@ const API_URL = process.env.E2E_API_URL
 test.describe.configure({ mode: 'serial' })
 
 let page
+// Cookie de refresh vigente justo antes del logout (para reenviarla después).
+let cookieRefreshAntesDelLogout = null
 
 test.beforeAll(async ({ browser }) => {
   if (!USUARIO || !CLAVE) {
@@ -125,6 +127,11 @@ test.describe('Flujo completo del jugador', () => {
   })
 
   test('8. cerrar sesión limpia todo y vuelve a bloquear el panel', async () => {
+    // Se guarda la cookie de refresh vigente ANTES de cerrar sesión: el paso 9
+    // la reenvía a mano para comprobar que el servidor la dio de baja.
+    const cookies = await page.context().cookies()
+    cookieRefreshAntesDelLogout = cookies.find((c) => /refresh/i.test(c.name)) ?? null
+
     await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).click()
 
     await expect(page).not.toHaveURL(/\/home/)
@@ -134,11 +141,24 @@ test.describe('Flujo completo del jugador', () => {
     await expect(page).not.toHaveURL(/\/home/)
   })
 
-  test('9. tras cerrar sesión, el servidor ya no renueva el token', async () => {
+  test('9. tras cerrar sesión, el servidor ya no acepta el refresh anterior', async ({ playwright }) => {
     test.skip(!API_URL, 'Define E2E_API_URL para comprobar el refresh en el servidor')
+    expect(
+      cookieRefreshAntesDelLogout,
+      'No se encontró la cookie de refresh antes del logout',
+    ).not.toBeNull()
 
-    // Usa las cookies de esta misma pestaña: debe estar invalidada.
-    const res = await page.request.post(`${API_URL}/token/refresh/`)
-    expect(res.status()).toBe(401)
+    // El navegador ya borró su copia; aquí se reenvía la cookie vieja a mano,
+    // desde un cliente limpio, como lo haría quien la hubiera robado.
+    const { name, value } = cookieRefreshAntesDelLogout
+    const limpio = await playwright.request.newContext()
+    const res = await limpio.post(`${API_URL}/token/refresh/`, {
+      headers: { Cookie: `${name}=${value}` },
+    })
+    const cuerpo = await res.text()
+    await limpio.dispose()
+
+    // 401 = el servidor la rechaza (en la lista negra). 200 = la sesión sigue viva.
+    expect(res.status(), `Respuesta del servidor: ${cuerpo}`).toBe(401)
   })
 })
