@@ -31,6 +31,18 @@ RUN npm ci --fetch-retries=8 --fetch-retry-mintimeout=20000 --fetch-retry-maxtim
 # Copiamos TODO el código fuente del frontend al contenedor
 COPY . .
 
+# Origen del build de Unity WebGL. Se pasa como build-arg desde
+# docker-compose.yml y se compila dentro del bundle (VITE_GAME_ORIGIN) y en la
+# CSP de Nginx (GAME_ORIGIN). Un unico valor para ambos evita que el iframe se
+# bloquee por discrepancia. El default conserva el comportamiento historico.
+ARG GAME_ORIGIN=http://192.168.18.50:8080
+ENV VITE_GAME_ORIGIN=${GAME_ORIGIN}
+
+# Compatibilidad temporal con el protocolo legacy de Unity. Por defecto sigue
+# activa para no romper builds antiguos; se desactiva con UNITY_LEGACY_COMPAT=false.
+ARG UNITY_LEGACY_COMPAT=true
+ENV VITE_UNITY_LEGACY_COMPAT=${UNITY_LEGACY_COMPAT}
+
 # Ejecutamos el build de producción. Vite genera archivos estáticos
 # optimizados (minificados, con hash para cache-busting) en la carpeta dist/.
 RUN npm run build
@@ -63,6 +75,12 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # arrancaria con "unknown directive" o, peor, se quedaria sin cabeceras.
 RUN mkdir -p /etc/nginx/snippets
 COPY nginx-security-headers.conf /etc/nginx/snippets/security-headers.conf
+
+# El ARG del stage builder no cruza al runtime: se vuelve a declarar para
+# inyectar el mismo origen en la CSP (el contenedor se monta read-only, asi que
+# la sustitucion tiene que ocurrir en build time, no en el entrypoint).
+ARG GAME_ORIGIN=http://192.168.18.50:8080
+RUN sed -i "s|__GAME_ORIGIN__|${GAME_ORIGIN}|g" /etc/nginx/snippets/security-headers.conf
 
 # Exponemos el puerto 80 (HTTP estándar) para que el contenedor
 # pueda recibir tráfico web. En docker-compose o al ejecutar,

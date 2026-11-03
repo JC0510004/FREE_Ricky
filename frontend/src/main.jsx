@@ -74,7 +74,7 @@ createRoot(document.getElementById('root')).render(
           } />
 
           {/* ─── RUTA PROTEGIDA: JUEGO (UNITY WEBGL) ─────────── */}
-          {/* Requiere autenticación. Carga el build WebGL desde /unity/ */}
+          {/* Requiere autenticación. Embebe el build WebGL desde VITE_GAME_ORIGIN */}
           <Route path="/juego" element={
             <Suspense fallback={<div className="route-loading"><span className="spinner" /></div>}>
               <ProtectedRoute><Juego /></ProtectedRoute>

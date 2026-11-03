@@ -332,6 +332,7 @@ rollback.
 
 - `DEPLOY_PRODUCCION.md` — checklist de lanzamiento.
 - `AUDITORIA.md` — hallazgos de seguridad resueltos.
+- `docs/PROTOCOLO_UNITY.md` — contrato de mensajes `postMessage` entre la web y el juego Unity.
 - `DIAGRAMAS_UML.html` — diagramas del sistema.
 - `pentest_reports/` — informes de pruebas de penetración.
 - Comentarios en el código: el proyecto documenta el *porqué* de las decisiones.
@@ -344,4 +345,10 @@ Por definir. Añade un archivo `LICENSE` con los términos de distribución ante
 publicar el proyecto.
 
 ## mejoras 
-La Comunicacion de la pagina con el juego funcione y traiga los datos correctamente 
+La Comunicacion de la pagina con el juego funcione y traiga los datos correctamente
+docker compose up -d --build
+Si quieres reconstruir solo uno (por ejemplo el frontend):
+docker compose up -d --build frontend
+Para forzarlos a recrearse sin esperar caché:
+docker compose up -d --build --force-recreate
+Para apagarlos:
