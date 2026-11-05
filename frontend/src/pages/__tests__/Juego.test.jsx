@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act, waitFor } from '@testing-library/react'
 
-const { navegar } = vi.hoisted(() => ({ navegar: vi.fn() }))
+const { navegar, ubicacion } = vi.hoisted(() => ({
+  navegar: vi.fn(),
+  ubicacion: { state: { nivelId: 3 } },
+}))
 
 import Juego from '../Juego'
 import API from '../../api/axios'
@@ -15,7 +18,7 @@ vi.mock('../../contexts/useAuth', () => ({
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...(await importOriginal()),
   useNavigate: () => navegar,
-  useLocation: () => ({ state: { nivelId: 3 } }),
+  useLocation: () => ubicacion,
 }))
 
 const ORIGEN = new URL(
@@ -37,8 +40,14 @@ function renderJuego() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('VITE_UNITY_LEGACY_COMPAT', 'false')
+  ubicacion.state = { nivelId: 3 }
   API.get.mockResolvedValue(NIVELES)
-  API.post.mockResolvedValue({ data: {} })
+  API.post.mockImplementation((url) => {
+    if (url === '/partidas/iniciar/') {
+      return Promise.resolve({ data: { token: 'token-test' } })
+    }
+    return Promise.resolve({ data: {} })
+  })
 })
 
 afterEach(() => {
@@ -81,6 +90,43 @@ describe('Juego', () => {
     )
   })
 
+  it('abre sin nivel y guarda el resultado usando la escena', async () => {
+    ubicacion.state = undefined
+    const { container } = renderJuego()
+    const iframe = container.querySelector('iframe')
+    const postMessage = vi
+      .spyOn(iframe.contentWindow, 'postMessage')
+      .mockImplementation(() => {})
+
+    enviar({ type: 'unityListo' })
+
+    await waitFor(() => {
+      expect(API.post).toHaveBeenCalledWith('/partidas/iniciar/', { nivel: 3 })
+    })
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'cargarNivel' }),
+      ORIGEN
+    )
+
+    enviar({
+      type: 'resultadoPartida',
+      datos: { escena: 'La Guarida', muertes: 1, tiempo: 20, completado: false },
+    })
+
+    await waitFor(() => {
+      expect(API.post).toHaveBeenCalledWith('/partidas/', {
+        nivel: 3,
+        muertes: 1,
+        tiempo: 20,
+        completado: false,
+        token: 'token-test',
+      })
+    })
+
+    enviar({ type: 'salirPanel' })
+    await waitFor(() => expect(navegar).toHaveBeenCalledWith('/home'))
+  })
+
   it('guarda resultadoPartida completada y vuelve al panel', async () => {
     renderJuego()
     enviar({
@@ -89,11 +135,13 @@ describe('Juego', () => {
     })
 
     await waitFor(() => {
+      expect(API.post).toHaveBeenCalledWith('/partidas/iniciar/', { nivel: 3 })
       expect(API.post).toHaveBeenCalledWith('/partidas/', {
         nivel: 3,
         muertes: 2,
         tiempo: 90,
         completado: true,
+        token: 'token-test',
       })
     })
     await waitFor(() => expect(navegar).toHaveBeenCalledWith('/home'), { timeout: 2000 })
@@ -112,6 +160,7 @@ describe('Juego', () => {
         muertes: 4,
         tiempo: 120,
         completado: false,
+        token: 'token-test',
       })
     })
     expect(navegar).toHaveBeenCalledWith('/home')
@@ -126,7 +175,10 @@ describe('Juego', () => {
     enviar(mensaje)
     enviar(mensaje)
 
-    await waitFor(() => expect(API.post).toHaveBeenCalledTimes(1))
+    await waitFor(() => {
+      const partidas = API.post.mock.calls.filter(([url]) => url === '/partidas/')
+      expect(partidas).toHaveLength(1)
+    })
   })
 
   it('pide stats y guarda abandono por timeout si salirPanel no trae datos', async () => {
@@ -148,6 +200,7 @@ describe('Juego', () => {
       muertes: 0,
       tiempo: 0,
       completado: false,
+      token: 'token-test',
     })
   })
 })
@@ -168,6 +221,7 @@ describe('Juego con compatibilidad legacy', () => {
         muertes: 3,
         tiempo: 10,
         completado: false,
+        token: 'token-test',
       })
     })
   })
@@ -195,6 +249,7 @@ describe('Juego con compatibilidad legacy', () => {
       muertes: 0,
       tiempo: 0,
       completado: false,
+      token: 'token-test',
     })
   })
 })

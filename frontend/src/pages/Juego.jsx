@@ -33,54 +33,58 @@ function compatibilidadLegacyActiva() {
   return import.meta.env.VITE_UNITY_LEGACY_COMPAT !== 'false'
 }
 
-async function guardarResultado(datos, nivelIdFallback) {
-  let nivel = null
+function tieneDatosPartida(datos) {
+  return datos?.nivelId != null
+    || datos?.escena != null
+    || datos?.muertes != null
+    || datos?.tiempo != null
+}
+
+async function resolverNivelId(datos, nivelIdFallback) {
+  let lista = []
   try {
     const { data } = await API.get('/niveles/')
-    const lista = data.results || data
-    if (datos?.nivelId != null) {
-      nivel = lista.find((n) => Number(n.id) === Number(datos.nivelId))
-    }
-    if (!nivel && nivelIdFallback != null) {
-      nivel = lista.find((n) => Number(n.id) === Number(nivelIdFallback))
-    }
-    if (!nivel && datos?.escena) {
-      nivel = lista.find((n) => normalizar(n.nombre) === normalizar(datos.escena))
-    }
+    lista = data.results || data
   } catch (e) {
-    console.error('[guardarResultado] error buscando niveles', e)
+    console.error('[Juego] error buscando niveles', e)
   }
 
-  if (!nivel && nivelIdFallback != null) {
-    try {
-      await API.post('/partidas/', {
-        nivel: Number(nivelIdFallback),
-        muertes: datos?.muertes ?? 0,
-        tiempo: datos?.tiempo ?? 0,
-        completado: datos?.completado === true,
-      })
-      console.log('[guardarResultado] Guardado con fallback nivelId')
-      return
-    } catch (e) {
-      console.error('[guardarResultado] fallo con fallback', e)
-      return
-    }
+  if (datos?.nivelId != null) {
+    const nivel = lista.find((n) => Number(n.id) === Number(datos.nivelId))
+    if (nivel) return nivel.id
   }
+  if (nivelIdFallback != null) {
+    const nivel = lista.find((n) => Number(n.id) === Number(nivelIdFallback))
+    if (nivel) return nivel.id
+  }
+  if (datos?.escena) {
+    const nivel = lista.find((n) => normalizar(n.nombre) === normalizar(datos.escena))
+    if (nivel) return nivel.id
+  }
+  if (nivelIdFallback != null) return Number(nivelIdFallback)
+  return null
+}
 
-  if (!nivel) {
+async function guardarResultado(datos, nivelId, token) {
+  if (nivelId == null) {
     console.warn(
       '[guardarResultado] No hay un nivel que coincida con el mensaje del juego:',
-      { nivelId: datos?.nivelId, escena: datos?.escena, nivelIdFallback }
+      { nivelId: datos?.nivelId, escena: datos?.escena }
     )
+    return
+  }
+  if (!token) {
+    console.error('[guardarResultado] falta el token de partida; no se guarda')
     return
   }
 
   try {
     await API.post('/partidas/', {
-      nivel: nivel.id,
+      nivel: Number(nivelId),
       muertes: datos?.muertes ?? 0,
       tiempo: datos?.tiempo ?? 0,
       completado: datos?.completado === true,
+      token,
     })
     console.log(
       '[guardarResultado] Partida guardada OK:',
@@ -97,17 +101,22 @@ export default function Juego() {
   const location = useLocation()
   const iframeRef = useRef(null)
   const nivelId = location.state?.nivelId
+  const tokenPromisesRef = useRef(new Map())
   const guardadoRef = useRef(false)
+  const savePromiseRef = useRef(null)
   const muertesRef = useRef(null)
   const tiempoRef = useRef(null)
   const esperandoAbandonoRef = useRef(false)
   const timeoutRef = useRef(null)
 
   useEffect(() => {
+    let activo = true
     guardadoRef.current = false
+    savePromiseRef.current = null
     muertesRef.current = null
     tiempoRef.current = null
     esperandoAbandonoRef.current = false
+    tokenPromisesRef.current = new Map()
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
@@ -120,50 +129,110 @@ export default function Juego() {
       }
     }
 
+    function asegurarToken(id) {
+      if (id == null) return Promise.resolve(null)
+      if (!tokenPromisesRef.current.has(id)) {
+        const promesa = API.post('/partidas/iniciar/', { nivel: id })
+          .then(({ data }) => {
+            const token = data?.token ?? null
+            if (!token) tokenPromisesRef.current.delete(id)
+            return token
+          })
+          .catch((err) => {
+            console.error(
+              '[Juego] iniciar falló:',
+              id,
+              err.response?.status,
+              JSON.stringify(err.response?.data)
+            )
+            tokenPromisesRef.current.delete(id)
+            return null
+          })
+        tokenPromisesRef.current.set(id, promesa)
+      }
+      return tokenPromisesRef.current.get(id)
+    }
+
+    function prepararTokens() {
+      if (nivelId != null) {
+        asegurarToken(nivelId)
+        return
+      }
+      API.get('/niveles/')
+        .then(({ data }) => {
+          if (!activo) return
+          const lista = data.results || data
+          for (const nivel of lista) asegurarToken(nivel.id)
+        })
+        .catch((err) => {
+          console.error('[Juego] no se pudieron preparar los tokens', err)
+        })
+    }
+
     function aplicarStats(datos) {
       if (!datos) return
-      if (datos.muertes !== null) muertesRef.current = datos.muertes
-      if (datos.tiempo !== null) tiempoRef.current = datos.tiempo
+      if (datos.muertes !== null && datos.muertes !== undefined) {
+        muertesRef.current = datos.muertes
+      }
+      if (datos.tiempo !== null && datos.tiempo !== undefined) {
+        tiempoRef.current = datos.tiempo
+      }
     }
 
     function tieneStats() {
       return muertesRef.current !== null || tiempoRef.current !== null
     }
 
-    function guardarPartida(datos, completado) {
-      if (guardadoRef.current) return
+    function guardarPartida(datos, { navegar = false } = {}) {
+      if (guardadoRef.current) return savePromiseRef.current
       guardadoRef.current = true
       esperandoAbandonoRef.current = false
       limpiarTimeout()
-      guardarResultado({ ...datos, completado }, nivelId)
-        .catch((err) => console.error('[Juego] no se pudo guardar la partida', err))
-        .finally(() => {
-          setTimeout(() => navigate('/home'), 600)
+
+      const completado = datos.completado === true
+      const promesa = (async () => {
+        const idNivel = await resolverNivelId(datos, nivelId)
+        if (idNivel == null) return
+        const token = await asegurarToken(idNivel)
+        await guardarResultado({ ...datos, completado }, idNivel, token)
+        tokenPromisesRef.current.delete(idNivel)
+        if (activo && !completado) asegurarToken(idNivel)
+      })()
+        .catch((err) => {
+          console.error('[Juego] no se pudo guardar la partida', err)
         })
+        .finally(() => {
+          if (navegar) navigate('/home')
+        })
+
+      savePromiseRef.current = promesa
+      return promesa
     }
 
     function guardarAbandono(datos = null) {
       aplicarStats(datos)
-      if (guardadoRef.current || nivelId == null) {
-        esperandoAbandonoRef.current = false
-        navigate('/home')
-        return
+      if (guardadoRef.current) {
+        const pendiente = savePromiseRef.current || Promise.resolve()
+        pendiente.finally(() => navigate('/home'))
+        return pendiente
       }
-      guardadoRef.current = true
+      if (nivelId == null && !tieneDatosPartida(datos)) {
+        navigate('/home')
+        return Promise.resolve()
+      }
+
       esperandoAbandonoRef.current = false
       limpiarTimeout()
       console.log('[Juego] Guardando abandono con:', {
         muertes: muertesRef.current,
         tiempo: tiempoRef.current,
       })
-      API.post('/partidas/', {
-        nivel: nivelId,
-        muertes: muertesRef.current ?? 0,
-        tiempo: tiempoRef.current ?? 0,
+      return guardarPartida({
+        ...(datos || {}),
+        muertes: muertesRef.current,
+        tiempo: tiempoRef.current,
         completado: false,
-      })
-        .catch((err) => console.error('[Juego] no se pudo guardar el abandono', err))
-        .finally(() => navigate('/home'))
+      }, { navegar: true })
     }
 
     function solicitarStats() {
@@ -201,9 +270,11 @@ export default function Juego() {
       }
 
       const { tipo, datos } = mensaje
+      console.log('[Juego] mensaje', tipo, datos)
       aplicarStats(datos)
 
       if (tipo === MENSAJE.UNITY_LISTO) {
+        prepararTokens()
         if (user?.username) {
           iframeRef.current?.contentWindow?.postMessage(
             { type: 'setPlayerName', nombre: user.username },
@@ -227,21 +298,22 @@ export default function Juego() {
       }
 
       if (tipo === MENSAJE.RESULTADO) {
-        guardarPartida(datos, datos.completado)
+        guardarPartida(datos, { navegar: datos.completado === true })
         return
       }
 
       if (tipo === MENSAJE.SALIR) {
         if (guardadoRef.current) {
-          navigate('/home')
+          const pendiente = savePromiseRef.current || Promise.resolve()
+          pendiente.finally(() => navigate('/home'))
+          return
+        }
+        if (tieneDatosPartida(datos)) {
+          guardarPartida({ ...datos, completado: datos.completado === true }, { navegar: true })
           return
         }
         if (nivelId == null) {
           navigate('/home')
-          return
-        }
-        if (datos.completado === true) {
-          guardarPartida(datos, true)
           return
         }
         if (tieneStats()) {
@@ -254,6 +326,7 @@ export default function Juego() {
 
     window.addEventListener('message', onMessage)
     return () => {
+      activo = false
       window.removeEventListener('message', onMessage)
       limpiarTimeout()
     }
