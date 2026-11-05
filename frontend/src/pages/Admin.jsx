@@ -433,7 +433,7 @@ export default function Admin() {
     if (user?.rol !== 'admin') return navigate('/home')
   }, [isLoading, isAuthenticated, user, navigate])
 
-  if (isLoading || !user) return null
+  if (isLoading || !user || user.rol !== 'admin') return null
   if (!tokenReady) {
     return (
       <div className="fr-dash">

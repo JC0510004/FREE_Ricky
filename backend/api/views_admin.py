@@ -102,8 +102,8 @@ class AdminStatsView(APIView):
     @extend_schema(
         tags=['Administración'],
         summary='Estadísticas globales',
-        description='Devuelve estadísticas globales de la plataforma: totals de usuarios, '
-        'partidas, niveles, puntuaciones y el jugador más activo.',
+        description='Devuelve estadísticas globales de la plataforma: total de usuarios '
+        'activos, partidas, niveles, puntuaciones y el jugador más activo.',
         responses={200: inline_serializer(
             'AdminStatsResponse',
             {
@@ -118,7 +118,10 @@ class AdminStatsView(APIView):
         )},
     )
     def get(self, request):
-        total_usuarios = Usuario.objects.count()
+        # Solo cuentas activas: las desactivadas por un admin no son usuarios
+        # de la plataforma y el contador debe coincidir con UsuarioListView,
+        # que también filtra is_active=True.
+        total_usuarios = Usuario.objects.filter(is_active=True).count()
         total_partidas = Partida.objects.count()
         total_niveles = Nivel.objects.count()
 

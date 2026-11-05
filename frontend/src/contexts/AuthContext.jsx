@@ -81,6 +81,7 @@ export function AuthProvider({ children }) {
           // para que el usuario tenga que iniciar sesión de nuevo
           if (!data) {
             setUser(null)
+            localStorage.removeItem('usuario:v1')
           } else if (data.usuario) {
             // El backend devuelve el usuario fresco (con rol/estado actual).
             // Lo aplicamos para mantener la app sincronizada (por ejemplo,
@@ -213,6 +214,7 @@ export function AuthProvider({ children }) {
         // Si la sesión ya no es válida, limpiamos el usuario del estado
         setUser(null)
         setTokenReady(false)
+        localStorage.removeItem('usuario:v1') 
         return false
       }
       // Aprovechamos la verificación para refrescar los datos del usuario

@@ -135,7 +135,7 @@ describe('Admin - acceso y estructura', () => {
     usarAuth({ user: { id: 2, username: 'juan', rol: 'jugador' } })
     renderAdmin()
     expect(navegar).toHaveBeenCalledWith('/home')
-    await screen.findByText('Mejor puntuación')
+    expect(screen.queryByText('Panel de Control')).not.toBeInTheDocument()
   })
 
     it('un admin no es redirigido', async () => {

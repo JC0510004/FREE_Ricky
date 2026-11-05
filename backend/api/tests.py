@@ -1310,6 +1310,21 @@ class NivelTests(TestCase):
         response = self.client.get(self.nivel_list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def test_detail_nivel_publico(self):
+        response = self.client.get(self.nivel_detail_url(self.nivel.pk))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['id'], self.nivel.pk)
+        self.assertEqual(response.data['nombre'], self.nivel.nombre)
+
+    def test_detail_nivel_no_existe_devuelve_404(self):
+        response = self.client.get(self.nivel_detail_url(9999))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_detail_nivel_ignora_token_invalido(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer token-invalido')
+        response = self.client.get(self.nivel_detail_url(self.nivel.pk))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
     def test_crear_nivel_como_admin(self):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
         response = self.client.post(self.nivel_list_url, {
@@ -1802,8 +1817,7 @@ class NivelEdgeCaseTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         url = self.nivel_detail_url(9999)
         response = self.client.get(url)
-        # NivelDetailView no soporta GET (solo PUT/DELETE), retorna 405
-        self.assertIn(response.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED])
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_nivel_create_campos_requeridos(self):
         admin = Usuario.objects.create_superuser(
@@ -2052,6 +2066,22 @@ class PermisosDetalladosTests(TestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn('total_usuarios', resp.data)
         self.assertIn('total_partidas', resp.data)
+
+    def test_admin_stats_excluye_usuarios_inactivos(self):
+        inactivo = Usuario.objects.create_user(
+            username='inactivo_stats',
+            email='inactivo_stats@gmail.com',
+            password='TestPass123!',
+        )
+        inactivo.is_active = False
+        inactivo.save(update_fields=['is_active'])
+
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        resp = self.client.get(reverse('admin_stats'))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        # setUp crea 2 cuentas activas (normal_user y admin_user); la tercera
+        # está desactivada y no debe contarse.
+        self.assertEqual(resp.data['total_usuarios'], 2)
 
     def test_usuario_desactivar_por_admin(self):
         user = Usuario.objects.get(username='normal_user')

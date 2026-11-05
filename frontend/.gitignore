@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 public/unity/
 public/unity/
+.env.e2e
+playwright-report/
+test-results/

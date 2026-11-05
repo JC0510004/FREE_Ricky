@@ -39,7 +39,7 @@ class UsuarioListView(APIView):
         responses={200: UsuarioSerializer(many=True)},
     )
     def get(self, request):
-        usuarios = Usuario.objects.filter(is_active=True)
+        usuarios = Usuario.objects.filter(is_active=True).order_by('id')
         paginator = self.pagination_class()
         paginator.page_size = self.page_size
         page_obj = paginator.paginate_queryset(usuarios, request)

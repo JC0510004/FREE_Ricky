@@ -27,7 +27,10 @@ export default function Community() {
         {/* ─── Llamada a la acción según la sesión ─── */}
         {/* Visitante sin sesión: invita a registrarse. Usuario con sesión: el
             mismo botón lleva directo al juego. */}
-        <Link to={isAuthenticated ? '/juego' : '/register'} className="community-button">
+        <Link
+          to={isAuthenticated ? '/juego' : '/register'}
+          className="community-button"
+        >
           ÚNETE A LA TRIPULACIÓN
         </Link>
 

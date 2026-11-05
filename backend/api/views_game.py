@@ -90,14 +90,39 @@ class NivelListView(APIView):
 
 
 class NivelDetailView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    # GET es público (igual que el listado) para que el cliente pueda pedir un
+    # nivel concreto sin token. JWTOpcional evita un 401 si llega un token
+    # inválido, pero IsAuthenticated sigue protegiendo PUT/DELETE.
+    authentication_classes = [JWTOpcional]
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        return [IsAuthenticated(), IsAdminRole()]
 
     def get_object(self, pk):
         try:
             return Nivel.objects.get(pk=pk)
         except Nivel.DoesNotExist:
             return None
+
+    @extend_schema(
+        tags=['Niveles'],
+        summary='Detalle de nivel',
+        description='Devuelve un nivel individual por su id. Endpoint público.',
+        responses={
+            200: NivelSerializer,
+            404: inline_serializer(
+                'NivelDetailNotFound',
+                {'error': serializers.CharField()},
+            ),
+        },
+    )
+    def get(self, request, pk):
+        nivel = self.get_object(pk)
+        if not nivel:
+            return Response({'error': 'No encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(NivelSerializer(nivel).data)
 
     @extend_schema(
         tags=['Niveles'],

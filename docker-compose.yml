@@ -464,6 +464,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Origen del build de Unity WebGL. Se inyecta a la vez en el bundle de
+      # Vite (VITE_GAME_ORIGIN) y en la CSP de Nginx (frame-src), de modo que
+      # ambos coinciden siempre. Sobrescribible desde .env (GAME_ORIGIN).
+      args:
+        GAME_ORIGIN: ${GAME_ORIGIN:-http://192.168.18.50:8080}
+        # Compatibilidad temporal con mensajes legacy de Unity.
+        UNITY_LEGACY_COMPAT: ${UNITY_LEGACY_COMPAT:-true}
 
     # Nombre fijo del contenedor.
     container_name: free_ricky_frontend
